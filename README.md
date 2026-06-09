@@ -76,6 +76,12 @@ cd backend
 PYTHONPATH=. python3 ../scripts/smoke_backend.py
 ```
 
+Live backend smoke test:
+
+```bash
+scripts/smoke_live_backend.sh
+```
+
 Build the Qdrant RAG index after configuring Qdrant and the embedding API:
 
 ```bash
@@ -114,3 +120,10 @@ Current smoke coverage:
 ## Open Source Notes
 
 This repository does not include private API keys, model weights, task outputs, user databases, or AlphaFold3 parameters. AlphaFold3, model weights, third-party tools, and external databases remain subject to their own licenses and terms.
+
+To publish after GitHub authentication is configured:
+
+```bash
+git remote add origin git@github.com:<owner>/<repo>.git
+git push -u origin main
+```
