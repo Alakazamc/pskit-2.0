@@ -1,0 +1,259 @@
+[[skills]]
+id = "pdb_discovery"
+name = "PDB Discovery"
+description = """
+Find relevant PDB entries from natural language.\
+Fetch PDB infomation only when the user wants specific informations of certain entries.\
+Don't chose this skill if the user wants to do further analysis in addition to retrieving information, such as nucleic acid binding pair annotation\
+"""
+workflow = [
+    "Use search_pdb(query) to find candidate IDs.",
+    "Use fetch_pdb_info(pdb_id) if necessary.",
+]
+allowed_tools = ["search_pdb", "fetch_pdb_info"]
+
+[[skills]]
+id = "web_search"
+name = "Web Search"
+description = """
+Search the public web through SerpAPI for current external information, papers, tools, companies, documentation, or background context not covered by PSKit databases.\
+Prefer RCSB, UniProt, and RNAcentral for authoritative molecular records. Use this skill when the user explicitly asks to search the web or asks for current/non-PSKit external context.\
+"""
+workflow = [
+    "Use serpapi_search(query) with a focused query and a small num value.",
+    "Summarize the results with source URLs and distinguish web evidence from PSKit tool outputs.",
+    "Do not use web search as proof that a local computation was completed.",
+]
+allowed_tools = ["serpapi_search"]
+
+[[skills]]
+id = "structure_splitting"
+name = "Structure Splitting"
+description = "Inspect entry metadata and split complex/chains for downstream analysis readiness."
+workflow = [
+    "Use fetch_pdb_info(pdb_id) for metadata.",
+    "Use download_pdb_file for user-provided PDB IDs or candidate IDs from search_pdb. If the required protein structure has already been downloaded in the historical dialog, do not download it again.",
+    "Use split_complex or split_pdb_by_chain on downloaded/local structure.",
+    "Summarize resulting files and recommended analysis entry points.",
+]
+allowed_tools = [
+    "fetch_pdb_info",
+    "download_pdb_file",
+    "split_complex",
+    "split_pdb_by_chain",
+]
+
+[[skills]]
+id = "binding_pair_annotation"
+name = "Protein Nucleic Acid Binding Pair Annotation"
+description = "Annotate protein-nucleic-acid contact residue pairs."
+workflow = [
+    "Use search_pdb to find candidate IDs if user only provides natural language description and not PDB IDs.",
+    "Use fetch_pdb_info if user not provide PDB IDs and ask for specific information on entries. Otherwise, do not fetch unnecessary metadata.",
+    "Use download_pdb_file for user-provided PDB IDs or candidate IDs from search_pdb. If the required protein structure has already been downloaded in the historical dialog, do not download it again.",
+    "Use annotate_binding_pairs with pdb_path and cutoff.",
+    "Use read_result_file to read the whole result file and summarize key pair statistics and their distances for user interpretation.",
+]
+allowed_tools = [
+    "search_pdb",
+    "fetch_pdb_info",
+    "download_pdb_file",
+    "annotate_binding_pairs",
+    "read_result_file",
+]
+
+[[skills]]
+id = "fragment_extraction"
+name = "Chain Fragment Extraction"
+description = "Extract specific chain/region for focused analysis."
+workflow = [
+    "Use search_pdb to find candidate IDs if user only provides natural language description and not PDB IDs.",
+    "Use fetch_pdb_info if user not provide PDB IDs and ask for specific information on entries. Otherwise, do not fetch unnecessary metadata.",
+    "Use download_pdb_file for user-provided PDB IDs or candidate IDs from search_pdb. If the required protein structure has already been downloaded in the historical dialog, do not download it again.",
+    "Use extract_fragment(pdb_path, chain, start, end).",
+    "Return fragment file path and suggested next analysis.",
+]
+allowed_tools = [
+    "search_pdb",
+    "fetch_pdb_info",
+    "download_pdb_file",
+    "extract_fragment",
+]
+
+[[skills]]
+id = "get_contact_map"
+name = "Get Contact Map"
+description = "Compute structural contact map for chain or full structure."
+workflow = [
+    "Use download_pdb_file for provided PDB ID. If the required protein structure has already been downloaded in the historical dialog, it does not need to be re-downloaded",
+    "Use calculate_contact_map with mode and optional chain.",
+]
+allowed_tools = ["download_pdb_file", "calculate_contact_map"]
+
+[[skills]]
+id = "binding_site_prediction"
+name = "Binding Site Prediction"
+description = "Predict DNA/RNA binding sites for protein structure."
+workflow = [
+    "Use download_pdb_file for provided PDB ID. If the required protein structure has already been downloaded in the historical dialog, it does not need to be re-downloaded",
+    "Use predict_binding_sites(pdb_path, ligand_type).",
+    "use read_result_file to read the whole result file and summarize key predicted binding sites and their scores for user interpretation.",
+]
+allowed_tools = [
+    "predict_binding_sites",
+    "download_pdb_file",
+    "read_result_file",
+]
+
+[[skills]]
+id = "feature_extraction_pipeline"
+name = "Feature Extraction Pipeline"
+description = "Extract  features for downstream modeling."
+workflow = [
+    "Use download_pdb_file for provided PDB ID. If the required protein structure has already been downloaded in the historical dialog, it does not need to be re-downloaded",
+    "Use extract_empirical_features.",
+    "Use read_result_file to read the whole result file and summarize key features for user interpretation.",
+]
+allowed_tools = [
+    "download_pdb_file",
+    "extract_empirical_features",
+    "read_result_file",
+]
+
+[[skills]]
+id = "sequence_interaction_prediction"
+name = "Sequence Interaction Prediction"
+description = "Predict interaction from protein and nucleic sequences."
+workflow = [
+    "Use predict_interaction(protein_sequence, nucleic_sequence).",
+    "Use read_result_file to read the whole result file and summarize key predicted interaction likelihood or classification for user interpretation.",
+]
+allowed_tools = ["predict_interaction", "read_result_file"]
+
+[[skills]]
+id = "alphafold3_structure_prediction"
+name = "AlphaFold 3 Structure Prediction"
+description = "Run AlphaFold 3 from protein sequence input and summarize the generated structure files or runtime logs."
+workflow = [
+    "Use run_alphafold3 with one or more protein_sequences when the user explicitly requests structure prediction from sequence.",
+    "Warn briefly that AF3 is a heavy job and may take time or wait for a worker slot.",
+    "After the tool finishes, summarize the main generated files and point the user to af3_stdout.log or af3_stderr.log when troubleshooting is needed.",
+    "Use read_result_file on AF3 logs only when the user asks for detailed troubleshooting or when the tool output indicates an error.",
+]
+allowed_tools = ["run_alphafold3", "read_result_file"]
+
+[[skills]]
+id = "rna_design_generation"
+name = "RNA Design Generation"
+description = "Generate candidate RNA sequences for a protein chain using the remote RNA expert service."
+workflow = [
+    "If the user provides a natural-language target but not a PDB ID, use search_pdb to identify candidate structures.",
+    "Use fetch_pdb_info only when chain or entry metadata is needed to choose the correct protein chain.",
+    "Call remote_rna_expert__generate_rna_for_protein with pdb_id, chain, and optional num_samples/length.",
+    "Summarize the generated RNA sequences or server output, and surface any warnings or inference failures clearly.",
+]
+allowed_tools = [
+    "search_pdb",
+    "fetch_pdb_info",
+    "remote_rna_expert__generate_rna_for_protein",
+]
+
+[[skills]]
+id = "molecular_database_lookup"
+name = "Molecular Database Lookup"
+description = "Search and inspect UniProt, RNAcentral, and RCSB entries for proteins or RNAs."
+workflow = [
+    "Use search_uniprot or search_rnacentral when the user starts from a protein or RNA description instead of a concrete accession.",
+    "Use fetch_uniprot_entry or fetch_rnacentral_entry for detailed metadata once an accession is known.",
+    "Use search_pdb or fetch_pdb_info only when structure-level context is also required.",
+    "Summarize the biological entity, identifiers, species, and sequence-level metadata relevant to the user's goal.",
+]
+allowed_tools = [
+    "search_uniprot",
+    "fetch_uniprot_entry",
+    "search_rnacentral",
+    "fetch_rnacentral_entry",
+    "search_pdb",
+    "fetch_pdb_info",
+]
+
+[[skills]]
+id = "all-round_skill"
+name = "All-Round skill"
+description = """
+A skill that can combine multiple tools for complex user requests.\
+Also applies for situations that a user asks for a specific tool like read_result_file.\
+Example for complex tasks: user asks for splitting a complex and then annotating binding pairs or predicting binding sites on a specific chain.\
+In this case, the agent should be able to combine tools like split_complex or split_pdb_by_chain with annotate_binding_pairs or predict_binding_sites in a logical workflow to achieve the user's goal.
+Do not use all-round skill if the user's request can be fulfilled by other skills or if the user is asking for general information without a specific actionable request.\
+Do not make unnecessary tool calls. For example, if the user already provides specific chain information and only wants binding site prediction, there is no need to call structure splitting tools.\
+"""
+workflow = [
+    "Identify the multiple steps/tools needed to fulfill the user's request.",
+    "Use the appropriate tools in a logical sequence to achieve the desired outcome.",
+    "Summarize the results and guide the user through the combined workflow.",
+]
+allowed_tools = [
+    "search_pdb",
+    "fetch_pdb_info",
+    "download_pdb_file",
+    "split_complex",
+    "split_pdb_by_chain",
+    "annotate_binding_pairs",
+    "calculate_contact_map",
+    "predict_binding_sites",
+    "extract_empirical_features",
+    "predict_interaction",
+    "run_alphafold3",
+    "read_result_file",
+    "remote_rna_expert__generate_rna_for_protein",
+    "search_uniprot",
+    "fetch_uniprot_entry",
+    "search_rnacentral",
+    "fetch_rnacentral_entry",
+    "serpapi_search",
+]
+
+[[skills]]
+id = "introduce_tools"
+name = "Introduce Tools"
+description = """
+Introduce available tools to the user when they ask for help or when their request is not clear enough to determine a specific skill. \
+Guide them on how to use the tools effectively.\
+Do not make tool calls in this skill, only provide information and guidance.\
+"""
+workflow = [
+    "Provide a brief overview of the available tools and their capabilities.",
+    "Suggest how the user can use these tools to achieve their goals.",
+    "Encourage the user to ask specific questions or make specific requests related to the tools.",
+]
+allowed_tools = [
+    "search_pdb",
+    "fetch_pdb_info",
+    "split_complex",
+    "split_pdb_by_chain",
+    "annotate_binding_pairs",
+    "extract_fragment",
+    "calculate_contact_map",
+    "predict_binding_sites",
+    "extract_empirical_features",
+    "predict_interaction",
+    "run_alphafold3",
+    "remote_rna_expert__generate_rna_for_protein",
+    "search_uniprot",
+    "fetch_uniprot_entry",
+    "search_rnacentral",
+    "fetch_rnacentral_entry",
+    "serpapi_search",
+]
+
+[[skills]]
+id = "default_fallback"
+name = "Default Fallback"
+description = "Fallback skill when no other skill matches. Provides a generic response or asks for clarification."
+workflow = [
+    "Provide a generic response indicating that the request is not recognized.",
+    "Optionally ask the user for clarification or more details to better understand their request.",
+    "Introduce available skills if appropriate to guide the user towards a valid request.",
+]
+allowed_tools = []

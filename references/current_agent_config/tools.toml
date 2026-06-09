@@ -1,0 +1,298 @@
+[[tools]]
+name = "search_pdb"
+description = "Search the RCSB PDB for protein/nucleic acid structures using natural language keywords."
+[tools.parameters]
+type = "object"
+required = ["query"]
+[tools.parameters.properties.query]
+type = "string"
+description = "Keywords to search for, e.g., 'human p53 DNA complex'"
+
+[[tools]]
+name = "serpapi_search"
+description = "Search the public web through SerpAPI for current external information, papers, tools, companies, documentation, or background context not covered by PSKit internal databases."
+[tools.parameters]
+type = "object"
+required = ["query"]
+[tools.parameters.properties.query]
+type = "string"
+description = "Natural-language web search query."
+[tools.parameters.properties.num]
+type = "integer"
+description = "Number of organic results to return. Default: 5. Maximum: 10."
+[tools.parameters.properties.engine]
+type = "string"
+description = "SerpAPI engine. Default: google."
+[tools.parameters.properties.location]
+type = "string"
+description = "Optional search location, e.g., 'United States' or 'China'."
+[tools.parameters.properties.hl]
+type = "string"
+description = "Optional interface language code, e.g., en or zh-cn."
+[tools.parameters.properties.gl]
+type = "string"
+description = "Optional country code, e.g., us or cn."
+
+[[tools]]
+name = "download_pdb_file"
+description = "Download a structure file from RCSB by PDB ID and save it into the current agent session."
+[tools.parameters]
+type = "object"
+required = ["pdb_id"]
+[tools.parameters.properties.pdb_id]
+type = "string"
+description = "4-character PDB ID, e.g., '8W2S'"
+[tools.parameters.properties.format]
+type = "string"
+enum = ["cif", "pdb"]
+description = "File format to download. Defaults to cif."
+
+[[tools]]
+name = "search_uniprot"
+description = "Search UniProt entries by free-text keywords and return top accession hits."
+[tools.parameters]
+type = "object"
+required = ["query"]
+[tools.parameters.properties.query]
+type = "string"
+description = "Keywords such as gene names, protein names, species, or functions."
+
+[[tools]]
+name = "fetch_uniprot_entry"
+description = "Fetch UniProt metadata for a specific accession or entry id."
+[tools.parameters]
+type = "object"
+required = ["accession"]
+[tools.parameters.properties.accession]
+type = "string"
+description = "UniProt accession or entry id, e.g. P04637 or TP53_HUMAN."
+
+[[tools]]
+name = "search_rnacentral"
+description = "Search RNAcentral entries by free-text keywords and return top RNA hits."
+[tools.parameters]
+type = "object"
+required = ["query"]
+[tools.parameters.properties.query]
+type = "string"
+description = "Keywords such as RNA family, species, symbol, or functional description."
+
+[[tools]]
+name = "fetch_rnacentral_entry"
+description = "Fetch RNAcentral metadata for a specific RNAcentral accession."
+[tools.parameters]
+type = "object"
+required = ["accession"]
+[tools.parameters.properties.accession]
+type = "string"
+description = "RNAcentral accession, e.g. URS000075F7A1_9606."
+
+[[tools]]
+name = "fetch_pdb_info"
+description = "Get metadata for a specific PDB ID (resolution, species, chain entities, etc.)."
+[tools.parameters]
+type = "object"
+required = ["pdb_id"]
+[tools.parameters.properties.pdb_id]
+type = "string"
+description = "4-character PDB ID, e.g., '1TUP'"
+
+[[tools]]
+name = "split_pdb_by_chain"
+description = """
+Split a PDB/mmCIF file into separate chain files.\
+If user only wants extract specific chains, use extract_fragment instead.\
+"""
+[tools.parameters]
+type = "object"
+required = ["pdb_path", "format"]
+[tools.parameters.properties.pdb_path]
+type = "string"
+[tools.parameters.properties.format]
+type = "string"
+enum = ["cif", "pdb"]
+description = "File format of the input structure, pdb or cif."
+
+[[tools]]
+name = "split_complex"
+description = "Split PDB/mmCIF file into separate parts by molecule type (protein/nucleic acid)."
+[tools.parameters]
+type = "object"
+required = ["pdb_path", "format"]
+[tools.parameters.properties.pdb_path]
+type = "string"
+[tools.parameters.properties.format]
+type = "string"
+enum = ["cif", "pdb"]
+description = "File format of the input structure, pdb or cif."
+
+[[tools]]
+name = "extract_fragment"
+description = """
+Extract a chain fragment from a structure file.\
+To extract a whole chain, leave start and end as default.\
+"""
+[tools.parameters]
+type = "object"
+required = ["pdb_path", "chain", "format"]
+[tools.parameters.properties.pdb_path]
+type = "string"
+[tools.parameters.properties.chain]
+type = "string"
+[tools.parameters.properties.format]
+type = "string"
+enum = ["cif", "pdb"]
+description = "File format of the input structure, pdb or cif."
+[tools.parameters.properties.start]
+type = "integer"
+description = "1-based starting position in the chain. Default: start of chain"
+[tools.parameters.properties.end]
+type = "integer"
+description = "1-based ending position in the chain. Default: end of chain"
+
+[[tools]]
+name = "calculate_contact_map"
+description = """
+Calculate contact map JSON from structure.\
+Output is a json file containing two keys:"axis" and "values".\
+"axis" is a list of residue identifiers (chain-residue number-residue name).\
+"values" is a list of upper triangular matrix values representing the contact map without diagonal elements, where the order corresponds to "axis".\
+"""
+[tools.parameters]
+type = "object"
+required = ["pdb_path", "format"]
+[tools.parameters.properties.pdb_path]
+type = "string"
+[tools.parameters.properties.chain]
+type = "string"
+[tools.parameters.properties.format]
+type = "string"
+enum = ["cif", "pdb"]
+description = "File format of the input structure, pdb or cif."
+[tools.parameters.properties.mode]
+type = "string"
+enum = ["d", "knn"]
+description = "Contact map calculation mode: distance-based (d) or k-nearest neighbors (knn). Default: d"
+[tools.parameters.properties.k]
+type = "integer"
+description = "Number of neighbors for knn mode. Required if mode=knn."
+
+[[tools]]
+name = "annotate_binding_pairs"
+description = """
+Annotate protein-nucleic acid binding residue pairs.\
+Output is a csv file with two clomns:"pair" and "distance".\
+"pair" is a string in the format of "chain1-resnum1-resname1_chain2-resnum2-resname2".\
+"""
+[tools.parameters]
+type = "object"
+required = ["pdb_path", "format"]
+[tools.parameters.properties.pdb_path]
+type = "string"
+[tools.parameters.properties.format]
+type = "string"
+enum = ["cif", "pdb"]
+description = "File format of the input structure, pdb or cif."
+[tools.parameters.properties.cutoff]
+type = "number"
+description = "Cutoff distance for binding pair annotation. Default: 3.5"
+
+[[tools]]
+name = "predict_binding_sites"
+description = """
+Predict DNA/RNA binding sites using PSKit ai model.\
+Output is a csv file with four columns: chain,residue_number,residue_name,score.\
+"""
+[tools.parameters]
+type = "object"
+required = ["pdb_path", "ligand_type"]
+[tools.parameters.properties.pdb_path]
+type = "string"
+description = "Structure file path for input"
+[tools.parameters.properties.ligand_type]
+type = "string"
+enum = ["DNA", "RNA"]
+
+[[tools]]
+name = "extract_empirical_features"
+description = """
+Extract empirical features including DSSP and Rosetta Score.\
+Dot not make rosetta relax unless user explicitly asks for it, as it can be time consuming.\
+"""
+[tools.parameters]
+type = "object"
+required = ["pdb_path"]
+[tools.parameters.properties.pdb_path]
+type = "string"
+description = "Structure file path for input"
+[tools.parameters.properties.emp_feats]
+type = "string"
+description = "comma-separated features, including dssp and rosetta, e.g., 'dssp,rosetta'. Default: dssp"
+[tools.parameters.properties.rosetta_relax]
+type = "string"
+enum = ["true", "false"]
+description = "Whether to relax the structure with Rosetta. Default: false"
+
+[[tools]]
+name = "read_result_file"
+description = "Read a result text file with token-safe truncation (line range + char limit)."
+[tools.parameters]
+type = "object"
+required = ["file_path"]
+[tools.parameters.properties.file_path]
+type = "string"
+description = "Path to result file. (Absolute path)"
+[tools.parameters.properties.start_line]
+type = "integer"
+description = "1-based starting line number. Default: 1"
+[tools.parameters.properties.max_lines]
+type = "integer"
+description = "Maximum number of lines to read. Default: 1000. Do not set below 1000 to avoid excessive truncation cutting key information. Max allowed is 5000."
+[tools.parameters.properties.max_chars]
+type = "integer"
+description = "Maximum number of characters to return. Default: 12000. Do not set below 12000 to avoid excessive truncation cutting key information. Max allowed is 20000."
+
+[[tools]]
+name = "predict_interaction"
+description = "Predict protein-nucleic acid interaction from sequence pairs."
+[tools.parameters]
+type = "object"
+required = ["protein_seq", "nucleic_acid_seq"]
+[tools.parameters.properties.protein_seq]
+type = "string"
+[tools.parameters.properties.nucleic_acid_seq]
+type = "string"
+
+[[tools]]
+name = "run_alphafold3"
+description = """
+Run AlphaFold 3 structure prediction for one or more biomolecular entities.\
+Use this only when the user explicitly wants structure prediction from sequence.\
+This is a heavy GPU job and may wait for an available worker slot.\
+"""
+[tools.parameters]
+type = "object"
+required = ["entities"]
+[tools.parameters.properties.job_name]
+type = "string"
+description = "Optional AF3 job name. Default: pskit_af3"
+[tools.parameters.properties.entities]
+type = "array"
+description = "Ordered biomolecular entities for the AF3 job."
+items = { type = "object" }
+[tools.parameters.properties.model_seed]
+type = "integer"
+description = "Model seed. Default: 42"
+[tools.parameters.properties.num_diffusion_samples]
+type = "integer"
+description = "Number of diffusion samples. Default: 5"
+[tools.parameters.properties.gpu_device]
+type = "string"
+description = "GPU device string. Default comes from PSKIT_AF3_GPU_DEVICE or 0."
+[tools.parameters.properties.max_template_date]
+type = "string"
+description = "Template cutoff date in YYYY-MM-DD format. Default: 2021-09-30"
+[tools.parameters.properties.protein_sequences]
+type = "array"
+description = "Backward-compatible protein-only shortcut. Use one string per protein chain."
+items = { type = "string" }

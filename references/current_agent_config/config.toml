@@ -1,0 +1,35 @@
+chat.model = "deepseek-v4-flash"
+skill_selection.model = "deepseek-v4-flash"
+summary.model = "deepseek-v4-flash"
+
+chat.api = "https://api.deepseek.com/v1/chat/completions"
+skill_selection.api = "https://api.deepseek.com/v1/chat/completions"
+summary.api = "https://api.deepseek.com/v1/chat/completions"
+chat.api_key_env = "LLM_API_KEY"
+skill_selection.api_key_env = "LLM_API_KEY"
+summary.api_key_env = "LLM_API_KEY"
+
+max_agent_steps = 30
+max_tool_calls = 60
+recent_user_turns_window = 12
+summary_every_user_turns = 8
+max_tool_result_chars = 8000
+
+[rag]
+enabled = true
+backend = "chroma"
+fallback_to_keyword = true
+top_k = 5
+max_context_chars = 8000
+
+[rag.embedding]
+model = "BAAI/bge-m3"
+api = "https://api.siliconflow.cn/v1/embeddings"
+api_key_env = "SILICONFLOW_API_KEY"
+
+[rag.chroma]
+url = "http://127.0.0.1:8000"
+collection = "pskit_knowledge"
+tenant = "default_tenant"
+database = "default_database"
+timeout_secs = 10
