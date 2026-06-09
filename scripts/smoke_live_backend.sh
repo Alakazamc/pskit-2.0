@@ -26,5 +26,9 @@ done
 
 curl -fsS "http://$HOST:$PORT/api/health"
 printf '\n'
-curl -fsS "http://$HOST:$PORT/" | grep -q "PSKit 2.0"
+if [ -f "$ROOT_DIR/frontend/dist/index.html" ]; then
+  curl -fsS "http://$HOST:$PORT/" | grep -q "PSKit 2.0"
+else
+  echo "frontend/dist not found; skipped SPA check"
+fi
 echo "smoke_live_backend: ok"

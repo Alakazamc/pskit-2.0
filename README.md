@@ -63,6 +63,13 @@ npm install
 npm run dev
 ```
 
+Docker Compose with service dependencies:
+
+```bash
+cd infra
+docker compose up --build
+```
+
 A6000 direct bind example:
 
 ```bash
@@ -76,7 +83,7 @@ cd backend
 PYTHONPATH=. python3 ../scripts/smoke_backend.py
 ```
 
-Live backend smoke test:
+Live backend smoke test. This always checks the API and checks the SPA only when `frontend/dist` exists:
 
 ```bash
 scripts/smoke_live_backend.sh
