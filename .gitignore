@@ -4,6 +4,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+build/
+*.egg-info/
 .venv/
 venv/
 
@@ -40,4 +42,3 @@ model_parameters/
 .DS_Store
 .idea/
 .vscode/
-
