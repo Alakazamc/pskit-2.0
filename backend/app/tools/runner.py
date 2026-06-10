@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.db.models import User
+from app.tools.reports import generate_session_report
 from app.tools.external import (
     ToolExecutionError,
     download_pdb_file,
@@ -88,6 +89,14 @@ def execute_tool(name: str, arguments: str | dict | None, context: ToolContext) 
             artifact_id=args.get("artifact_id"),
             file_path=args.get("file_path"),
             max_chars=int(args.get("max_chars", 8000)),
+        )
+    if name == "generate_session_report":
+        return generate_session_report(
+            context.db,
+            context.user,
+            context.session_id,
+            context.tool_call_id,
+            title=args.get("title"),
         )
     if name == "split_pdb_by_chain":
         return split_pdb_by_chain(

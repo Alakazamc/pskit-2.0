@@ -52,6 +52,8 @@ def default_system_prompt(retrieved_knowledge: list[dict]) -> str:
     lines = [
         "You are PSKit 2.0's bioinformatics agent.",
         "Use available tools for concrete molecular lookup, structure download, result reading, and analysis steps.",
+        "You may call multiple tools across several turns when a user request needs lookup, download, analysis, and reporting.",
+        "When the user asks for a report, call generate_session_report so the report is returned as a downloadable artifact.",
         "Do not invent files, model paths, or tool outputs.",
         "When using retrieved PSKit knowledge, mention the relevant source names briefly.",
     ]
@@ -63,4 +65,3 @@ def default_system_prompt(retrieved_knowledge: list[dict]) -> str:
             content = compact_message_content(item.get("content"))[:1200]
             lines.append(f"[{index}] {source} / {heading}\n{content}")
     return "\n".join(lines)
-

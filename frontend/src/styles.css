@@ -540,6 +540,11 @@ textarea:focus {
   justify-self: start;
 }
 
+.message-card.streaming {
+  border-style: dashed;
+  background: rgba(255, 255, 255, 0.9);
+}
+
 .message-card p {
   margin: 0;
   white-space: pre-wrap;
@@ -610,6 +615,28 @@ textarea:focus {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: end;
+}
+
+.suggestion-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.suggestion-chip {
+  border: 1px solid #bfe5e9;
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: var(--teal-dark);
+  background: #edfafa;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.suggestion-chip:hover {
+  border-color: var(--teal);
+  background: #ddf6f7;
 }
 
 .agent-rail {

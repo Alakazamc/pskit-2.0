@@ -15,4 +15,6 @@ class AgentState(TypedDict, total=False):
     active_task_ids: list[str]
     artifacts: list[dict[str, Any]]
     diagnostics: list[dict[str, Any]]
+    pending_events: list[dict[str, Any]]
+    step_count: int
     final_answer: str | None

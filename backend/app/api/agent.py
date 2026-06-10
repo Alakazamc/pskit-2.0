@@ -8,13 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
-from app.agent.graph import run_agent_graph
-from app.agent.llm import LlmUnavailable, OpenAICompatibleClient, default_system_prompt
+from app.agent.orchestrator import AgentRuntime, LangGraphAgentRunner
 from app.db.models import AgentMessage, AgentSession, User, now_utc
 from app.db.session import get_db
 from app.schemas.agent import AgentMessageRequest, AgentMessageResponse, AgentSessionResponse, CreateAgentSessionRequest
-from app.tools.external import ToolExecutionError
-from app.tools.runner import ToolContext, execute_tool
 
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
@@ -115,115 +112,43 @@ def recent_chat_messages(db: Session, session_id: UUID, user: User, limit: int =
     return messages
 
 
-def tool_call_name_and_args(tool_call: dict) -> tuple[str, str]:
-    function = tool_call.get("function") or {}
-    return function.get("name") or "", function.get("arguments") or "{}"
-
-
-def normalize_assistant_message(message: dict) -> dict:
-    normalized = {
-        "role": "assistant",
-        "content": message.get("content") or "",
-    }
-    if message.get("tool_calls"):
-        normalized["tool_calls"] = message["tool_calls"]
-    return normalized
-
-
-def run_agent_turn(
+def stream_agent_turn(
     db: Session,
     user: User,
     session: AgentSession,
     user_content: str,
-    retrieved_knowledge: list[dict],
-    source_payload: list[dict],
-    rag_backend: str,
-) -> tuple[str, list[dict], list[dict]]:
-    events: list[dict] = [{"type": "knowledge_sources", "backend": rag_backend, "sources": source_payload}]
-    artifacts: list[dict] = []
-    llm = OpenAICompatibleClient()
+):
+    runner = LangGraphAgentRunner(
+        AgentRuntime(db=db, user=user, session=session),
+        recent_chat_messages(db, session.id, user),
+    )
 
-    messages = [{"role": "system", "content": default_system_prompt(retrieved_knowledge)}]
-    messages.extend(recent_chat_messages(db, session.id, user))
+    for event in runner.iter_events(user_content):
+        event_type = str(event.get("type") or "event")
+        payload = {key: value for key, value in event.items() if key != "type"}
+        yield sse_event(event_type, payload)
 
-    try:
-        assistant = llm.chat(messages, tools=True)
-        messages.append(normalize_assistant_message(assistant))
-
-        for _step in range(4):
-            tool_calls = assistant.get("tool_calls") or []
-            if not tool_calls:
-                content = assistant.get("content") or assistant.get("reasoning_content") or ""
-                if content:
-                    return content, events, artifacts
-                break
-
-            for call in tool_calls:
-                call_id = call.get("id") or f"call_{len(events)}"
-                name, raw_args = tool_call_name_and_args(call)
-                events.append(
-                    {
-                        "type": "tool_call_started",
-                        "tool_call_id": call_id,
-                        "name": name,
-                        "args": raw_args,
-                    }
-                )
-                try:
-                    result = execute_tool(
-                        name,
-                        raw_args,
-                        ToolContext(db=db, user=user, session_id=session.id, tool_call_id=call_id),
-                    )
-                    events.append(
-                        {
-                            "type": "tool_call_finished",
-                            "tool_call_id": call_id,
-                            "name": name,
-                            "result": result,
-                        }
-                    )
-                    if result.get("artifact_id"):
-                        artifact = {
-                            "artifact_id": result["artifact_id"],
-                            "filename": result.get("filename"),
-                            "download_url": result.get("download_url"),
-                        }
-                        artifacts.append(artifact)
-                        events.append({"type": "artifact_created", "artifact": artifact})
-                    if result.get("task_id"):
-                        events.append(
-                            {
-                                "type": "task_created",
-                                "task_id": result["task_id"],
-                                "task_type": result.get("task_type"),
-                                "status": result.get("status"),
-                            }
-                        )
-                    tool_result = json.dumps(result, ensure_ascii=False)
-                except Exception as exc:
-                    error = {
-                        "error_type": "tool_execution_error",
-                        "tool": name,
-                        "message": str(exc),
-                    }
-                    events.append({"type": "error", "error": error})
-                    tool_result = json.dumps(error, ensure_ascii=False)
-
-                messages.append({"role": "tool", "tool_call_id": call_id, "content": tool_result})
-
-            assistant = llm.chat(messages, tools=True)
-            messages.append(normalize_assistant_message(assistant))
-
-        content = assistant.get("content") or "Tool execution finished, but the model returned no final text."
-        return content, events, artifacts
-    except LlmUnavailable as exc:
-        answer = (
-            "PSKit 2.0 Agent backend is running, but the LLM is not available for this request. "
-            f"Reason: {exc}. Retrieved knowledge sources are still attached."
-        )
-        events.append({"type": "error", "error": {"error_type": "llm_unavailable", "message": str(exc)}})
-        return answer, events, artifacts
+    assistant_message = AgentMessage(
+        session_id=session.id,
+        user_id=user.id,
+        role="assistant",
+        content=runner.record.final_answer,
+        metadata_json={
+            "sources": runner.record.sources,
+            "rag_backend": runner.record.rag_backend,
+            "artifacts": runner.record.artifacts,
+            "suggestions": runner.record.suggestions,
+            "events": runner.record.events,
+            "agent_architecture": "langgraph_planner_executor_synthesizer",
+            "generated_at": datetime.utcnow().isoformat(),
+        },
+    )
+    db.add(assistant_message)
+    session.updated_at = now_utc()
+    db.commit()
+    db.refresh(assistant_message)
+    yield sse_event("message_done", {"message_id": str(assistant_message.id)})
+    yield sse_event("done", {})
 
 
 @router.post("/sessions/{session_id}/message")
@@ -246,43 +171,7 @@ def send_message(
     db.commit()
     db.refresh(user_message)
 
-    graph_state = run_agent_graph({"latest_user_message": payload.content})
-    rag_backend = graph_state.get("rag_backend", "keyword_fallback")
-    source_payload = graph_state.get("retrieved_knowledge", [])
-    answer, events, artifacts = run_agent_turn(
-        db,
-        user,
-        session,
-        payload.content,
-        source_payload,
-        [{"source": item["source"], "heading": item["heading"], "score": item["score"]} for item in source_payload],
-        rag_backend,
+    return StreamingResponse(
+        stream_agent_turn(db, user, session, payload.content),
+        media_type="text/event-stream",
     )
-    assistant_message = AgentMessage(
-        session_id=session.id,
-        user_id=user.id,
-        role="assistant",
-        content=answer,
-        metadata_json={
-            "sources": [
-                {"source": item["source"], "heading": item["heading"], "score": item["score"]}
-                for item in source_payload
-            ],
-            "rag_backend": rag_backend,
-            "artifacts": artifacts,
-            "generated_at": datetime.utcnow().isoformat(),
-        },
-    )
-    db.add(assistant_message)
-    db.commit()
-    db.refresh(assistant_message)
-
-    def stream():
-        for event in events:
-            event_type = event.pop("type")
-            yield sse_event(event_type, event)
-        yield sse_event("message_delta", {"delta": answer})
-        yield sse_event("message_done", {"message_id": str(assistant_message.id)})
-        yield sse_event("done", {})
-
-    return StreamingResponse(stream(), media_type="text/event-stream")

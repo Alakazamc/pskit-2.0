@@ -27,6 +27,7 @@ TOOL_CATALOG: tuple[ToolSpec, ...] = (
     ToolSpec("predict_interaction", "Predict sequence-level protein-nucleic interaction.", long_running=True),
     ToolSpec("run_alphafold3", "Submit AlphaFold 3 structure prediction.", long_running=True),
     ToolSpec("read_result_file", "Read a registered artifact/result file."),
+    ToolSpec("generate_session_report", "Generate a Markdown report for the current agent session."),
     ToolSpec(
         "remote_rna_expert__generate_rna_for_protein",
         "Generate RNA candidates for a protein chain through remote MCP.",
@@ -97,6 +98,12 @@ def openai_tool_schemas() -> list[dict]:
                 "artifact_id": {"type": "string"},
                 "file_path": {"type": "string"},
                 "max_chars": {"type": "integer"},
+            },
+        },
+        "generate_session_report": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
             },
         },
         "split_pdb_by_chain": {
@@ -180,6 +187,15 @@ def openai_tool_schemas() -> list[dict]:
                 },
                 "model_seed": {"type": "integer"},
                 "num_diffusion_samples": {"type": "integer"},
+            },
+        },
+        "remote_rna_expert__generate_rna_for_protein": {
+            "type": "object",
+            "required": ["pdb_id", "chain"],
+            "properties": {
+                "pdb_id": {"type": "string"},
+                "chain": {"type": "string"},
+                "num_samples": {"type": "integer"},
             },
         },
     }

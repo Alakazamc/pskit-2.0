@@ -48,6 +48,8 @@ const ragBackend = ref("none");
 const artifacts = ref<ArtifactEvent[]>([]);
 const events = ref<ToolEvent[]>([]);
 const tasks = ref<Task[]>([]);
+const streamingAnswer = ref("");
+const suggestions = ref<string[]>([]);
 
 const activeSession = computed(() => sessions.value.find((item) => item.id === activeSessionId.value));
 
@@ -93,6 +95,8 @@ async function newSession() {
   sources.value = [];
   artifacts.value = [];
   events.value = [];
+  streamingAnswer.value = "";
+  suggestions.value = [];
 }
 
 async function selectSession(sessionId: string) {
@@ -100,10 +104,28 @@ async function selectSession(sessionId: string) {
   sources.value = [];
   artifacts.value = [];
   events.value = [];
+  streamingAnswer.value = "";
+  suggestions.value = [];
   await loadHistory();
 }
 
 function handleStreamEvent(event: StreamEvent) {
+  if (event.type === "agent_step") {
+    events.value.unshift({
+      type: "agent_step",
+      name: String(event.label || "执行步骤"),
+      status: String(event.status || ""),
+    });
+    return;
+  }
+  if (event.type === "message_delta") {
+    streamingAnswer.value += String(event.delta || "");
+    return;
+  }
+  if (event.type === "suggestions") {
+    suggestions.value = Array.isArray(event.items) ? event.items.map((item) => String(item)) : [];
+    return;
+  }
   if (event.type === "knowledge_sources") {
     sources.value = (event.sources as SourceEvent[]) || [];
     ragBackend.value = String(event.backend || "unknown");
@@ -137,12 +159,18 @@ function handleStreamEvent(event: StreamEvent) {
   }
 }
 
+function useSuggestion(suggestion: string) {
+  input.value = suggestion;
+}
+
 async function sendMessage() {
   const content = input.value.trim();
   if (!content || !activeSessionId.value || sending.value) return;
   sending.value = true;
   input.value = "";
   error.value = "";
+  streamingAnswer.value = "";
+  suggestions.value = [];
   messages.value.push({
     id: `local-${Date.now()}`,
     role: "user",
@@ -153,6 +181,7 @@ async function sendMessage() {
   try {
     await streamAgentMessage(activeSessionId.value, content, handleStreamEvent);
     await Promise.all([loadHistory(), loadSessions(), loadTasks()]);
+    streamingAnswer.value = "";
   } catch (err) {
     error.value = err instanceof ApiError ? err.message : "消息发送失败";
   } finally {
@@ -197,6 +226,21 @@ onMounted(boot);
           <span>{{ message.role === "user" ? "用户" : message.role === "assistant" ? "智能体" : message.role }}</span>
           <MarkdownMessage :content="message.content" />
         </article>
+        <article v-if="streamingAnswer" class="message-card assistant streaming">
+          <span>智能体生成中</span>
+          <MarkdownMessage :content="streamingAnswer" />
+        </article>
+      </div>
+      <div v-if="suggestions.length > 0" class="suggestion-row" aria-label="后续建议">
+        <button
+          v-for="suggestion in suggestions"
+          :key="suggestion"
+          class="suggestion-chip"
+          type="button"
+          @click="useSuggestion(suggestion)"
+        >
+          {{ suggestion }}
+        </button>
       </div>
       <form class="composer" @submit.prevent="sendMessage">
         <textarea
