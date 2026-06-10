@@ -18,7 +18,7 @@ async function register(username: string, password: string) {
     await auth.register(username, password);
     await router.push("/agent");
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : "Registration failed";
+    error.value = err instanceof ApiError ? err.message : "注册失败";
   } finally {
     loading.value = false;
   }

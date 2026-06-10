@@ -22,18 +22,18 @@ function submit() {
 <template>
   <section class="auth-panel">
     <div class="auth-copy">
-      <h2>{{ props.mode === "login" ? "Sign in" : "Create account" }}</h2>
+      <h2>{{ props.mode === "login" ? "登录账号" : "注册账号" }}</h2>
       <p>
-        {{ props.mode === "login" ? "Access protected PSKit tools and reports." : "Create a workspace account for isolated sessions and artifacts." }}
+        {{ props.mode === "login" ? "登录后可以使用受保护的 PSKit 工具、任务和报告。" : "创建账号后，对话、任务和结果文件会按用户隔离保存。" }}
       </p>
     </div>
     <form class="auth-form" @submit.prevent="submit">
       <label>
-        Username
+        用户名
         <input v-model="username" name="username" autocomplete="username" minlength="3" required />
       </label>
       <label>
-        Password
+        密码
         <input
           v-model="password"
           name="password"
@@ -45,12 +45,12 @@ function submit() {
       </label>
       <p v-if="props.error" class="error-line">{{ props.error }}</p>
       <button class="primary-button full" :disabled="props.loading">
-        {{ props.loading ? "Working..." : props.mode === "login" ? "Login" : "Register" }}
+        {{ props.loading ? "处理中..." : props.mode === "login" ? "登录" : "注册" }}
       </button>
       <p class="auth-switch">
-        <span>{{ props.mode === "login" ? "No account yet?" : "Already have an account?" }}</span>
+        <span>{{ props.mode === "login" ? "还没有账号？" : "已经有账号？" }}</span>
         <RouterLink :to="props.mode === 'login' ? '/register' : '/login'">
-          {{ props.mode === "login" ? "Create one" : "Sign in" }}
+          {{ props.mode === "login" ? "去注册" : "去登录" }}
         </RouterLink>
       </p>
     </form>

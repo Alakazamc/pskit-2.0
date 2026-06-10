@@ -19,7 +19,7 @@ async function login(username: string, password: string) {
     await auth.login(username, password);
     await router.push(String(route.query.redirect || "/agent"));
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : "Login failed";
+    error.value = err instanceof ApiError ? err.message : "登录失败";
   } finally {
     loading.value = false;
   }

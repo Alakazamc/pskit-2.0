@@ -15,7 +15,7 @@ async function loadTasks() {
   try {
     tasks.value = await api.tasks();
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : "Could not load tasks";
+    error.value = err instanceof ApiError ? err.message : "无法加载任务";
   } finally {
     loading.value = false;
   }
@@ -28,13 +28,13 @@ onMounted(loadTasks);
   <section class="content-panel">
     <div class="panel-header">
       <div>
-        <h2>Tasks</h2>
-        <p>Long-running model jobs and generated artifacts.</p>
+        <h2>任务</h2>
+        <p>长时间运行的模型任务、进度状态和生成结果文件。</p>
       </div>
-      <button class="ghost-button" @click="loadTasks">Refresh</button>
+      <button class="ghost-button" @click="loadTasks">刷新</button>
     </div>
     <p v-if="error" class="error-line">{{ error }}</p>
-    <EmptyState v-else-if="!loading && tasks.length === 0" title="No tasks yet" body="Submit a model tool from the Agent to create a queued task." />
+    <EmptyState v-else-if="!loading && tasks.length === 0" title="暂无任务" body="在智能体中调用模型工具后，会在这里生成排队任务。" />
     <div v-else class="task-list">
       <article v-for="task in tasks" :key="task.id" class="task-row">
         <div>

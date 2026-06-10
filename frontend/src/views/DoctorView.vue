@@ -14,7 +14,7 @@ async function loadDoctor() {
   try {
     report.value = await api.doctor();
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : "Could not load doctor";
+    error.value = err instanceof ApiError ? err.message : "无法加载运行体检";
   } finally {
     loading.value = false;
   }
@@ -27,16 +27,16 @@ onMounted(loadDoctor);
   <section class="content-panel">
     <div class="panel-header">
       <div>
-        <h2>Runtime doctor</h2>
-        <p>Admin-only health check for models, APIs, vector database, and scientific binaries.</p>
+        <h2>运行体检</h2>
+        <p>管理员可见，用于检查模型权重、API、向量数据库和科学计算二进制工具。</p>
       </div>
-      <button class="ghost-button" @click="loadDoctor">Refresh</button>
+      <button class="ghost-button" @click="loadDoctor">刷新</button>
     </div>
     <p v-if="error" class="error-line">{{ error }}</p>
     <div v-else-if="report" class="doctor-layout">
       <div class="doctor-summary">
         <StatusPill :status="report.overall" />
-        <strong>{{ report.fail_count }} fail · {{ report.warn_count }} warn</strong>
+        <strong>{{ report.fail_count }} 个失败 · {{ report.warn_count }} 个警告</strong>
       </div>
       <div class="check-list">
         <article v-for="check in report.checks" :key="check.name" class="check-row">

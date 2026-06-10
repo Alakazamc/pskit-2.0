@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 
 import EmptyState from "../components/EmptyState.vue";
+import MarkdownMessage from "../components/MarkdownMessage.vue";
 import StatusPill from "../components/StatusPill.vue";
 import {
   ApiError,
@@ -72,20 +73,20 @@ async function boot() {
   try {
     await loadSessions();
     if (!activeSessionId.value) {
-      const session = await api.createSession("New Chat");
+      const session = await api.createSession("新对话");
       sessions.value.unshift(session);
       activeSessionId.value = session.id;
     }
     await Promise.all([loadHistory(), loadTasks()]);
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : "Could not load agent";
+    error.value = err instanceof ApiError ? err.message : "无法加载智能体";
   } finally {
     loading.value = false;
   }
 }
 
 async function newSession() {
-  const session = await api.createSession("New Chat");
+  const session = await api.createSession("新对话");
   sessions.value.unshift(session);
   activeSessionId.value = session.id;
   messages.value = [];
@@ -153,7 +154,7 @@ async function sendMessage() {
     await streamAgentMessage(activeSessionId.value, content, handleStreamEvent);
     await Promise.all([loadHistory(), loadSessions(), loadTasks()]);
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : "Message failed";
+    error.value = err instanceof ApiError ? err.message : "消息发送失败";
   } finally {
     sending.value = false;
   }
@@ -166,8 +167,8 @@ onMounted(boot);
   <section class="agent-layout">
     <aside class="session-pane">
       <div class="pane-header">
-        <strong>Conversations</strong>
-        <button class="mini-button" @click="newSession">New</button>
+        <strong>对话记录</strong>
+        <button class="mini-button" @click="newSession">新建</button>
       </div>
       <button
         v-for="session in sessions"
@@ -176,7 +177,7 @@ onMounted(boot);
         :class="{ active: session.id === activeSessionId }"
         @click="selectSession(session.id)"
       >
-        <span>{{ session.title || "New Chat" }}</span>
+        <span>{{ session.title || "新对话" }}</span>
         <small>{{ new Date(session.updated_at).toLocaleString() }}</small>
       </button>
     </aside>
@@ -184,35 +185,35 @@ onMounted(boot);
     <div class="chat-panel">
       <div class="chat-header">
         <div>
-          <h2>{{ activeSession?.title || "Agent" }}</h2>
-          <p>Ask for PDB download, chain splitting, RAG questions, binding prediction, PAIR, or AF3 tasks.</p>
+          <h2>{{ activeSession?.title || "智能体" }}</h2>
+          <p>可以请求 PDB 下载、链拆分、RAG 问答、结合位点预测、PAIR 或 AF3 任务。</p>
         </div>
         <StatusPill :status="sending ? 'running' : 'ready'" />
       </div>
       <p v-if="error" class="error-line">{{ error }}</p>
-      <EmptyState v-if="!loading && messages.length === 0" title="Start an analysis" body="Example: download 7U5E and predict RNA binding sites." />
+      <EmptyState v-if="!loading && messages.length === 0" title="开始一次分析" body="示例：下载 7U5E 并预测 RNA 结合位点。" />
       <div class="message-list">
         <article v-for="message in messages" :key="message.id" class="message-card" :class="message.role">
-          <span>{{ message.role }}</span>
-          <p>{{ message.content }}</p>
+          <span>{{ message.role === "user" ? "用户" : message.role === "assistant" ? "智能体" : message.role }}</span>
+          <MarkdownMessage :content="message.content" />
         </article>
       </div>
       <form class="composer" @submit.prevent="sendMessage">
         <textarea
           v-model="input"
           rows="3"
-          placeholder="Ask PSKit to search structures, run tools, create reports, or explain model dependencies..."
+          placeholder="让 PSKit 搜索结构、调用工具、生成报告，或解释模型依赖..."
           @keydown.meta.enter.prevent="sendMessage"
           @keydown.ctrl.enter.prevent="sendMessage"
         />
-        <button class="primary-button" :disabled="sending || !input.trim()">Send</button>
+        <button class="primary-button" :disabled="sending || !input.trim()">发送</button>
       </form>
     </div>
 
     <aside class="agent-rail">
       <div class="rail-card dark">
-        <span class="card-label">Latest tool events</span>
-        <div v-if="events.length === 0" class="muted">No tool event yet.</div>
+        <span class="card-label">最新工具事件</span>
+        <div v-if="events.length === 0" class="muted">暂无工具事件。</div>
         <div v-for="event in events.slice(0, 6)" :key="`${event.type}-${event.tool_call_id}-${event.task_id}`" class="rail-row">
           <strong>{{ event.name || event.task_type || event.type }}</strong>
           <small>{{ event.status || event.tool_call_id || event.task_id }}</small>
@@ -220,8 +221,8 @@ onMounted(boot);
       </div>
 
       <div class="rail-card">
-        <span class="card-label">Artifacts</span>
-        <div v-if="artifacts.length === 0" class="muted">Artifacts created by tools will appear here.</div>
+        <span class="card-label">结果文件</span>
+        <div v-if="artifacts.length === 0" class="muted">工具生成的结果文件会显示在这里。</div>
         <a
           v-for="artifact in artifacts.slice(0, 6)"
           :key="artifact.artifact_id"
@@ -235,9 +236,9 @@ onMounted(boot);
       </div>
 
       <div class="rail-card">
-        <span class="card-label">RAG sources</span>
+        <span class="card-label">RAG 来源</span>
         <StatusPill :status="ragBackend" />
-        <div v-if="sources.length === 0" class="muted">No retrieved source for the latest turn.</div>
+        <div v-if="sources.length === 0" class="muted">最近一轮暂无检索来源。</div>
         <article v-for="source in sources.slice(0, 4)" :key="`${source.source}-${source.heading}`" class="source-card">
           <strong>{{ source.heading || source.source }}</strong>
           <small>{{ source.source }} · {{ Number(source.score || 0).toFixed(2) }}</small>
@@ -245,8 +246,8 @@ onMounted(boot);
       </div>
 
       <div class="rail-card">
-        <span class="card-label">Recent tasks</span>
-        <div v-if="tasks.length === 0" class="muted">No tasks yet.</div>
+        <span class="card-label">最近任务</span>
+        <div v-if="tasks.length === 0" class="muted">暂无任务。</div>
         <article v-for="task in tasks.slice(0, 4)" :key="task.id" class="task-mini">
           <strong>{{ task.task_type }}</strong>
           <StatusPill :status="task.status" />

@@ -13,7 +13,7 @@ onMounted(async () => {
   try {
     tools.value = (await api.tools()).tools;
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : "Could not load tools";
+    error.value = err instanceof ApiError ? err.message : "无法加载工具";
   } finally {
     loading.value = false;
   }
@@ -24,13 +24,13 @@ onMounted(async () => {
   <section class="content-panel">
     <div class="panel-header">
       <div>
-        <h2>Tool catalog</h2>
-        <p>Typed tools exposed to the PSKit Agent.</p>
+        <h2>工具目录</h2>
+        <p>PSKit 智能体可调用的结构化工具列表。</p>
       </div>
       <StatusPill status="protected" />
     </div>
     <p v-if="error" class="error-line">{{ error }}</p>
-    <EmptyState v-else-if="!loading && tools.length === 0" title="No tools" body="The backend returned an empty tool catalog." />
+    <EmptyState v-else-if="!loading && tools.length === 0" title="暂无工具" body="后端返回的工具目录为空。" />
     <div v-else class="tool-grid">
       <article v-for="tool in tools" :key="tool.name" class="tool-card">
         <div class="tool-card-head">
