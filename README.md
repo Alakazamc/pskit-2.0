@@ -1,145 +1,229 @@
 # PSKit 2.0
 
-PSKit 2.0 is a full-stack BioAI Agent workbench for protein-nucleic-acid analysis. It rebuilds the original PSKit deployment around a Vue frontend, FastAPI backend, authenticated multi-user sessions, RAG-assisted agent behavior, long-running model tasks, and downloadable scientific artifacts.
+PSKit 2.0 is a full-stack BioAI Agent workbench for protein-nucleic-acid analysis. It combines a Vue web UI, FastAPI backend, LangGraph agent orchestration, Qdrant RAG, authenticated user sessions, long-running BioAI task execution, and downloadable scientific reports.
 
-The current implementation keeps the proven PSKit 1.x scientific runtime as a compatibility backend through `PSKIT_LEGACY_ROOT`, while the 2.0 service owns orchestration, auth, task state, file ownership, and the web interface.
+The project is designed for A6000 single-server deployment while keeping the original PSKit scientific runtime reusable through `PSKIT_LEGACY_ROOT`.
 
-## Core Capabilities
+If you have questions about deployment or collaboration, please contact **Alakazamc on WeChat**.
 
-- Multi-user auth with HttpOnly cookie sessions and role-based admin access.
-- Agent sessions with persisted message history and Server-Sent Events.
-- Tool catalog for RCSB PDB, UniProt, RNAcentral, SerpAPI, structure splitting, contact maps, result reading, binding-site prediction, PAIR, empirical features, and AlphaFold3.
-- Long-running task execution with persisted status, structured failure states, stdout/stderr logs, and registered downloadable artifacts.
-- Runtime doctor for model weights, Foldseek, DSSP, AF3 resources, LLM API, embedding API, and Qdrant.
-- Project-knowledge RAG through a LangGraph retrieval node: Qdrant + BAAI/bge-m3 when configured, keyword fallback otherwise.
-- Vue 3 workbench UI with public docs, login/register, Agent, Tasks, Tools, and Doctor pages.
+## Highlights
+
+- **LangGraph Agent architecture**: retrieval, planning, tool execution, and answer synthesis are explicit graph nodes.
+- **RAG knowledge retrieval**: Markdown knowledge base indexed by Qdrant with `BAAI/bge-m3`; keyword fallback is available when the vector stack is unavailable.
+- **BioAI tool calling**: PDB/RCSB, UniProt, RNAcentral, SerpAPI, structure splitting, contact maps, binding-site prediction, PAIR-style interaction prediction, remote RNA expert, AlphaFold3 task submission, result reading, and report generation.
+- **SSE streaming UI**: Agent step events, tool-call start/finish events, answer deltas, artifact cards, and follow-up suggestions.
+- **Authenticated multi-user system**: username/password login, HttpOnly cookie sessions, admin-only runtime doctor, and ownership checks for sessions, tasks, files, and reports.
+- **Long-running task runtime**: worker process for model/GPU jobs, structured task states, logs, and registered artifacts.
+- **Deployment-oriented engineering**: runtime doctor, A6000 start/control scripts, `.env.example`, architecture docs, and smoke tests.
+
+## Current User-Facing Features
+
+- Public home/about/technical documentation pages.
+- Login and registration pages.
+- Agent chat page with Markdown rendering, SSE progress, RAG sources, tool events, result files, task list, and follow-up suggestions.
+- Task center for queued/running/succeeded/failed BioAI jobs.
+- Tool catalog page.
+- Admin doctor page for checking LLM, embedding, Qdrant, model paths, Foldseek, DSSP, AlphaFold3, and runtime dependencies.
+- Downloadable artifacts, including CIF/PDB/JSON/CSV/log/report files.
 
 ## Technology Stack
 
-| Layer | Current Implementation |
-| --- | --- |
-| Frontend | Vue 3, TypeScript, Vite, Pinia, Vue Router, custom CSS |
-| Backend API | FastAPI, Pydantic, SQLAlchemy, httpx |
-| Auth | Argon2id when available, PBKDF2 development fallback, HttpOnly cookie sessions |
-| Database | SQLite fallback now, PostgreSQL-ready SQLAlchemy models |
-| Agent | LangGraph retrieval node, OpenAI-compatible chat client, tool-call loop, SSE events |
-| RAG | Qdrant + BAAI/bge-m3 when configured, Markdown keyword fallback otherwise |
-| Task runtime | Local worker process now; Celery/Redis target design |
-| Artifacts | Local filesystem with ownership checks now; S3/MinIO target design |
-| BioAI runtime | PSKit 1.x compatibility subprocess via `PSKIT_LEGACY_ROOT` |
+| Layer | Technology | Role |
+| --- | --- | --- |
+| Frontend | Vue 3, TypeScript, Vite | SPA workbench and protected routes |
+| Frontend state/routing | Pinia, Vue Router | Auth state, sessions, tasks, navigation |
+| UI | Custom CSS | Responsive BioAI dashboard and Agent chat UI |
+| Backend API | FastAPI, Pydantic v2 | HTTP APIs, SSE, auth, tasks, files, doctor |
+| Database | SQLite default, PostgreSQL-ready SQLAlchemy models | Users, sessions, messages, tasks, artifacts |
+| Auth | Argon2id/PBKDF2 fallback, HttpOnly cookie | Password login and session security |
+| Agent orchestration | LangGraph, langchain-core | Planner, executor, synthesizer, graph state |
+| LLM client | httpx + OpenAI-compatible chat schema | DeepSeek/OpenRouter/compatible providers |
+| RAG vector DB | Qdrant | Semantic retrieval with metadata payloads |
+| Embedding model | `BAAI/bge-m3` | 1024-dim Chinese/English document embedding |
+| Optional rerank | `BAAI/bge-reranker-v2-m3` | Higher precision RAG ranking |
+| Task runtime | Local Python worker, Celery/Redis-ready deps | Long-running model/GPU task execution |
+| Artifacts | Local filesystem, S3/MinIO-ready design | Registered scientific outputs |
+| BioAI runtime | PSKit 1.x compatibility subprocess | INABe, PAIR, AF3 and legacy tools |
+| External tools | Foldseek, DSSP, AlphaFold3, remote RNA expert | Structure and model workflows |
+| Testing | pytest/TestClient, smoke scripts, Vue build checks | Local and deployment validation |
 
 ## Repository Layout
 
 ```text
-backend/      FastAPI backend, database models, auth, APIs, tools, worker
-frontend/     Vue 3 application source
-knowledge/    Markdown knowledge files for RAG
-docs/         Architecture, migration, deployment, test, and resume docs
-scripts/      Local/A6000 startup, worker, frontend build, and smoke scripts
+backend/      FastAPI backend, LangGraph agent, auth, DB models, APIs, tools, worker
+frontend/     Vue 3 + TypeScript frontend
+knowledge/    Markdown RAG knowledge base
+docs/         Design, architecture, deployment, migration, API, and test docs
+scripts/      A6000 control scripts, worker scripts, smoke tests, RAG indexing
 infra/        Docker Compose dependency plan
-references/   Read-only reference copy of selected old PSKit Agent config
+agent/        Agent design notes
+tests/        Test plan and placeholders
+references/   Read-only reference copy of old PSKit configuration
 ```
 
 ## Quick Start
 
-Backend:
+### 1. Clone
+
+```bash
+git clone <your-repo-url> pskit-2.0
+cd pskit-2.0
+```
+
+### 2. Configure Environment
+
+```bash
+cp .env.example .env
+chmod 600 .env
+```
+
+Edit `.env` and fill in your API keys, model paths, Qdrant settings, and PSKit runtime paths. Do not commit `.env`.
+
+### 3. Install Backend Dependencies
 
 ```bash
 cd backend
-PYTHONPATH=. python3 -m uvicorn app.main:app --host 127.0.0.1 --port 10706
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
 ```
 
-Worker:
+If you are using the existing A6000 Python environment, you can skip the venv and run with `PYTHONPATH=.`.
+
+### 4. Build Frontend
 
 ```bash
-scripts/run_worker_forever.sh
-```
-
-Frontend:
-
-```bash
-cd frontend
+cd ../frontend
 npm install
-npm run dev
+npm run build
 ```
 
-Docker Compose with service dependencies:
+### 5. Start Backend and Worker
+
+From the repository root:
 
 ```bash
-cd infra
-docker compose up --build
+scripts/pskit2_ctl.sh start
+scripts/pskit2_ctl.sh status
+scripts/pskit2_ctl.sh logs 120
 ```
 
-A6000 direct bind example:
+Stop services:
 
 ```bash
-PSKIT_BIND=172.31.199.38:10706 scripts/start_a6000.sh
+scripts/pskit2_ctl.sh stop
 ```
 
-Smoke test:
+## A6000 Deployment
+
+For a direct A6000 intranet deployment:
 
 ```bash
-cd backend
-PYTHONPATH=. python3 ../scripts/smoke_backend.py
+PSKIT_BIND=172.31.199.38:10716 scripts/pskit2_ctl.sh start
 ```
 
-Live backend smoke test. This always checks the API and checks the SPA only when `frontend/dist` exists:
+Then access:
 
-```bash
-scripts/smoke_live_backend.sh
+```text
+http://172.31.199.38:10716/agent
 ```
 
-Build the Qdrant RAG index after configuring Qdrant and the embedding API:
+The developer laptop does not need to stay online when PSKit binds directly to the A6000 intranet IP.
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) and [docs/09_deployment_a6000.md](docs/09_deployment_a6000.md) for detailed deployment steps.
+
+## RAG Setup
+
+PSKit 2.0 uses Markdown files under `knowledge/` as the source document library.
+
+Recommended vector setup:
+
+```text
+EMBEDDING_MODEL=BAAI/bge-m3
+QDRANT_VECTOR_SIZE=1024
+QDRANT_COLLECTION=pskit_knowledge
+```
+
+Build or rebuild the index:
 
 ```bash
 cd backend
 PYTHONPATH=. python3 ../scripts/build_rag_index.py
 ```
 
-## Environment
+If `QDRANT_PATH` is set, PSKit uses embedded local Qdrant storage. If not, it connects to `QDRANT_URL`. If Qdrant or embedding is unavailable, Agent retrieval falls back to keyword search.
 
-Copy `.env.example` to `.env` and edit locally. Do not commit `.env`, API keys, model weights, runtime data, or generated artifacts.
+## Environment Variables
 
-Important runtime variables:
+Use `.env.example` as the canonical template. Main groups:
 
-- `LLM_BASE_URL`, `LLM_MODEL_ID`, `LLM_API_KEY`
-- `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_API_KEY`
-- `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION`, `QDRANT_VECTOR_SIZE`
-- `QDRANT_PATH` for single-node embedded Qdrant storage when no Qdrant server is available.
-- `PSKIT_LEGACY_ROOT`
-- `PSKIT_MODEL_PARAMETERS`
-- `PSKIT_FOLDSEEK`
-- `PSKIT_DSSP`
-- `PSKIT_AF3_DB_DIR`
-- `PSKIT_AF3_MODEL_DIR`
-- `PSKIT_AF3_IMAGE`
+- **Server**: `PSKIT_BIND`, `DATABASE_URL`, `REDIS_URL`
+- **LLM**: `LLM_BASE_URL`, `LLM_MODEL_ID`, `LLM_API_KEY`
+- **Embedding/RAG**: `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_API_KEY`, `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_PATH`, `QDRANT_COLLECTION`, `QDRANT_VECTOR_SIZE`
+- **Search**: `SERPAPI_API_KEY`
+- **BioAI runtime**: `PSKIT_LEGACY_ROOT`, `PSKIT_MODEL_PARAMETERS`, `PSKIT_FOLDSEEK`, `PSKIT_DSSP`
+- **AlphaFold3**: `PSKIT_AF3_DB_DIR`, `PSKIT_AF3_MODEL_DIR`, `PSKIT_AF3_IMAGE`, `PSKIT_AF3_GPU_DEVICE`
+- **Remote MCP/RNA expert**: `REMOTE_RNA_EXPERT_SSE_URL`
+- **Security**: `SESSION_COOKIE_NAME`, `SESSION_TTL_DAYS`, `COOKIE_SECURE`
 
-For compatibility with existing LangChain-style env files, PSKit also accepts
-`EMBED_BASE_URL`, `EMBED_MODEL_NAME`, and `EMBED_API_KEY` as aliases for the
-embedding settings. `BAAI/bge-m3` produces 1024-dimensional vectors, so Qdrant
-collections for this model should use `QDRANT_VECTOR_SIZE=1024`. If `QDRANT_PATH`
-is set, PSKit uses embedded local Qdrant storage and ignores `QDRANT_URL`; this is
-useful for A6000 single-machine demos when Qdrant Cloud is not reachable.
+Never commit real API keys, model weights, task outputs, user databases, or `.env`.
 
-## Verified On A6000
+## Smoke Tests
 
-Current smoke coverage:
+Backend API smoke test:
 
-- Backend import and route registration.
-- Register/login/me.
-- Agent session creation.
-- Tool catalog API.
-- Queued task creation.
-- Worker execution and structured failed state for invalid input.
-- Worker execution of short AlphaFold3 smoke task, producing CIF/JSON/log artifacts.
+```bash
+cd backend
+PYTHONPATH=. python3 ../scripts/smoke_backend.py
+```
+
+Live backend smoke test:
+
+```bash
+scripts/smoke_live_backend.sh
+```
+
+Frontend build check:
+
+```bash
+cd frontend
+npm run build
+```
+
+Runtime check:
+
+```bash
+scripts/pskit2_ctl.sh status
+```
 
 ## Open Source Notes
 
-This repository does not include private API keys, model weights, task outputs, user databases, or AlphaFold3 parameters. AlphaFold3, model weights, third-party tools, and external databases remain subject to their own licenses and terms.
+This repository intentionally excludes:
 
-To publish after GitHub authentication is configured:
+- `.env` and private API keys.
+- User database files.
+- Generated task outputs and artifacts.
+- ESM2, SaProt, RNA-FM, INABe, AlphaFold3, or other model weights.
+- AlphaFold3 model parameters and public databases.
+
+AlphaFold3, model weights, third-party tools, and biological databases are governed by their own licenses and terms. You must obtain and configure them separately.
+
+## Publishing to GitHub
+
+If you already have a GitHub repository:
 
 ```bash
 git remote add origin git@github.com:<owner>/<repo>.git
 git push -u origin main
 ```
+
+If using GitHub CLI:
+
+```bash
+gh auth login
+gh repo create <owner>/<repo> --private --source=. --remote=origin --push
+```
+
+## Contact
+
+If there are questions or issues, please contact **Alakazamc on WeChat**.

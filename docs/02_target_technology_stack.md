@@ -1,81 +1,91 @@
-# Target Technology Stack
+# Technology Stack
 
-## Final Stack
+This document describes the current PSKit 2.0 implementation and the production hardening targets.
 
-| Layer | Technology | Role |
+If there are questions or issues, please contact **Alakazamc on WeChat**.
+
+## Implemented Stack
+
+| Layer | Technology | Responsibility |
 | --- | --- | --- |
-| Frontend | Vue 3 + TypeScript + Vite | Main web application |
-| UI styling | Tailwind CSS + Headless UI | Clean responsive UI |
-| Frontend state | Pinia | Auth, sessions, tasks, runtime panels |
-| Routing | Vue Router | Public/protected/admin routes |
-| Molecular viewer | Mol* Viewer | PDB/mmCIF and AF3 structure visualization |
-| Backend | FastAPI | HTTP APIs, SSE, auth, files, tasks, doctor |
-| Schemas | Pydantic v2 | Request/response/tool/error models |
-| DB | PostgreSQL | Users, sessions, tasks, messages, file metadata |
-| ORM | SQLAlchemy 2 | Database access |
-| Migration | Alembic | Schema migrations |
-| Agent | LangGraph | Stateful agent workflow orchestration |
-| LLM client | httpx + OpenAI-compatible schema | DeepSeek/OpenRouter/other providers |
-| Vector DB | Qdrant | RAG vector search and metadata filtering |
-| Embedding | BAAI/bge-m3 | Chinese/English semantic retrieval |
-| Reranker | BAAI/bge-reranker-v2-m3 | RAG precision improvement |
-| Queue | Celery + Redis | Long-running GPU/model tasks |
-| Artifact store | MinIO/S3-compatible | CIF, PDB, CSV, JSON, logs, reports |
-| Streaming | SSE | Agent deltas, tool calls, task progress |
-| Auth | Argon2id + HttpOnly cookie | Secure session login |
-| Permissions | RBAC + ownership checks | user/admin and data isolation |
-| Deployment | A6000 native + Docker Compose dependencies | Stable server deployment |
-| Reverse proxy | Caddy or Nginx | HTTPS/domain/proxy |
-| Observability | Structured logs + OpenTelemetry-ready spans | Debugging and production traceability |
-| Testing | pytest, Playwright, Vitest | Backend, E2E, frontend tests |
-| Code quality | ruff, mypy, eslint, prettier | Maintainability |
+| Frontend | Vue 3, TypeScript, Vite | Single-page workbench UI |
+| Routing/state | Vue Router, Pinia | Public/protected routes and app state |
+| Styling | Custom CSS | BioAI dashboard and Agent chat UI |
+| Backend API | FastAPI | HTTP APIs, SSE, auth, files, tasks, doctor |
+| Validation | Pydantic v2 | Request/response settings and schemas |
+| ORM | SQLAlchemy 2 | Users, sessions, messages, tasks, artifacts |
+| Database | SQLite default | Single-server demo persistence |
+| Auth | Argon2id/PBKDF2 fallback, HttpOnly cookie | Login and session security |
+| Agent graph | LangGraph | RAG, planner, executor, synthesizer workflow |
+| LangChain layer | langchain-core messages | Message abstraction without monolithic LangChain dependency |
+| LLM client | httpx + OpenAI-compatible schema | DeepSeek/OpenRouter/compatible chat APIs |
+| RAG documents | Markdown files under `knowledge/` | Maintainable project/system knowledge |
+| Vector DB | Qdrant | Semantic retrieval and payload metadata |
+| Embedding | `BAAI/bge-m3` | 1024-dim bilingual embeddings |
+| RAG fallback | Keyword search | Works when embedding/Qdrant is unavailable |
+| Task runtime | Local Python worker | Long-running model/tool jobs |
+| Artifacts | Local filesystem + DB metadata | Downloadable CIF/PDB/CSV/JSON/log/report files |
+| BioAI runtime | `PSKIT_LEGACY_ROOT` subprocess calls | Reuse old PSKit scientific runtime |
+| External tools | Foldseek, DSSP, AlphaFold3, remote RNA expert | Structure and model workflows |
+| Ops | `scripts/pskit2_ctl.sh` | No-sudo start/stop/status/logs on A6000 |
+| Testing | Python smoke scripts, Vue build checks | Basic regression coverage |
 
-## Why Qdrant Instead Of Chroma
+## Production Hardening Targets
 
-The current PSKit uses Chroma successfully. For PSKit 2.0, Qdrant is selected because it is more authoritative for a production RAG story:
+| Area | Target |
+| --- | --- |
+| Database | PostgreSQL |
+| Queue | Celery + Redis |
+| Artifact store | S3/MinIO |
+| Reverse proxy | Caddy or Nginx with HTTPS |
+| Observability | Structured logs and OpenTelemetry-ready traces |
+| Frontend E2E | Playwright |
+| Backend tests | pytest integration tests with temporary DB |
+| RAG quality | Optional reranker such as `BAAI/bge-reranker-v2-m3` |
+| Deployment | systemd units or containerized dependency stack |
 
-- Dedicated vector search engine.
-- Strong payload metadata filtering.
-- Payload indexes.
-- Hybrid retrieval support.
-- Better fit for multi-user and document-level isolation.
-- Stronger interview story for production-grade retrieval infrastructure.
+## Agent Architecture
 
-Chroma remains useful for quick local prototypes, but the GitHub/portfolio version should use Qdrant.
-
-## Why PostgreSQL Instead Of SQLite
-
-SQLite is good for single-machine demos, but PostgreSQL is a stronger default for:
-
-- Multi-user auth.
-- Task history.
-- File metadata.
-- Session persistence.
-- Admin operations.
-- Future deployment scaling.
-
-SQLite can remain a local fallback, but PostgreSQL should be the documented production target.
-
-## Why Celery + Redis Instead Of RQ
-
-RQ is simpler, but Celery is more recognizable and more flexible for:
-
-- Long-running model jobs.
-- Retry policies.
-- Worker routing.
-- Task status.
-- Scheduled cleanup.
-- Production monitoring.
-
-For PSKit, AF3 and model inference tasks justify Celery.
-
-## Why LangGraph
-
-PSKit workflows are graph-like:
+PSKit workflows are stateful:
 
 ```text
-RAG -> skill selection -> preflight -> LLM -> tool call -> task -> artifact -> summary
+retrieve knowledge -> plan next action -> execute tool -> observe result -> continue or synthesize answer
 ```
 
-LangGraph makes these steps explicit, testable, interruptible, and resumable.
+LangGraph makes these steps explicit and testable:
 
+- `retrieve_knowledge` retrieves Qdrant/keyword RAG context.
+- `plan_next_action` calls the LLM with OpenAI-compatible tools.
+- `execute_tools` runs PSKit tools and records artifacts/tasks.
+- `synthesize_answer` produces the final Chinese answer.
+
+The UI receives each step through SSE events.
+
+## RAG Stack
+
+Qdrant is used because it provides a stronger production RAG story:
+
+- Dedicated vector search engine.
+- Payload metadata support.
+- Cloud or local deployment options.
+- Future-ready multi-user document isolation.
+- Clear 1024-dimensional configuration for `BAAI/bge-m3`.
+
+`BAAI/bge-m3` is selected because it supports Chinese and English technical documents and produces 1024-dimensional vectors.
+
+Required setting:
+
+```text
+QDRANT_VECTOR_SIZE=1024
+```
+
+## SQLite and Worker Rationale
+
+SQLite and the local Python worker are intentional first-release choices for A6000 single-machine demos:
+
+- No extra database service required.
+- Simple backup and debugging.
+- Lower deployment friction.
+- Queued long-running tasks are still persisted.
+
+The architecture remains PostgreSQL and Celery/Redis ready.
