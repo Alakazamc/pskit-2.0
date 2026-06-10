@@ -1,12 +1,16 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=("../.env", ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     app_name: str = "PSKit 2.0"
     app_env: str = "development"
@@ -16,15 +20,27 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/pskit2.sqlite3"
     redis_url: str = "redis://127.0.0.1:6379/0"
     qdrant_url: str = "http://127.0.0.1:6333"
+    qdrant_api_key: str | None = None
     qdrant_collection: str = "pskit_knowledge"
+    qdrant_vector_size: int | None = None
+    qdrant_distance: str = "cosine"
 
     llm_base_url: str = "https://api.deepseek.com/v1"
     llm_model_id: str = "deepseek-v4-flash"
     llm_api_key: str | None = None
 
-    embedding_base_url: str = "https://api.siliconflow.cn/v1"
-    embedding_model: str = "BAAI/bge-m3"
-    embedding_api_key: str | None = None
+    embedding_base_url: str = Field(
+        default="https://api.siliconflow.cn/v1",
+        validation_alias=AliasChoices("EMBEDDING_BASE_URL", "EMBED_BASE_URL"),
+    )
+    embedding_model: str = Field(
+        default="BAAI/bge-m3",
+        validation_alias=AliasChoices("EMBEDDING_MODEL", "EMBED_MODEL_NAME"),
+    )
+    embedding_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("EMBEDDING_API_KEY", "EMBED_API_KEY"),
+    )
 
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
     rerank_api_key: str | None = None

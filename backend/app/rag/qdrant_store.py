@@ -16,7 +16,8 @@ def get_qdrant_client():
         from qdrant_client import QdrantClient
     except Exception as exc:
         raise RuntimeError(f"qdrant-client is not installed: {exc}") from exc
-    return QdrantClient(url=get_settings().qdrant_url)
+    settings = get_settings()
+    return QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
 
 
 def knowledge_root() -> Path:
@@ -44,13 +45,25 @@ def chunk_payload(chunk: RetrievedChunk, index: int) -> dict:
     }
 
 
+def qdrant_distance() -> object:
+    from qdrant_client import models
+
+    settings = get_settings()
+    normalized = settings.qdrant_distance.strip().upper()
+    try:
+        return getattr(models.Distance, normalized)
+    except AttributeError:
+        return models.Distance.COSINE
+
+
 def recreate_collection(client, collection_name: str, vector_size: int) -> None:
     from qdrant_client import models
 
+    distance = qdrant_distance()
     if hasattr(client, "recreate_collection"):
         client.recreate_collection(
             collection_name=collection_name,
-            vectors_config=models.VectorParams(size=vector_size, distance=models.Distance.COSINE),
+            vectors_config=models.VectorParams(size=vector_size, distance=distance),
         )
         return
     try:
@@ -59,7 +72,7 @@ def recreate_collection(client, collection_name: str, vector_size: int) -> None:
         pass
     client.create_collection(
         collection_name=collection_name,
-        vectors_config=models.VectorParams(size=vector_size, distance=models.Distance.COSINE),
+        vectors_config=models.VectorParams(size=vector_size, distance=distance),
     )
 
 
@@ -89,6 +102,11 @@ def build_qdrant_index(db: Session) -> dict:
         raise RuntimeError("Embedding count does not match chunk count")
 
     vector_size = len(vectors[0])
+    if settings.qdrant_vector_size and settings.qdrant_vector_size != vector_size:
+        raise RuntimeError(
+            f"Embedding vector size is {vector_size}, but QDRANT_VECTOR_SIZE="
+            f"{settings.qdrant_vector_size}"
+        )
     client = get_qdrant_client()
     recreate_collection(client, settings.qdrant_collection, vector_size)
     upsert_chunks(client, settings.qdrant_collection, chunks, vectors)

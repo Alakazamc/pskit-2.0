@@ -104,6 +104,7 @@ Important runtime variables:
 
 - `LLM_BASE_URL`, `LLM_MODEL_ID`, `LLM_API_KEY`
 - `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_API_KEY`
+- `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION`, `QDRANT_VECTOR_SIZE`
 - `PSKIT_LEGACY_ROOT`
 - `PSKIT_MODEL_PARAMETERS`
 - `PSKIT_FOLDSEEK`
@@ -111,6 +112,11 @@ Important runtime variables:
 - `PSKIT_AF3_DB_DIR`
 - `PSKIT_AF3_MODEL_DIR`
 - `PSKIT_AF3_IMAGE`
+
+For compatibility with existing LangChain-style env files, PSKit also accepts
+`EMBED_BASE_URL`, `EMBED_MODEL_NAME`, and `EMBED_API_KEY` as aliases for the
+embedding settings. `BAAI/bge-m3` produces 1024-dimensional vectors, so Qdrant
+collections for this model should use `QDRANT_VECTOR_SIZE=1024`.
 
 ## Verified On A6000
 
