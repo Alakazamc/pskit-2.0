@@ -17,6 +17,12 @@ def get_qdrant_client():
     except Exception as exc:
         raise RuntimeError(f"qdrant-client is not installed: {exc}") from exc
     settings = get_settings()
+    if settings.qdrant_path:
+        path = settings.qdrant_path
+        if not path.is_absolute():
+            path = (Path.cwd() / path).resolve()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return QdrantClient(path=str(path))
     return QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
 
 

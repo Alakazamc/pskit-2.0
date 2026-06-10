@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://127.0.0.1:6379/0"
     qdrant_url: str = "http://127.0.0.1:6333"
     qdrant_api_key: str | None = None
+    qdrant_path: Path | None = None
     qdrant_collection: str = "pskit_knowledge"
     qdrant_vector_size: int | None = None
     qdrant_distance: str = "cosine"

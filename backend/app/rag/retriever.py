@@ -85,13 +85,10 @@ def retrieve_keyword(query: str, top_k: int = 5) -> list[RetrievedChunk]:
 
 def retrieve_qdrant(query: str, top_k: int = 5) -> list[RetrievedChunk]:
     settings = get_settings()
-    try:
-        from qdrant_client import QdrantClient
-    except Exception as exc:
-        raise RuntimeError(f"qdrant-client is not installed: {exc}") from exc
+    from app.rag.qdrant_store import get_qdrant_client
 
     vector = embed_texts([query])[0]
-    client = QdrantClient(url=settings.qdrant_url)
+    client = get_qdrant_client()
 
     if hasattr(client, "query_points"):
         response = client.query_points(
