@@ -376,6 +376,20 @@ button {
   font-weight: 700;
 }
 
+.auth-switch {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.auth-switch a {
+  color: var(--teal-dark);
+  font-weight: 800;
+}
+
 input,
 textarea {
   width: 100%;

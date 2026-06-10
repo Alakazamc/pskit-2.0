@@ -47,6 +47,12 @@ function submit() {
       <button class="primary-button full" :disabled="props.loading">
         {{ props.loading ? "Working..." : props.mode === "login" ? "Login" : "Register" }}
       </button>
+      <p class="auth-switch">
+        <span>{{ props.mode === "login" ? "No account yet?" : "Already have an account?" }}</span>
+        <RouterLink :to="props.mode === 'login' ? '/register' : '/login'">
+          {{ props.mode === "login" ? "Create one" : "Sign in" }}
+        </RouterLink>
+      </p>
     </form>
   </section>
 </template>
