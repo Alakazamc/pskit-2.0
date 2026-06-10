@@ -446,7 +446,7 @@ textarea:focus {
 
 .agent-layout {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr) 330px;
+  grid-template-columns: 240px minmax(0, 1fr) minmax(280px, 320px);
   gap: 18px;
   height: calc(100vh - 116px);
   min-height: 620px;
@@ -456,6 +456,7 @@ textarea:focus {
 .chat-panel,
 .agent-rail {
   min-height: 0;
+  min-width: 0;
 }
 
 .session-pane {
@@ -642,12 +643,15 @@ textarea:focus {
 .agent-rail {
   display: grid;
   gap: 14px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .rail-card {
+  min-width: 0;
   border-radius: 26px;
   padding: 18px;
+  overflow-wrap: anywhere;
 }
 
 .rail-card.dark {
@@ -665,12 +669,16 @@ textarea:focus {
 .task-mini,
 .doctor-summary {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
   padding: 12px;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.08);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .artifact-link,
@@ -683,6 +691,22 @@ textarea:focus {
 .source-card {
   margin-top: 10px;
   padding: 14px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rail-row strong,
+.rail-row small,
+.artifact-link,
+.task-mini strong,
+.task-mini small,
+.doctor-summary strong,
+.doctor-summary small,
+.source-card strong,
+.source-card small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .task-row {

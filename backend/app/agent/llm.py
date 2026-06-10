@@ -33,12 +33,20 @@ class OpenAICompatibleClient:
             payload["tools"] = openai_tool_schemas()
             payload["tool_choice"] = "auto"
 
-        with httpx.Client(timeout=90) as client:
-            response = client.post(
-                self.settings.chat_completions_url,
-                headers={"Authorization": f"Bearer {self.settings.llm_api_key}"},
-                json=payload,
-            )
+        try:
+            with httpx.Client(timeout=90) as client:
+                response = client.post(
+                    self.settings.chat_completions_url,
+                    headers={"Authorization": f"Bearer {self.settings.llm_api_key}"},
+                    json=payload,
+                )
+        except httpx.RequestError as exc:
+            raise LlmUnavailable(
+                "LLM API unreachable. "
+                f"url={self.settings.chat_completions_url}; "
+                f"reason={exc}. "
+                "Check server outbound network, campus gateway, or configure an accessible proxy endpoint."
+            ) from exc
         if response.status_code >= 400:
             raise LlmUnavailable(f"LLM API error {response.status_code}: {response.text[:500]}")
         data = response.json()
