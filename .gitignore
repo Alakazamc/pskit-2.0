@@ -23,11 +23,16 @@ dist/
 secrets/
 
 # Runtime data
-data/
-tasks/
-artifacts/
-uploads/
-logs/
+/data/
+/backend/data/
+/tasks/
+/backend/tasks/
+/artifacts/
+/backend/artifacts/
+/uploads/
+/backend/uploads/
+/logs/
+/backend/logs/
 *.sqlite
 *.sqlite3
 *.db
