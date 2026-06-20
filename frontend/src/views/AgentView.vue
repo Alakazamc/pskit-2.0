@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 
 import EmptyState from "../components/EmptyState.vue";
 import MarkdownMessage from "../components/MarkdownMessage.vue";
@@ -50,6 +50,7 @@ const events = ref<ToolEvent[]>([]);
 const tasks = ref<Task[]>([]);
 const streamingAnswer = ref("");
 const suggestions = ref<string[]>([]);
+const messageListRef = ref<HTMLElement | null>(null);
 
 const activeSession = computed(() => sessions.value.find((item) => item.id === activeSessionId.value));
 
@@ -63,10 +64,18 @@ async function loadSessions() {
 async function loadHistory() {
   if (!activeSessionId.value) return;
   messages.value = await api.sessionHistory(activeSessionId.value);
+  await scrollToBottom();
 }
 
 async function loadTasks() {
   tasks.value = await api.tasks();
+}
+
+async function scrollToBottom() {
+  await nextTick();
+  if (messageListRef.value) {
+    messageListRef.value.scrollTop = messageListRef.value.scrollHeight;
+  }
 }
 
 async function boot() {
@@ -120,6 +129,7 @@ function handleStreamEvent(event: StreamEvent) {
   }
   if (event.type === "message_delta") {
     streamingAnswer.value += String(event.delta || "");
+    void scrollToBottom();
     return;
   }
   if (event.type === "suggestions") {
@@ -178,6 +188,7 @@ async function sendMessage() {
     created_at: new Date().toISOString(),
     metadata: {},
   });
+  void scrollToBottom();
   try {
     await streamAgentMessage(activeSessionId.value, content, handleStreamEvent);
     await Promise.all([loadHistory(), loadSessions(), loadTasks()]);
@@ -221,7 +232,7 @@ onMounted(boot);
       </div>
       <p v-if="error" class="error-line">{{ error }}</p>
       <EmptyState v-if="!loading && messages.length === 0" title="开始一次分析" body="示例：下载 7U5E 并预测 RNA 结合位点。" />
-      <div class="message-list">
+      <div ref="messageListRef" class="message-list">
         <article v-for="message in messages" :key="message.id" class="message-card" :class="message.role">
           <span>{{ message.role === "user" ? "用户" : message.role === "assistant" ? "智能体" : message.role }}</span>
           <MarkdownMessage :content="message.content" />

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import httpx
 
 from app.config import get_settings
@@ -54,6 +56,62 @@ class OpenAICompatibleClient:
         if not choices:
             raise LlmUnavailable("LLM API returned no choices")
         return choices[0].get("message") or {}
+
+    async def stream_chat(self, messages: list[dict]):
+        if not self.settings.llm_api_key:
+            raise LlmUnavailable("LLM_API_KEY is not configured")
+
+        payload = {
+            "model": self.settings.llm_model_id,
+            "messages": messages,
+            "temperature": 0.2,
+            "max_tokens": 1200,
+            "stream": True,
+        }
+        timeout = httpx.Timeout(connect=30, read=None, write=30, pool=30)
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                async with client.stream(
+                    "POST",
+                    self.settings.chat_completions_url,
+                    headers={"Authorization": f"Bearer {self.settings.llm_api_key}"},
+                    json=payload,
+                ) as response:
+                    if response.status_code >= 400:
+                        body = (await response.aread()).decode("utf-8", errors="replace")
+                        raise LlmUnavailable(
+                            f"LLM API error {response.status_code}: {body[:500]}"
+                        )
+
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data:"):
+                            continue
+                        raw = line.removeprefix("data:").strip()
+                        if not raw or raw == "[DONE]":
+                            if raw == "[DONE]":
+                                break
+                            continue
+                        try:
+                            data = json.loads(raw)
+                        except json.JSONDecodeError:
+                            continue
+                        choices = data.get("choices") or []
+                        if not choices:
+                            continue
+                        delta = choices[0].get("delta") or {}
+                        content = delta.get("content")
+                        if isinstance(content, str) and content:
+                            yield content
+        except LlmUnavailable:
+            raise
+        except httpx.RequestError as exc:
+            raise LlmUnavailable(
+                "LLM streaming API unreachable. "
+                f"url={self.settings.chat_completions_url}; "
+                f"reason={exc}. "
+                "Check server outbound network, campus gateway, or configure an accessible proxy endpoint."
+            ) from exc
 
 
 def default_system_prompt(retrieved_knowledge: list[dict]) -> str:

@@ -112,7 +112,7 @@ def recent_chat_messages(db: Session, session_id: UUID, user: User, limit: int =
     return messages
 
 
-def stream_agent_turn(
+async def stream_agent_turn(
     db: Session,
     user: User,
     session: AgentSession,
@@ -123,7 +123,7 @@ def stream_agent_turn(
         recent_chat_messages(db, session.id, user),
     )
 
-    for event in runner.iter_events(user_content):
+    async for event in runner.aiter_events(user_content):
         event_type = str(event.get("type") or "event")
         payload = {key: value for key, value in event.items() if key != "type"}
         yield sse_event(event_type, payload)
@@ -174,4 +174,9 @@ def send_message(
     return StreamingResponse(
         stream_agent_turn(db, user, session, payload.content),
         media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )

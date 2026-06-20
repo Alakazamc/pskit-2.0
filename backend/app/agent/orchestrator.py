@@ -118,7 +118,6 @@ def plan_next_action_node(runtime: AgentRuntime):
         assistant = runtime.llm.chat(state.get("messages", []), tools=True)
         messages = [*state.get("messages", []), normalize_assistant_message(assistant)]
         tool_calls = assistant.get("tool_calls") or []
-        content = assistant.get("content") or assistant.get("reasoning_content") or ""
         events = [
             make_event(
                 "agent_step",
@@ -132,7 +131,7 @@ def plan_next_action_node(runtime: AgentRuntime):
             "llm_response": assistant,
             "messages": messages,
             "tool_calls": tool_calls,
-            "final_answer": content if content and not tool_calls else state.get("final_answer"),
+            "final_answer": state.get("final_answer"),
             "pending_events": events,
         }
 
@@ -236,33 +235,22 @@ def execute_tools_node(runtime: AgentRuntime):
 
 def synthesize_answer_node(runtime: AgentRuntime):
     def node(state: AgentState) -> AgentState:
-        final_answer = state.get("final_answer")
-        if final_answer:
-            return {
-                **state,
-                "pending_events": [
-                    make_event("agent_step", label="Synthesizer 生成最终回答", status="completed")
-                ],
-            }
-
         messages = [
             *state.get("messages", []),
             {
                 "role": "user",
-                "content": "请基于以上工具结果给出中文最终回答，不要再调用工具。",
+                "content": (
+                    "请基于以上对话、RAG 上下文和工具结果给出中文最终回答。"
+                    "不要再调用工具，不要展示内部思维链，只输出面向用户的结论、证据和下一步建议。"
+                ),
             },
         ]
-        assistant = runtime.llm.chat(messages, tools=False)
-        final_answer = (
-            assistant.get("content")
-            or "工具步骤已完成，但模型没有返回最终总结。请查看右侧工具事件和结果文件，或选择下方建议继续。"
-        )
         return {
             **state,
-            "messages": [*messages, normalize_assistant_message(assistant)],
-            "final_answer": final_answer,
+            "messages": messages,
+            "final_answer": state.get("final_answer"),
             "pending_events": [
-                make_event("agent_step", label="Synthesizer 汇总工具结果", status="completed")
+                make_event("agent_step", label="Synthesizer 开始生成最终回答", status="running")
             ],
         }
 
@@ -309,8 +297,8 @@ class LangGraphAgentRunner:
         self.chat_history = normalize_chat_history(chat_history)
         self.record = AgentRunRecord()
 
-    def iter_events(self, latest_user_message: str):
-        final_state: AgentState = {
+    def initial_state(self, latest_user_message: str) -> AgentState:
+        return {
             "latest_user_message": latest_user_message,
             "messages": self.chat_history,
             "tool_calls": [],
@@ -322,6 +310,23 @@ class LangGraphAgentRunner:
             "pending_events": [],
             "final_answer": None,
         }
+
+    def finalize_record(self, final_state: AgentState, answer: str) -> None:
+        self.record.final_answer = answer
+        self.record.artifacts = list(final_state.get("artifacts") or [])
+        self.record.rag_backend = str(final_state.get("rag_backend") or "none")
+        self.record.sources = [
+            {
+                "source": item.get("source"),
+                "heading": item.get("heading"),
+                "score": item.get("score"),
+            }
+            for item in final_state.get("retrieved_knowledge", [])
+        ]
+        self.record.suggestions = build_suggestions(self.record.events, self.record.artifacts)
+
+    def iter_events(self, latest_user_message: str):
+        final_state = self.initial_state(latest_user_message)
         graph = build_runtime_graph(self.runtime)
 
         try:
@@ -352,19 +357,93 @@ class LangGraphAgentRunner:
             final_state["final_answer"] = answer
 
         answer = str(final_state.get("final_answer") or "")
-        self.record.final_answer = answer
-        self.record.artifacts = list(final_state.get("artifacts") or [])
-        self.record.rag_backend = str(final_state.get("rag_backend") or "none")
-        self.record.sources = [
-            {
-                "source": item.get("source"),
-                "heading": item.get("heading"),
-                "score": item.get("score"),
-            }
-            for item in final_state.get("retrieved_knowledge", [])
-        ]
-        self.record.suggestions = build_suggestions(self.record.events, self.record.artifacts)
+        if not answer:
+            try:
+                assistant = self.runtime.llm.chat(final_state.get("messages", []), tools=False)
+                answer = assistant.get("content") or (
+                    "工具步骤已完成，但模型没有返回最终总结。"
+                    "请查看右侧工具事件和结果文件，或选择下方建议继续。"
+                )
+                event = make_event(
+                    "agent_step", label="Synthesizer 完成最终回答", status="completed"
+                )
+            except LlmUnavailable as exc:
+                answer = f"最终回答生成失败：{exc}"
+                event = make_event(
+                    "error", error={"error_type": "llm_unavailable", "message": str(exc)}
+                )
+            self.record.events.append(event)
+            yield event
+
+        self.finalize_record(final_state, answer)
 
         for delta in chunk_text(answer):
             yield make_event("message_delta", delta=delta)
+        yield make_event("suggestions", items=self.record.suggestions)
+
+    async def aiter_events(self, latest_user_message: str):
+        final_state = self.initial_state(latest_user_message)
+        graph = build_runtime_graph(self.runtime)
+
+        try:
+            for update in graph.stream(final_state):
+                if not isinstance(update, dict):
+                    continue
+                for payload in update.values():
+                    if not isinstance(payload, dict):
+                        continue
+                    final_state = {**final_state, **payload}
+                    for event in payload.get("pending_events", []):
+                        self.record.events.append(event)
+                        yield event
+        except LlmUnavailable as exc:
+            answer = (
+                "PSKit 2.0 后端正在运行，但本次请求无法连接大语言模型。"
+                f"原因：{exc}。RAG 来源和工具状态仍会保留在页面中。"
+            )
+            event = make_event(
+                "error", error={"error_type": "llm_unavailable", "message": str(exc)}
+            )
+            self.record.events.append(event)
+            yield event
+            final_state["final_answer"] = answer
+        except Exception as exc:
+            answer = f"Agent 执行失败：{exc}"
+            event = make_event(
+                "error", error={"error_type": "agent_runtime_error", "message": str(exc)}
+            )
+            self.record.events.append(event)
+            yield event
+            final_state["final_answer"] = answer
+
+        answer = str(final_state.get("final_answer") or "")
+        if answer:
+            for delta in chunk_text(answer):
+                yield make_event("message_delta", delta=delta)
+        else:
+            answer_parts: list[str] = []
+            try:
+                async for delta in self.runtime.llm.stream_chat(final_state.get("messages", [])):
+                    answer_parts.append(delta)
+                    yield make_event("message_delta", delta=delta)
+                answer = "".join(answer_parts)
+                if not answer:
+                    answer = (
+                        "工具步骤已完成，但模型没有返回最终总结。"
+                        "请查看右侧工具事件和结果文件，或选择下方建议继续。"
+                    )
+                    yield make_event("message_delta", delta=answer)
+                event = make_event(
+                    "agent_step", label="Synthesizer 完成最终回答", status="completed"
+                )
+            except LlmUnavailable as exc:
+                answer = f"最终回答生成失败：{exc}"
+                yield make_event("message_delta", delta=answer)
+                event = make_event(
+                    "error", error={"error_type": "llm_unavailable", "message": str(exc)}
+                )
+            self.record.events.append(event)
+            yield event
+
+        self.finalize_record(final_state, answer)
         yield make_event("suggestions", items=self.record.suggestions)
