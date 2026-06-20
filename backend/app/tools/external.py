@@ -23,17 +23,24 @@ def normalize_pdb_id(pdb_id: str) -> str:
     return value
 
 
-def search_pdb(query: str) -> dict:
-    settings = get_settings()
-    payload = {
+def build_rcsb_full_text_payload(query: str, rows: int = 10) -> dict:
+    value = query.strip()
+    if not value:
+        raise ToolExecutionError("query must not be empty")
+    return {
         "query": {
             "type": "terminal",
-            "service": "text",
-            "parameters": {"attribute": "text", "operator": "contains_words", "value": query},
+            "service": "full_text",
+            "parameters": {"value": value},
         },
-        "request_options": {"paginate": {"start": 0, "rows": 10}},
+        "request_options": {"paginate": {"start": 0, "rows": rows}},
         "return_type": "entry",
     }
+
+
+def search_pdb(query: str) -> dict:
+    settings = get_settings()
+    payload = build_rcsb_full_text_payload(query)
     with httpx.Client(timeout=30) as client:
         response = client.post(settings.rcsb_search_url, json=payload)
     if response.status_code >= 400:
@@ -43,7 +50,12 @@ def search_pdb(query: str) -> dict:
         {"pdb_id": item.get("identifier"), "score": item.get("score")}
         for item in data.get("result_set", [])
     ]
-    return {"query": query, "count": len(hits), "hits": hits}
+    return {
+        "query": query.strip(),
+        "count": len(hits),
+        "total_count": int(data.get("total_count") or len(hits)),
+        "hits": hits,
+    }
 
 
 def fetch_pdb_info(pdb_id: str) -> dict:
@@ -236,4 +248,3 @@ def read_result_file(
 
 def json_dumps_result(result: dict) -> str:
     return json.dumps(result, ensure_ascii=False, indent=2)
-
