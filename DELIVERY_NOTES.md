@@ -1,47 +1,51 @@
-# PSKit 2.0 v0.2.0 Delivery Notes / 交付说明
+# PSKit 2.0 v0.3.0 Delivery Notes / 交付说明
 
 ## Delivery scope / 交付范围
 
-This release contains a reproducible Linux AMD64 Docker stack: FastAPI/Vue web
-application, background worker, one-shot database migration, Qdrant, persistent
-volumes, sanitized source, locked dependencies, CI, and smoke-test scripts.
+This release contains the unified FastAPI/Vue production application, durable
+Agent turns, background and science workers, the research harness, atomic
+Qdrant indexing, database migrations, verified backups, health monitoring,
+locked dependencies, CI gates, and offline-delivery scripts.
 
-本版本包含可复现的 Linux AMD64 Docker 交付栈：FastAPI/Vue Web 应用、后台
-worker、一次性数据库迁移、Qdrant、持久化卷、已脱敏源码、依赖锁、CI 与冒烟
-测试脚本。
+本版本统一交付 FastAPI/Vue 生产应用、可恢复 Agent 轮次、普通与科学 Worker、
+科研运行框架、Qdrant 原子索引、数据库迁移、校验备份、健康监控、依赖锁、CI
+门禁和离线交付脚本。
 
 ## Acceptance baseline / 验收基线
 
-- The image builds from lock files and runs as non-root UID 10001.
-- Fresh install and 0.1.0 SQLite upgrade both reach migration `0002`.
-- Web, worker, and Qdrant report healthy before Compose returns success.
-- Registration, current-user lookup, protected task listing, logout, rejected
-  unauthenticated access, login, and session restoration pass end to end.
-- Backend lint, formatting, strict type check, and tests pass.
-- Frontend lint, tests, production build, and production dependency audit pass.
+- Images build from lock files and run as non-root UID 10001.
+- Fresh databases and supported legacy SQLite databases reach migration `0003`.
+- Web, worker, Qdrant, and configured science dependencies pass readiness.
+- Registration, login, session restoration, Agent SSE, tasks, artifact downloads,
+  and task retry contracts pass end to end.
+- Backend tests/lint/types/dependency audit and frontend build/lint/tests/audit pass.
+- Backup output contains SQLite, artifacts, Qdrant snapshot, runtime config, and
+  SHA-256 verification data.
 
 ## Deliberately not included / 不包含内容
 
-API keys, accounts, user databases, artifacts, private deployment addresses,
-model weights, licensed AlphaFold 3 assets, and the legacy PSKit runtime are not
-included. Heavy prediction tools remain unavailable until an operator installs
-and configures those external assets.
+The repository and offline image bundle exclude API keys, accounts, user data,
+private deployment addresses, model weights, licensed AlphaFold3 assets, and
+the separately managed CORAL/PepCCD services. Operators configure those assets
+through server-only environment files and read-only mounts.
 
 ## Start and verify / 启动与验证
 
 Follow `DOCKER_QUICKSTART.md`. For an offline handoff, verify both SHA-256 files,
-load the image bundle, copy `.env.docker.example` to `.env.docker`, and start
-with `--no-build --pull never --wait`. Then run:
+load the bundle, create `.env.docker`, and start with:
 
 ```bash
+docker compose --env-file .env.docker up -d --no-build --pull never --wait
 ./scripts/docker_smoke.sh http://127.0.0.1:10716
 ```
 
 The expected final lines are `health=ok`, `spa=ok`, `asset=ok`, and `auth=ok`.
 
-## Security defaults / 安全默认值
+## Security and operations / 安全与运维
 
-The port binds to loopback, public registration closes after the first admin,
-sessions use HTTP-only cookies, login attempts are rate-limited, artifact access
-is owner-checked, task inputs are bounded, and production CORS is disabled.
-Use an HTTPS reverse proxy and set `COOKIE_SECURE=true` before internet exposure.
+The default port binds to loopback. Public registration is enabled for this
+delivery and protected by proxy-aware, database-backed request throttling.
+Sessions are bounded and HTTP-only; artifact ownership, task quotas, GPU
+allowlists, security headers, log rotation, resource limits, backup retention,
+and readiness checks are enforced. Use HTTPS and `COOKIE_SECURE=true` for
+internet exposure.

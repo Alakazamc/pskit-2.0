@@ -11,20 +11,20 @@
 ## 简历项目经历（可直接使用）
 
 **PSKit 2.0｜蛋白质-核酸智能设计与科研 Agent 平台**  
-技术栈：Python、FastAPI、React、SQLAlchemy、SQLite、Qdrant、Docker Compose、MCP、DeepSeek、bge-m3、AlphaFold3、PyTorch
+技术栈：Python、FastAPI、Vue 3、TypeScript、SQLAlchemy、SQLite、Qdrant、Docker Compose、MCP、DeepSeek、bge-m3、AlphaFold3、PyTorch
 
 - 负责科研 Agent 平台的生产化交付，打通“自然语言请求—工具规划—异步任务—GPU/MCP 执行—结果文件—流式回答”链路，支持结构检索、结合位点预测、蛋白质-核酸交互预测、候选生成和结构预测。
-- 接入 Coral 与 PepCCD 两个 MCP 科学服务，并整合 AlphaFold3、INABe、PAIR 等本地/容器化模型；通过生产 API 完成 5 类真实科学任务回归，共生成 33 个可追溯产物。
-- 构建基于 bge-m3 与 Qdrant 的科研知识 RAG，将 53 个知识片段编码为 1024 维向量；修复容器临时索引问题，增加启动期自动建索引和持久化就绪检查。
-- 设计任务幂等、Worker 心跳、科学依赖探针、任务重试与产物登记机制；对单用户设置普通任务与 AlphaFold3 并发配额，避免 GPU 和队列资源被独占。
+- 接入 Coral 与 PepCCD 两个 MCP 科学服务，并整合 AlphaFold3、INABe、PAIR 等本地/容器化模型；通过生产 API 完成 5 类真实科学任务回归，保留任务、耗时和可下载产物证据。
+- 构建基于 bge-m3 与 Qdrant 的科研知识 RAG，将 54 个知识片段编码为 1024 维向量；将重建流程改为版本集合校验与 alias 原子切换，避免上线重建中断检索。
+- 设计任务幂等、轮次租约、Worker 心跳、科学依赖探针、事务化并发配额、任务重试与产物登记机制，避免重复工具调用和 GPU/队列资源被独占。
 - 修复 Agent 局部工具失败导致整条消息失败的问题，保留工具级诊断并确保成功结果和最终回答正常返回；增加失败参数指纹，抑制同轮重复无效调用。
 - 完成公开注册场景的安全加固，包括认证请求限流、3 天会话 TTL、单用户 5 会话上限、安全响应头、生产 CORS 边界和 API JSON 404，消除假健康与错误页面误判。
-- 使用 Docker Compose 部署 Web、Worker、Qdrant 与 RAG 索引任务，在真实 A6000 环境完成 AlphaFold3 蛋白-RNA复合物推理，验证 MSA、模板检索、GPU 推理、结果归一化和产物下载全链路。
+- 使用 Docker Compose 部署 Web、Worker、Qdrant 与 RAG 索引任务，在真实 A6000 环境完成 AlphaFold3 蛋白-RNA复合物推理；增加版本化迁移、校验备份、定时健康检查、资源限制和日志轮转。
 
 ## 更精简的三条版本
 
-- 搭建蛋白质-核酸科研 Agent 平台，整合 FastAPI、React、Qdrant RAG、MCP 与异步 Worker，实现自然语言驱动的结构检索、结合预测、候选生成和 AlphaFold3 推理。
-- 接入 Coral、PepCCD、INABe、PAIR 与 AlphaFold3，在 4×RTX A6000 环境完成 5 类生产全链路回归，生成 33 个可追溯科学产物。
+- 搭建蛋白质-核酸科研 Agent 平台，整合 FastAPI、Vue 3、Qdrant RAG、MCP 与异步 Worker，实现自然语言驱动的结构检索、结合预测、候选生成和 AlphaFold3 推理。
+- 接入 Coral、PepCCD、INABe、PAIR 与 AlphaFold3，在 4×RTX A6000 环境完成 5 类生产全链路回归，累计生成 48 个可追溯科学产物。
 - 完成生产安全与可靠性治理：修复假健康、临时向量索引、消息错误语义和重复工具调用，增加会话/任务配额、科学就绪检查、产物幂等及一键容器化部署。
 
 ## 面试时的项目说明
@@ -36,10 +36,10 @@
 ## 可量化亮点
 
 - 5 类科学任务生产全链路通过。
-- 33 个测试产物完成数据库登记与文件校验。
+- 48 个发布回归产物完成数据库登记与文件校验。
 - 2 个 MCP 服务完成协议握手、工具发现和真实调用。
-- 53 个知识片段完成 1024 维向量化并持久化到 Qdrant。
+- 54 个知识片段完成 1024 维向量化并持久化到 Qdrant。
 - AlphaFold3 最小蛋白-RNA复合物任务在 969.231 秒内完成，并输出结构与置信度证据。
 - 公网就绪检查覆盖数据库、向量库、任务 Worker 和科学依赖四个边界。
 
-> 使用时建议只保留与你实际承担职责一致的表述；若投递偏后端岗位，突出任务编排、幂等和可靠性；偏 AI 平台岗位，突出 MCP、RAG、模型接入和 GPU 调度；偏全栈岗位，再保留 React 与流式交互部分。
+> 使用时建议只保留与你实际承担职责一致的表述；若投递偏后端岗位，突出任务编排、幂等和可靠性；偏 AI 平台岗位，突出 MCP、RAG、模型接入和 GPU 调度；偏全栈岗位，再保留 Vue 3 与流式交互部分。
