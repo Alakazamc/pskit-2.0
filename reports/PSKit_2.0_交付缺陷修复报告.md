@@ -39,7 +39,7 @@ PSKit 2.0 `0.3.0` 已部署到 A6000 生产服务器。公网健康与就绪接�
 | 17 | 依赖、类型和镜像缺少发布门禁 | 固定锁文件，加入 Ruff、Mypy、pip-audit、npm audit、测试、Compose 和镜像构建门禁 | 本地全部门禁通过，无已知依赖漏洞 | 已修复 |
 | 18 | Windows 打包的 Bash 脚本出现 `sh\r` | 增加 `.gitattributes`，强制 shell/systemd/Docker 资产使用 LF | A6000 smoke 脚本可直接执行 | 已修复 |
 | 19 | 容器内部 10706 与旧端口保护规则冲突 | 镜像和 Compose 显式声明容器内兼容端口，宿主机仍发布 10716 | 镜像 import 与 canary 启动通过 | 已修复 |
-| 20 | 无持续健康和备份调度 | 安装用户级 systemd 健康/备份 timer | 健康检查每 5 分钟；每日备份已启用 | 已修复 |
+| 20 | 无持续健康和备份调度；A6000 未启用 user linger，SSH 退出后 systemd user timer 会停止 | 安装用户 crontab，增加 `flock` 防重入、日志限长和幂等安装脚本 | 健康检查每 5 分钟；每日 03:20 校验备份；不依赖 SSH 会话 | 已修复 |
 
 ## 3. 生产全链路证据
 
@@ -94,4 +94,4 @@ PSKit 2.0 `0.3.0` 已部署到 A6000 生产服务器。公网健康与就绪接�
 2. 先发送“你好”验证普通对话，再发送“下载 7U5E 并预测 RNA 结合位点”。
 3. 在任务页观察 queued/running/succeeded，完成后下载产物。
 4. 管理员在用户页检查账号、会话和指标。
-5. 运维侧确认 `/api/ready` 四项均为 `ok`，并检查 `systemctl --user list-timers` 中两个 PSKit timer。
+5. 运维侧确认 `/api/ready` 四项均为 `ok`，检查用户 crontab 中两个 PSKit 任务，并核对 `logs/health.log` 最近一次成功时间。

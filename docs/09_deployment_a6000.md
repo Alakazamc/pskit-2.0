@@ -244,3 +244,18 @@ For a public deployment, add:
 - Redis/Celery.
 - S3/MinIO artifact storage.
 - systemd unit files.
+
+### Persistent scheduling without systemd linger
+
+The A6000 deployment account may not keep a user systemd manager alive after
+SSH logout. In that case, install the repository-managed user cron entries:
+
+```bash
+./scripts/install_user_cron.sh
+./scripts/run_scheduled_job.sh health
+tail -n 20 logs/health.log
+```
+
+This runs health verification every five minutes and a verified backup every
+day at 03:20 Asia/Shanghai. The jobs use per-task locks so a slow run cannot
+overlap its next invocation.

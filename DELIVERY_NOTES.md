@@ -49,3 +49,16 @@ Sessions are bounded and HTTP-only; artifact ownership, task quotas, GPU
 allowlists, security headers, log rotation, resource limits, backup retention,
 and readiness checks are enforced. Use HTTPS and `COOKIE_SECURE=true` for
 internet exposure.
+
+On hosts where the deployment user does not have systemd linger enabled, user
+timers stop after the final SSH session exits. Install the equivalent persistent
+user cron schedule instead:
+
+```bash
+./scripts/install_user_cron.sh
+./scripts/run_scheduled_job.sh health
+```
+
+The installer preserves unrelated crontab entries, prevents overlapping runs,
+and schedules readiness checks every five minutes plus a verified backup at
+03:20 Asia/Shanghai each day. Logs are kept under `logs/` with bounded size.
