@@ -23,6 +23,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONPATH=/app/backend \
+    PSKIT_ALLOW_LEGACY_PORT_10706=true \
     BIND_HOST=0.0.0.0 \
     BIND_PORT=10706 \
     DATABASE_URL=sqlite:////app/backend/data/pskit2.sqlite3 \

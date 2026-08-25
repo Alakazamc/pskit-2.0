@@ -8,6 +8,7 @@ x-pskit-common: &pskit-common
   env_file:
     - .env.docker
   environment:
+    PSKIT_ALLOW_LEGACY_PORT_10706: "true"
     PSKIT_BIND: 0.0.0.0:10706
     BIND_HOST: 0.0.0.0
     BIND_PORT: "10706"

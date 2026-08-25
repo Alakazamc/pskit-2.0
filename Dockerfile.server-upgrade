@@ -8,6 +8,8 @@ LABEL org.opencontainers.image.title="PSKit 2.0" \
       org.opencontainers.image.description="Full-stack BioAI Agent workbench" \
       org.opencontainers.image.version="${PSKIT_VERSION}"
 
+ENV PSKIT_ALLOW_LEGACY_PORT_10706=true
+
 USER root
 COPY backend/requirements.lock /app/backend/requirements.lock
 RUN python -m pip install --no-cache-dir --require-hashes -r /app/backend/requirements.lock
