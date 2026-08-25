@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+*.egg-info/
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!.env.docker.example
+scripts/ssh_config.windows
+*.pem
+*.key
+secrets/
+
+# Runtime data
+/data/
+/backend/data/
+/tasks/
+/backend/tasks/
+/artifacts/
+/backend/artifacts/
+/uploads/
+/backend/uploads/
+/logs/
+/backend/logs/
+*.sqlite
+*.sqlite3
+*.db
+
+# Model weights
+model_parameters/
+*.pth
+*.pt
+*.safetensors
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
