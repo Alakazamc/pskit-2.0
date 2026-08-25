@@ -5,6 +5,7 @@ from app.auth.dependencies import get_current_user
 from app.db.models import User
 from app.rag.retriever import retrieve
 
+
 router = APIRouter(prefix="/api/rag", tags=["rag"])
 
 

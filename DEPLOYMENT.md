@@ -110,11 +110,9 @@ PSKIT_AF3_DB_DIR=/home/public/database/alphafold3
 PSKIT_AF3_MODEL_DIR=/data/hzeng/af3/model-parameters
 PSKIT_AF3_IMAGE=alphafold3:3.0.1
 PSKIT_AF3_GPU_DEVICE=0
-REMOTE_RNA_EXPERT_SSE_URL=http://172.31.226.126:8099/sse
-CORAL_MCP_SSE_URL=http://coral-mcp-host:port/sse
-CORAL_MCP_TOOL_NAME=replace-with-list-tools-result
-PEPCCD_MCP_SSE_URL=http://pepccd-mcp-host:port/sse
-PEPCCD_MCP_TOOL_NAME=replace-with-list-tools-result
+REMOTE_RNA_EXPERT_SSE_URL=http://coral-mcp-host:port/sse
+PEPCCD_MCP_URL=http://pepccd-mcp-host:port/mcp
+PEPCCD_MCP_TOOL_NAME=pepccd_generate_peptides
 ```
 
 ## 4. Install Dependencies
@@ -207,9 +205,9 @@ For public or cross-network access, put Caddy/Nginx in front of the service and 
 
 ## 8. First Login
 
-Open the site and register the first user. With `REGISTRATION_MODE=first_user`,
-that account becomes `admin` and public registration then closes. Create later
-accounts through the authenticated administrator endpoint.
+Open the site and register the first administrator with the server bootstrap
+token. With `REGISTRATION_MODE=open`, later users can register normally;
+administrators can disable accounts and revoke sessions at `/admin/users`.
 
 Admin-only features:
 

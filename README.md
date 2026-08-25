@@ -11,8 +11,8 @@ optional compatible scientific runtime can be connected through
 - **LangGraph Agent architecture**: retrieval, planning, tool execution, and answer synthesis are explicit graph nodes.
 - **RAG knowledge retrieval**: Markdown knowledge base indexed by Qdrant with `BAAI/bge-m3`; keyword fallback is available when the vector stack is unavailable.
 - **BioAI tool calling**: PDB/RCSB, UniProt, RNAcentral, SerpAPI, structure splitting, contact maps, binding-site prediction, PAIR-style interaction prediction, CORAL/PepCCD MCP services, remote RNA expert, AlphaFold3 task submission, result reading, and report generation.
-- **SSE streaming UI**: Agent step events, tool-call start/finish events, answer deltas, artifact cards, and follow-up suggestions.
-- **Authenticated multi-user system**: username/password login, HttpOnly cookie sessions, admin-only runtime doctor, and ownership checks for sessions, tasks, files, and reports.
+- **Recoverable SSE streaming UI**: durable turn IDs prevent duplicate scientific jobs after a browser or proxy disconnect; task and artifact state is polled from the server.
+- **Authenticated multi-user system**: username/password login, HttpOnly cookie sessions, proxy-aware database-backed auth limits, admin user/session management, audit events, and ownership checks.
 - **Long-running task runtime**: worker process for model/GPU jobs, structured task states, logs, and registered artifacts.
 - **Deployment-oriented engineering**: database migrations, readiness checks, locked dependencies, CI gates, offline image export, and end-to-end smoke tests.
 
@@ -21,9 +21,9 @@ optional compatible scientific runtime can be connected through
 - Public home/about/technical documentation pages.
 - Login and registration pages.
 - Agent chat page with Markdown rendering, SSE progress, RAG sources, tool events, result files, task list, and follow-up suggestions.
-- Task center for queued/running/completed/failed BioAI jobs.
+- Task center with live polling, result downloads, retry chains and queued/running/completed/failed BioAI jobs.
 - Tool catalog page.
-- Admin doctor page for checking LLM, embedding, Qdrant, model paths, Foldseek, DSSP, AlphaFold3, and runtime dependencies.
+- Admin pages for users, sessions, runtime metrics and checks of LLM, embedding, Qdrant, MCP, model paths, Foldseek, DSSP and AlphaFold3.
 - Downloadable artifacts, including CIF/PDB/JSON/CSV/log/report files.
 
 ## Technology Stack
@@ -165,9 +165,8 @@ Use `.env.example` as the canonical template. Main groups:
 - **Search**: `SERPAPI_API_KEY`
 - **BioAI runtime**: `PSKIT_LEGACY_ROOT`, `PSKIT_MODEL_PARAMETERS`, `PSKIT_FOLDSEEK`, `PSKIT_DSSP`
 - **AlphaFold3**: `PSKIT_AF3_DB_DIR`, `PSKIT_AF3_MODEL_DIR`, `PSKIT_AF3_IMAGE`, `PSKIT_AF3_GPU_DEVICE`
-- **Remote MCP/RNA expert**: `REMOTE_RNA_EXPERT_SSE_URL`
-- **CORAL MCP**: `CORAL_MCP_SSE_URL`, `CORAL_MCP_TOOL_NAME`
-- **PepCCD MCP**: `PEPCCD_MCP_SSE_URL`, `PEPCCD_MCP_TOOL_NAME`
+- **CORAL MCP**: `REMOTE_RNA_EXPERT_SSE_URL` (SSE transport; tool `generate_rna_for_protein`)
+- **PepCCD MCP**: `PEPCCD_MCP_URL`, `PEPCCD_MCP_TOOL_NAME` (Streamable HTTP transport)
 - **Security**: `REGISTRATION_MODE`, `SESSION_COOKIE_NAME`, `SESSION_TTL_DAYS`, `COOKIE_SECURE`, login rate limits
 
 Never commit real API keys, model weights, task outputs, user databases, or `.env`.

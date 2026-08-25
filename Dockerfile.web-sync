@@ -1,8 +1,0 @@
-FROM pskit2-science-demo:pskit2-0.2.2-delivery AS source
-
-FROM pskit2:0.2.0
-USER root
-COPY --from=source /app/backend /app/backend
-COPY --from=source /app/frontend/dist /app/frontend/dist
-COPY scripts/build_rag_index.py /app/scripts/build_rag_index.py
-USER pskit

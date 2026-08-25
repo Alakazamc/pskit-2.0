@@ -3,7 +3,7 @@ set -eu
 
 root_dir="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 env_file="${1:-.env.docker}"
-version="${PSKIT_VERSION:-0.2.0}"
+version="${PSKIT_VERSION:-0.3.0}"
 image_name="pskit2-${version}-linux-amd64-images.tar.gz"
 image_bundle="$root_dir/dist/$image_name"
 image_checksum="$image_bundle.sha256"

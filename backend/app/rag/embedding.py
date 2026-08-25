@@ -24,9 +24,7 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     with httpx.Client(timeout=60) as client:
         response = client.post(settings.embeddings_url, headers=headers, json=payload)
     if response.status_code >= 400:
-        raise EmbeddingUnavailable(
-            f"Embedding API returned {response.status_code}: {response.text[:500]}"
-        )
+        raise EmbeddingUnavailable(f"Embedding API returned {response.status_code}: {response.text[:500]}")
 
     body = response.json()
     data = body.get("data")

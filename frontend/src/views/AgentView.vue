@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 
 import EmptyState from "../components/EmptyState.vue";
 import MarkdownMessage from "../components/MarkdownMessage.vue";
 import StatusPill from "../components/StatusPill.vue";
 import {
   ApiError,
+  activeAgentTurn,
   api,
+  recoverAgentTurn,
   streamAgentMessage,
   type AgentMessage,
   type AgentSession,
@@ -51,6 +53,8 @@ const tasks = ref<Task[]>([]);
 const streamingAnswer = ref("");
 const suggestions = ref<string[]>([]);
 const messageListRef = ref<HTMLElement | null>(null);
+let taskPollTimer: number | undefined;
+let recovering = false;
 
 const activeSession = computed(() => sessions.value.find((item) => item.id === activeSessionId.value));
 
@@ -68,7 +72,46 @@ async function loadHistory() {
 }
 
 async function loadTasks() {
-  tasks.value = await api.tasks();
+  let loadedTasks: Task[];
+  try {
+    loadedTasks = await api.tasks();
+  } catch (err) {
+    error.value = err instanceof ApiError ? err.message : "无法刷新任务状态";
+    return;
+  }
+  tasks.value = loadedTasks;
+  const taskArtifacts = tasks.value
+    .filter((task) => !task.session_id || task.session_id === activeSessionId.value)
+    .flatMap((task) => task.artifacts)
+    .map((artifact) => ({
+      artifact_id: artifact.id,
+      filename: artifact.filename,
+      download_url: artifact.download_url,
+    }));
+  const merged = new Map(
+    [...artifacts.value, ...taskArtifacts].map((artifact) => [artifact.artifact_id, artifact]),
+  );
+  artifacts.value = [...merged.values()];
+}
+
+async function resumeActiveTurn() {
+  if (!activeSessionId.value || recovering || sending.value) return;
+  const active = await activeAgentTurn(activeSessionId.value);
+  if (!active) return;
+  recovering = true;
+  sending.value = true;
+  error.value = "检测到服务器仍在执行上一条消息，正在恢复进度…";
+  try {
+    await recoverAgentTurn(active.turn_id, handleStreamEvent);
+    await Promise.all([loadHistory(), loadSessions(), loadTasks()]);
+    streamingAnswer.value = "";
+    error.value = "";
+  } catch (err) {
+    error.value = err instanceof ApiError ? err.message : "无法恢复服务器任务";
+  } finally {
+    recovering = false;
+    sending.value = false;
+  }
 }
 
 async function scrollToBottom() {
@@ -89,6 +132,7 @@ async function boot() {
       activeSessionId.value = session.id;
     }
     await Promise.all([loadHistory(), loadTasks()]);
+    void resumeActiveTurn();
   } catch (err) {
     error.value = err instanceof ApiError ? err.message : "无法加载智能体";
   } finally {
@@ -116,6 +160,8 @@ async function selectSession(sessionId: string) {
   streamingAnswer.value = "";
   suggestions.value = [];
   await loadHistory();
+  await loadTasks();
+  void resumeActiveTurn();
 }
 
 function handleStreamEvent(event: StreamEvent) {
@@ -156,6 +202,16 @@ function handleStreamEvent(event: StreamEvent) {
     void loadTasks();
     return;
   }
+  if (event.type === "task_update") {
+    events.value.unshift({
+      type: "task_update",
+      task_id: String(event.task_id || ""),
+      task_type: String(event.task_type || ""),
+      status: String(event.status || ""),
+    });
+    void loadTasks();
+    return;
+  }
   if (event.type === "tool_call_started" || event.type === "tool_call_finished") {
     events.value.unshift({
       type: event.type,
@@ -189,18 +245,42 @@ async function sendMessage() {
     metadata: {},
   });
   void scrollToBottom();
+  const turnId = crypto.randomUUID();
   try {
-    await streamAgentMessage(activeSessionId.value, content, handleStreamEvent);
+    await streamAgentMessage(activeSessionId.value, content, handleStreamEvent, turnId);
     await Promise.all([loadHistory(), loadSessions(), loadTasks()]);
     streamingAnswer.value = "";
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : "消息发送失败";
+    if (err instanceof ApiError && ![0, 409].includes(err.status)) {
+      error.value = err.message;
+      sending.value = false;
+      return;
+    }
+    try {
+      const active = await activeAgentTurn(activeSessionId.value);
+      if (active) {
+        await recoverAgentTurn(active.turn_id, handleStreamEvent);
+      }
+      await Promise.all([loadHistory(), loadSessions(), loadTasks()]);
+      streamingAnswer.value = "";
+      error.value = "";
+    } catch (recoveryError) {
+      error.value = recoveryError instanceof ApiError
+        ? recoveryError.message
+        : err instanceof ApiError
+          ? err.message
+          : "消息连接中断；服务器可能仍在运行，请稍后刷新本会话";
+    }
   } finally {
     sending.value = false;
   }
 }
 
-onMounted(boot);
+onMounted(async () => {
+  await boot();
+  taskPollTimer = window.setInterval(() => void loadTasks(), 3000);
+});
+onUnmounted(() => window.clearInterval(taskPollTimer));
 </script>
 
 <template>

@@ -1,14 +1,13 @@
-import logging
-import re
 from dataclasses import dataclass
 from pathlib import Path
+import re
 
 from app.config import get_settings
 from app.rag.embedding import embed_texts
 
-logger = logging.getLogger(__name__)
 
 TOKEN_RE = re.compile(r"[A-Za-z0-9_\-./]+|[\u4e00-\u9fff]+")
+AUTHORITATIVE_SOURCE = "00_current_pskit2_capabilities.md"
 
 
 @dataclass(frozen=True)
@@ -21,6 +20,28 @@ class RetrievedChunk:
 
 def tokenize(text: str) -> set[str]:
     return {item.lower() for item in TOKEN_RE.findall(text)}
+
+
+def prioritize_authoritative(
+    chunks: list[RetrievedChunk],
+    top_k: int,
+) -> list[RetrievedChunk]:
+    authoritative = next(
+        (chunk for chunk in chunks if chunk.source == AUTHORITATIVE_SOURCE),
+        None,
+    )
+    remaining: list[RetrievedChunk] = []
+    seen: set[tuple[str, str | None, str]] = set()
+    if authoritative:
+        seen.add((authoritative.source, authoritative.heading, authoritative.content))
+    for chunk in chunks:
+        key = (chunk.source, chunk.heading, chunk.content)
+        if key in seen:
+            continue
+        seen.add(key)
+        remaining.append(chunk)
+    ordered = ([authoritative] if authoritative else []) + remaining
+    return ordered[:top_k]
 
 
 def iter_markdown_chunks(knowledge_dir: Path) -> list[RetrievedChunk]:
@@ -73,7 +94,8 @@ def retrieve_keyword(query: str, top_k: int = 5) -> list[RetrievedChunk]:
         if not overlap:
             continue
         heading_boost = 0.5 if chunk.heading and tokenize(chunk.heading) & query_tokens else 0.0
-        score = len(overlap) + heading_boost
+        authoritative_boost = 2.0 if chunk.source == AUTHORITATIVE_SOURCE else 0.0
+        score = len(overlap) + heading_boost + authoritative_boost
         scored.append(
             RetrievedChunk(
                 source=chunk.source,
@@ -82,7 +104,10 @@ def retrieve_keyword(query: str, top_k: int = 5) -> list[RetrievedChunk]:
                 score=float(score),
             )
         )
-    return sorted(scored, key=lambda item: item.score, reverse=True)[:top_k]
+    return prioritize_authoritative(
+        sorted(scored, key=lambda item: item.score, reverse=True),
+        top_k,
+    )
 
 
 def retrieve_qdrant(query: str, top_k: int = 5) -> list[RetrievedChunk]:
@@ -124,9 +149,18 @@ def retrieve_qdrant(query: str, top_k: int = 5) -> list[RetrievedChunk]:
 
 def retrieve(query: str, top_k: int = 5) -> tuple[str, list[RetrievedChunk]]:
     try:
-        chunks = retrieve_qdrant(query, top_k=top_k)
+        chunks = retrieve_qdrant(query, top_k=max(top_k * 2, top_k))
         if chunks:
-            return "qdrant", chunks
-    except Exception as exc:
-        logger.warning("Qdrant retrieval failed; using keyword fallback: %s", exc)
+            settings = get_settings()
+            knowledge_dir = settings.knowledge_dir
+            if not knowledge_dir.is_absolute():
+                knowledge_dir = (Path.cwd() / knowledge_dir).resolve()
+            current_chunks = [
+                chunk
+                for chunk in iter_markdown_chunks(knowledge_dir)
+                if chunk.source == AUTHORITATIVE_SOURCE
+            ]
+            return "qdrant", prioritize_authoritative([*current_chunks[:1], *chunks], top_k)
+    except Exception:
+        pass
     return "keyword_fallback", retrieve_keyword(query, top_k=top_k)

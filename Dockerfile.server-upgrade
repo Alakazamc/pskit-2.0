@@ -1,0 +1,24 @@
+# Server-only fast path for an A6000 host that already has the last verified
+# release image. The canonical clean build remains Dockerfile.
+ARG PSKIT_SERVER_BASE_IMAGE=pskit2:0.2.2-delivery
+FROM ${PSKIT_SERVER_BASE_IMAGE}
+
+ARG PSKIT_VERSION=0.3.0
+LABEL org.opencontainers.image.title="PSKit 2.0" \
+      org.opencontainers.image.description="Full-stack BioAI Agent workbench" \
+      org.opencontainers.image.version="${PSKIT_VERSION}"
+
+USER root
+COPY backend/requirements.lock /app/backend/requirements.lock
+RUN python -m pip install --no-cache-dir --require-hashes -r /app/backend/requirements.lock
+COPY backend/pyproject.toml /app/backend/pyproject.toml
+COPY backend/alembic.ini /app/backend/alembic.ini
+COPY backend/alembic/ /app/backend/alembic/
+COPY backend/app/ /app/backend/app/
+COPY knowledge/ /app/knowledge/
+COPY scripts/migrate_db.py scripts/build_rag_index.py /app/scripts/
+COPY frontend/dist/ /app/frontend/dist/
+RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps /app/backend \
+    && python -m compileall -q /app/backend/app \
+    && python -m pip check
+USER pskit

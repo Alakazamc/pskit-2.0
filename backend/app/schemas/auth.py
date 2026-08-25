@@ -1,31 +1,13 @@
-from typing import Literal
-
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class AuthRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    username: str = Field(min_length=3, max_length=80, pattern=r"^[A-Za-z0-9_.-]+$")
+    username: str = Field(min_length=3, max_length=80)
     password: str = Field(min_length=8, max_length=256)
-
-    @field_validator("username")
-    @classmethod
-    def normalize_username(cls, value: str) -> str:
-        return value.strip()
-
-
-class AdminCreateUserRequest(AuthRequest):
-    role: Literal["admin", "user"] = "user"
+    bootstrap_token: str | None = Field(default=None, max_length=512)
 
 
 class UserResponse(BaseModel):
     id: str
     username: str
     role: str
-
-
-class RegistrationStatusResponse(BaseModel):
-    enabled: bool
-    mode: str
-    first_user: bool

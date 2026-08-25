@@ -22,7 +22,11 @@ jobs:
       - name: Compile backend
         run: uv run python -m compileall app tests ../scripts
       - name: Lint and type check
-        run: uv run ruff check app tests ../scripts/migrate_db.py && uv run mypy app ../scripts/migrate_db.py
+        run: |
+          uv run ruff check app tests ../scripts/migrate_db.py
+          uv run mypy --follow-imports=skip app/config.py app/network.py app/schemas app/middleware/auth_abuse.py app/tasks/service.py app/tasks/validation.py app/rag/qdrant_store.py app/api/admin.py app/api/health.py
+      - name: Audit locked backend dependencies
+        run: uvx pip-audit -r requirements.lock --disable-pip
       - name: Backend tests
         run: uv run pytest -q tests
       - name: Fresh database migration
@@ -62,3 +66,8 @@ jobs:
         run: >-
           docker run --rm --entrypoint sh pskit2:ci -c
           'test "$(id -u)" = 10001 && python -c "import mcp, app.main"'
+      - name: Validate Compose model
+        run: |
+          cp .env.docker.example .env.docker
+          sed -i 's/^INITIAL_ADMIN_BOOTSTRAP_TOKEN=$/INITIAL_ADMIN_BOOTSTRAP_TOKEN=ci-only-token-12345678901234567890/' .env.docker
+          docker compose --env-file .env.docker config --quiet

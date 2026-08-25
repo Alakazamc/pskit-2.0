@@ -14,7 +14,12 @@ const navItems = computed(() => [
   { to: "/agent", label: "智能体", public: false },
   { to: "/tasks", label: "任务", public: false },
   { to: "/tools", label: "工具", public: false },
-  ...(auth.isAdmin ? [{ to: "/admin/doctor", label: "运行体检", public: false }] : []),
+  ...(auth.isAdmin
+    ? [
+        { to: "/admin/doctor", label: "运行体检", public: false },
+        { to: "/admin/users", label: "用户管理", public: false },
+      ]
+    : []),
 ]);
 
 const isAuthPage = computed(() => route.name === "login" || route.name === "register");

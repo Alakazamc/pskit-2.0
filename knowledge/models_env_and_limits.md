@@ -16,16 +16,15 @@ external binaries. AlphaFold 3 uses `PSKIT_AF3_DB_DIR`,
 assets are not included in the core image.
 
 The current task API runs INABe, PAIR, and AlphaFold 3 through the local science
-worker. CORAL and PepCCD run through separately managed MCP/SSE services. Set
-`CORAL_MCP_SSE_URL` / `CORAL_MCP_TOOL_NAME` and
-`PEPCCD_MCP_SSE_URL` / `PEPCCD_MCP_TOOL_NAME`. A tool name may be omitted only
-when that MCP server exposes exactly one tool; otherwise PSKit fails closed and
-reports the available names instead of guessing which remote operation to run.
+worker. CORAL and PepCCD run through separately managed MCP services. Set
+`REMOTE_RNA_EXPERT_SSE_URL` for CORAL's SSE transport and `PEPCCD_MCP_URL` plus
+`PEPCCD_MCP_TOOL_NAME` for PepCCD's Streamable HTTP transport. PSKit validates
+the advertised input schema before calling PepCCD and fails closed on ambiguity.
 
 ## Input and execution limits / 输入与执行限制
 
 Serialized task input is limited to 1 MB and total sequence input to 20,000
-characters. AlphaFold 3 accepts at most 32 entities and 1–20 diffusion samples.
+characters. AlphaFold 3 accepts at most 20 entities and 1–20 diffusion samples.
 Remote RNA generation accepts 1–50 samples. Subprocess, LLM stream, remote MCP,
 retry, and stale-task timeouts are configurable and finite.
 

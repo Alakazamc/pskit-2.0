@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.artifacts.service import (
     register_local_artifact,
-    resolve_owned_local_artifact,
+    resolve_owned_local_artifact_reference,
     session_artifact_dir,
 )
 from app.config import get_settings
@@ -47,10 +47,14 @@ def search_pdb(query: str) -> dict:
     with httpx.Client(timeout=30) as client:
         response = client.post(settings.rcsb_search_url, json=payload)
     if response.status_code >= 400:
-        raise ToolExecutionError(
-            f"RCSB search failed: HTTP {response.status_code} {response.text[:300]}"
-        )
-    data = response.json()
+        raise ToolExecutionError(f"RCSB search failed: HTTP {response.status_code} {response.text[:300]}")
+    if response.status_code == 204 or not response.content:
+        data = {"result_set": [], "total_count": 0}
+    else:
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise ToolExecutionError("RCSB search returned invalid JSON") from exc
     hits = [
         {"pdb_id": item.get("identifier"), "score": item.get("score")}
         for item in data.get("result_set", [])
@@ -69,9 +73,7 @@ def fetch_pdb_info(pdb_id: str) -> dict:
     with httpx.Client(timeout=30) as client:
         response = client.get(f"{settings.rcsb_data_base.rstrip('/')}/{pdb_id}")
     if response.status_code >= 400:
-        raise ToolExecutionError(
-            f"RCSB entry lookup failed: HTTP {response.status_code} {response.text[:300]}"
-        )
+        raise ToolExecutionError(f"RCSB entry lookup failed: HTTP {response.status_code} {response.text[:300]}")
     data = response.json()
     return {
         "pdb_id": pdb_id,
@@ -101,9 +103,7 @@ def download_pdb_file(
     with httpx.Client(timeout=60) as client:
         response = client.get(url)
     if response.status_code >= 400:
-        raise ToolExecutionError(
-            f"Download structure failed: HTTP {response.status_code} {response.text[:300]}"
-        )
+        raise ToolExecutionError(f"Download structure failed: HTTP {response.status_code} {response.text[:300]}")
     out_dir = session_artifact_dir(user.id, session_id, tool_call_id)
     path = out_dir / f"{pdb_id.lower()}.{suffix}"
     path.write_bytes(response.content)
@@ -128,13 +128,11 @@ def download_pdb_file(
 
 def search_uniprot(query: str) -> dict:
     settings = get_settings()
-    params: dict[str, str | int] = {"query": query, "format": "json", "size": 10}
+    params = {"query": query, "format": "json", "size": 10}
     with httpx.Client(timeout=30) as client:
         response = client.get(settings.uniprot_search_url, params=params)
     if response.status_code >= 400:
-        raise ToolExecutionError(
-            f"UniProt search failed: HTTP {response.status_code} {response.text[:300]}"
-        )
+        raise ToolExecutionError(f"UniProt search failed: HTTP {response.status_code} {response.text[:300]}")
     data = response.json()
     results = []
     for item in data.get("results", [])[:10]:
@@ -157,9 +155,7 @@ def fetch_uniprot_entry(accession: str) -> dict:
     with httpx.Client(timeout=30) as client:
         response = client.get(f"{settings.uniprot_entry_base.rstrip('/')}/{accession}.json")
     if response.status_code >= 400:
-        raise ToolExecutionError(
-            f"UniProt entry lookup failed: HTTP {response.status_code} {response.text[:300]}"
-        )
+        raise ToolExecutionError(f"UniProt entry lookup failed: HTTP {response.status_code} {response.text[:300]}")
     data = response.json()
     sequence = data.get("sequence", {})
     return {
@@ -174,13 +170,11 @@ def fetch_uniprot_entry(accession: str) -> dict:
 
 def search_rnacentral(query: str) -> dict:
     settings = get_settings()
-    params: dict[str, str | int] = {"q": query, "format": "json", "page_size": 10}
+    params = {"q": query, "format": "json", "page_size": 10}
     with httpx.Client(timeout=30) as client:
         response = client.get(settings.rnacentral_search_url, params=params)
     if response.status_code >= 400:
-        raise ToolExecutionError(
-            f"RNAcentral search failed: HTTP {response.status_code} {response.text[:300]}"
-        )
+        raise ToolExecutionError(f"RNAcentral search failed: HTTP {response.status_code} {response.text[:300]}")
     data = response.json()
     results = []
     for item in data.get("results", [])[:10]:
@@ -198,13 +192,9 @@ def fetch_rnacentral_entry(accession: str) -> dict:
     settings = get_settings()
     accession = accession.strip()
     with httpx.Client(timeout=30) as client:
-        response = client.get(
-            f"{settings.rnacentral_entry_base.rstrip('/')}/{accession}", params={"format": "json"}
-        )
+        response = client.get(f"{settings.rnacentral_entry_base.rstrip('/')}/{accession}", params={"format": "json"})
     if response.status_code >= 400:
-        raise ToolExecutionError(
-            f"RNAcentral entry lookup failed: HTTP {response.status_code} {response.text[:300]}"
-        )
+        raise ToolExecutionError(f"RNAcentral entry lookup failed: HTTP {response.status_code} {response.text[:300]}")
     return response.json()
 
 
@@ -212,7 +202,7 @@ def serpapi_search(query: str, num: int = 5, engine: str = "google") -> dict:
     settings = get_settings()
     if not settings.serpapi_api_key:
         raise ToolExecutionError("SERPAPI_API_KEY is not configured")
-    params: dict[str, str | int] = {
+    params = {
         "engine": engine or "google",
         "q": query,
         "num": max(1, min(int(num or 5), 10)),
@@ -221,9 +211,7 @@ def serpapi_search(query: str, num: int = 5, engine: str = "google") -> dict:
     with httpx.Client(timeout=30) as client:
         response = client.get(settings.serpapi_search_url, params=params)
     if response.status_code >= 400:
-        raise ToolExecutionError(
-            f"SerpAPI search failed: HTTP {response.status_code} {response.text[:300]}"
-        )
+        raise ToolExecutionError(f"SerpAPI search failed: HTTP {response.status_code} {response.text[:300]}")
     data = response.json()
     results = [
         {
@@ -239,18 +227,24 @@ def serpapi_search(query: str, num: int = 5, engine: str = "google") -> dict:
 def read_result_file(
     db: Session,
     user: User,
-    artifact_id: str,
+    artifact_id: str | None = None,
+    file_path: str | None = None,
     max_chars: int = 8000,
 ) -> dict:
     try:
-        path = resolve_owned_local_artifact(db, user, artifact_id)
+        path = resolve_owned_local_artifact_reference(
+            db,
+            user,
+            artifact_id=artifact_id,
+            file_path=file_path,
+        )
     except (FileNotFoundError, NotImplementedError, ValueError) as exc:
-        raise ToolExecutionError(str(exc)) from exc
+        raise ToolExecutionError("Artifact not found or is not readable") from exc
 
     text = path.read_text(encoding="utf-8", errors="replace")
     limit = max(100, min(int(max_chars or 8000), 50000))
     return {
-        "file": str(path),
+        "file": path.name,
         "returned_chars": min(len(text), limit),
         "total_chars": len(text),
         "truncated": len(text) > limit,

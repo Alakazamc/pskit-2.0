@@ -16,9 +16,10 @@ host address is `127.0.0.1:10716`.
 
 ## Persistence and upgrades / 持久化与升级
 
-Normal `docker compose down` preserves both named volumes. Back up `pskit_data`
-before an upgrade. Never use `down --volumes` unless a permanent reset is
-intended. Version 0.2.0 automatically upgrades the 0.1.0 SQLite schema.
+Normal `docker compose down` preserves both named volumes. Run
+`scripts/backup_runtime.sh` before an upgrade. Never use `down --volumes` unless
+a permanent reset is intended. Version 0.3.0 migrates the production schema and
+stores verified SQLite, artifact, and Qdrant snapshots outside the root disk.
 
 ## External providers / 外部服务
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0 - Production hardening and unified science runtime
+
+- Unified the complete production Agent, research harness, local-model, MCP,
+  and AlphaFold3 code paths into the canonical repository and images.
+- Added database-backed proxy-aware authentication throttling, bounded sessions,
+  transactional task quotas, GPU allowlists, and administrator audit events.
+- Added resumable Agent turns, task artifact downloads/retries, and an admin
+  user/metrics interface.
+- Made RAG rebuilds atomic through versioned Qdrant collections and alias swaps.
+- Added the production-schema migration, dependency audit, CI quality gates,
+  verified SQLite/artifact/Qdrant backups, health monitoring, log rotation, and
+  container resource limits.
+- Corrected Compose health paths, startup dependencies, persistent host paths,
+  server image overlays, and explicit CORAL/PepCCD configuration.
+
 ## 0.2.0 - Delivery hardening
 
 - Closed public registration after first-admin bootstrap by default and added an admin-only user creation endpoint.

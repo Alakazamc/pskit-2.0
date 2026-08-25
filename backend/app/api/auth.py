@@ -1,83 +1,111 @@
+import secrets
+
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_admin, get_current_user
+from app.auth.dependencies import get_current_user
 from app.auth.passwords import hash_password, verify_password
-from app.auth.rate_limit import SlidingWindowRateLimiter
 from app.auth.sessions import create_session, delete_session
 from app.config import get_settings
-from app.db.models import AppState, User
+from app.db.models import SystemState, User, now_utc
 from app.db.session import get_db
-from app.schemas.auth import (
-    AdminCreateUserRequest,
-    AuthRequest,
-    RegistrationStatusResponse,
-    UserResponse,
-)
+from app.network import client_ip
+from app.schemas.auth import AuthRequest, UserResponse
+
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-SETTINGS = get_settings()
-login_limiter = SlidingWindowRateLimiter(
-    SETTINGS.login_rate_limit_attempts,
-    SETTINGS.login_rate_limit_window_seconds,
-)
 
 
 def user_response(user: User) -> UserResponse:
     return UserResponse(id=str(user.id), username=user.username, role=user.role)
 
 
-def client_key(request: Request, username: str) -> str:
-    ip = request.client.host if request.client else "unknown"
-    return f"{ip}:{username.casefold()}"
+def claim_initial_admin(db: Session, user: User) -> bool:
+    """原子认领唯一首位管理员，避免并发注册产生多个管理员。"""
+
+    if db.scalar(select(User.id).where(User.role == "admin").limit(1)) is not None:
+        return False
+    values = {
+        "key": "auth.initial_admin",
+        "value_json": {"user_id": str(user.id)},
+        "created_at": now_utc(),
+        "updated_at": now_utc(),
+    }
+    dialect_name = db.get_bind().dialect.name
+    if dialect_name == "sqlite":
+        statement = sqlite_insert(SystemState).values(**values).on_conflict_do_nothing(
+            index_elements=[SystemState.key]
+        )
+    elif dialect_name == "postgresql":
+        statement = postgresql_insert(SystemState).values(**values).on_conflict_do_nothing(
+            index_elements=[SystemState.key]
+        )
+    else:
+        raise RuntimeError(f"Unsupported database dialect for admin bootstrap: {dialect_name}")
+    claimed = db.execute(statement)
+    if claimed.rowcount != 1:
+        return False
+    user.role = "admin"
+    return True
 
 
-def persist_user(db: Session, payload: AuthRequest, role: str) -> User:
-    user = User(
-        username=payload.username,
-        password_hash=hash_password(payload.password),
-        role=role,
-    )
-    db.add(user)
-    return user
+def authorize_initial_admin_claim(
+    db: Session,
+    bootstrap_token: str | None,
+) -> bool:
+    """生产环境首位管理员必须证明持有服务器本地引导令牌。"""
+
+    if db.scalar(select(User.id).where(User.role == "admin").limit(1)) is not None:
+        return False
+    settings = get_settings()
+    if settings.app_env.lower() not in {"production", "release"}:
+        return True
+    expected = settings.initial_admin_bootstrap_token or ""
+    supplied = bootstrap_token or ""
+    if not expected or not secrets.compare_digest(supplied, expected):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Initial administrator bootstrap token is required",
+        )
+    return True
 
 
-@router.get("/registration", response_model=RegistrationStatusResponse)
-def registration_status(db: Session = Depends(get_db)):
-    user_count = db.scalar(select(func.count()).select_from(User)) or 0
-    mode = SETTINGS.registration_mode
-    enabled = mode == "open" or (mode == "first_user" and user_count == 0)
-    return RegistrationStatusResponse(enabled=enabled, mode=mode, first_user=user_count == 0)
+@router.get("/registration")
+def registration_status():
+    mode = get_settings().registration_mode
+    return {"enabled": mode == "open", "mode": mode, "first_user": False}
 
 
 @router.post("/register", response_model=UserResponse)
-def register(
-    payload: AuthRequest, request: Request, response: Response, db: Session = Depends(get_db)
-):
-    mode = SETTINGS.registration_mode
-    user_count = db.scalar(select(func.count()).select_from(User)) or 0
-    if mode == "disabled" or (mode == "first_user" and user_count > 0):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Registration is closed")
-
+def register(payload: AuthRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     existing = db.scalar(select(User).where(User.username == payload.username))
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid username or password"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid username or password")
 
-    role = "admin" if mode == "first_user" else "user"
-    user = persist_user(db, payload, role)
-    if mode == "first_user":
-        db.add(AppState(key="admin_initialized", value=payload.username))
+    should_claim_initial_admin = authorize_initial_admin_claim(
+        db,
+        payload.bootstrap_token,
+    )
+    user = User(
+        username=payload.username,
+        password_hash=hash_password(payload.password),
+        role="user",
+    )
+    db.add(user)
     try:
+        db.flush()
+        if should_claim_initial_admin:
+            claim_initial_admin(db, user)
         db.commit()
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Registration was completed by another request",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid username or password",
         ) from exc
     db.refresh(user)
 
@@ -85,72 +113,45 @@ def register(
         db,
         user,
         user_agent=request.headers.get("user-agent"),
-        ip=request.client.host if request.client else None,
+        ip=client_ip(request),
     )
+    settings = get_settings()
     response.set_cookie(
-        SETTINGS.session_cookie_name,
+        settings.session_cookie_name,
         token,
         httponly=True,
-        secure=SETTINGS.cookie_secure,
+        secure=settings.cookie_secure,
         samesite="lax",
-        max_age=SETTINGS.session_ttl_days * 24 * 60 * 60,
+        max_age=settings.session_ttl_days * 24 * 60 * 60,
         path="/",
     )
     return user_response(user)
 
 
 @router.post("/login", response_model=UserResponse)
-def login(
-    payload: AuthRequest, request: Request, response: Response, db: Session = Depends(get_db)
-):
-    key = client_key(request, payload.username)
-    retry_after = login_limiter.retry_after(key)
-    if retry_after is not None:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many failed login attempts",
-            headers={"Retry-After": str(retry_after)},
-        )
+def login(payload: AuthRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.username == payload.username))
     if not user or not verify_password(payload.password, user.password_hash):
-        login_limiter.record_failure(key)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid username or password"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid username or password")
     if user.disabled_at is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User disabled")
 
-    login_limiter.reset(key)
     token, _session = create_session(
         db,
         user,
         user_agent=request.headers.get("user-agent"),
-        ip=request.client.host if request.client else None,
+        ip=client_ip(request),
     )
+    settings = get_settings()
     response.set_cookie(
-        SETTINGS.session_cookie_name,
+        settings.session_cookie_name,
         token,
         httponly=True,
-        secure=SETTINGS.cookie_secure,
+        secure=settings.cookie_secure,
         samesite="lax",
-        max_age=SETTINGS.session_ttl_days * 24 * 60 * 60,
+        max_age=settings.session_ttl_days * 24 * 60 * 60,
         path="/",
     )
-    return user_response(user)
-
-
-@router.post("/users", response_model=UserResponse)
-def admin_create_user(
-    payload: AdminCreateUserRequest,
-    db: Session = Depends(get_db),
-    _admin: User = Depends(get_current_admin),
-):
-    existing = db.scalar(select(User).where(User.username == payload.username))
-    if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
-    user = persist_user(db, payload, payload.role)
-    db.commit()
-    db.refresh(user)
     return user_response(user)
 
 
@@ -161,8 +162,9 @@ def logout(
     user: User = Depends(get_current_user),
     session_cookie: str | None = Cookie(default=None, alias=get_settings().session_cookie_name),
 ):
+    settings = get_settings()
     delete_session(db, session_cookie)
-    response.delete_cookie(SETTINGS.session_cookie_name, path="/")
+    response.delete_cookie(settings.session_cookie_name, path="/")
     return {"ok": True, "user_id": str(user.id)}
 
 

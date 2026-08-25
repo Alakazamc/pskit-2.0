@@ -2,7 +2,7 @@ from logging.config import fileConfig
 
 from alembic import context
 from app.config import get_settings
-from app.db import models  # noqa: F401
+from app.db import harness_models, models  # noqa: F401
 from app.db.base import Base
 
 config = context.config

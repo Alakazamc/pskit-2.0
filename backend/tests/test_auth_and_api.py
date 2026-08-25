@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.agent import recent_chat_messages
+from app.agent.execution import recent_chat_messages
 from app.artifacts.service import register_local_artifact
 from app.db.models import AgentMessage, AgentSession, User, now_utc
 from app.db.session import SessionLocal, init_db
@@ -107,19 +107,9 @@ def test_invalid_task_type_and_oversized_sequence_are_rejected():
 
     missing_mcp_arguments = client.post(
         "/api/tasks",
-        json={"task_type": "coral_mcp__predict", "input": {}},
+        json={"task_type": "generate_pepccd_candidates", "input": {}},
     )
     assert missing_mcp_arguments.status_code == 422
-
-    coral = client.post(
-        "/api/tasks",
-        json={
-            "task_type": "coral_mcp__predict",
-            "input": {"arguments": {"protein_sequence": "ACDE", "rna_sequence": "ACGU"}},
-        },
-    )
-    assert coral.status_code == 200
-    assert coral.json()["status"] == "queued"
 
 
 def test_artifact_reader_enforces_user_ownership():
@@ -188,7 +178,7 @@ def test_recent_chat_messages_does_not_replay_abandoned_user_turns():
         )
         db.commit()
 
-        assert recent_chat_messages(db, session.id, user) == [
+        assert recent_chat_messages(db, session.id, user.id) == [
             {"role": "user", "content": "hello"}
         ]
 
@@ -212,7 +202,7 @@ def test_recent_chat_messages_does_not_replay_abandoned_user_turns():
         )
         db.commit()
 
-        assert recent_chat_messages(db, session.id, user) == [
+        assert recent_chat_messages(db, session.id, user.id) == [
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "Hi!"},
             {"role": "user", "content": "new question"},

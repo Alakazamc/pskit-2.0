@@ -1,8 +1,9 @@
 # PSKit 2.0 Docker Quick Start
 
 This package is the reproducible onboarding path for PSKit 2.0. The default
-stack contains the web/API process, the real SQL-polling task worker, Qdrant,
-and persistent Docker volumes.
+stack contains the web/API process, the SQL-polling task worker, Qdrant,
+bounded logs/resources, and persistent Docker volumes. Version 0.3.0 uses one
+source tree for Web and Worker; the A6000 image is a derived science overlay.
 
 ## A6000 science worker
 
@@ -98,11 +99,10 @@ docker compose --env-file .env.docker build
 docker compose --env-file .env.docker up -d --wait
 ```
 
-Open <http://127.0.0.1:10716/agent>. The first registered user becomes admin.
-With the default `REGISTRATION_MODE=first_user`, public registration closes
-immediately afterward. Additional users must be created by an administrator
-through `POST /api/auth/users`, or registration must be explicitly changed to
-`open` on a trusted private deployment.
+Before production startup, set a random `INITIAL_ADMIN_BOOTSTRAP_TOKEN` of at
+least 24 characters. Open <http://127.0.0.1:10716/agent>. Public registration
+is enabled when `REGISTRATION_MODE=open`; the first administrator must submit
+the bootstrap token. Administrators can then manage users at `/admin/users`.
 
 ## 3. Verify
 
@@ -121,7 +121,7 @@ Invoke-RestMethod http://127.0.0.1:10716/api/health
 Expected response:
 
 ```json
-{"ok":true,"service":"PSKit 2.0","version":"0.2.0","checks":{"database":"ok","qdrant":"ok"}}
+{"ok":true,"service":"PSKit 2.0","version":"0.3.0"}
 ```
 
 ## Development loop
@@ -190,7 +190,7 @@ documentation, and the offline images:
 ./scripts/export_offline_delivery.sh .env.docker
 ```
 
-This creates `dist/pskit2-0.2.0-offline-delivery.tar` and its SHA-256 file.
+This creates `dist/pskit2-0.3.0-offline-delivery.tar` and its SHA-256 file.
 The outer archive is intentionally uncompressed because its largest member is
 already gzip-compressed.
 
@@ -208,19 +208,19 @@ API keys, model weights, or user data.
 On the recipient machine:
 
 ```bash
-sha256sum -c pskit2-0.2.0-offline-delivery.tar.sha256
-tar -xf pskit2-0.2.0-offline-delivery.tar
-cd pskit2-0.2.0
+sha256sum -c pskit2-0.3.0-offline-delivery.tar.sha256
+tar -xf pskit2-0.3.0-offline-delivery.tar
+cd pskit2-0.3.0
 cd dist
-sha256sum -c pskit2-0.2.0-linux-amd64-images.tar.gz.sha256
-gzip -dc pskit2-0.2.0-linux-amd64-images.tar.gz | docker load
+sha256sum -c pskit2-0.3.0-linux-amd64-images.tar.gz.sha256
+gzip -dc pskit2-0.3.0-linux-amd64-images.tar.gz | docker load
 cd ..
 cp .env.docker.example .env.docker
 docker compose --env-file .env.docker up -d --no-build --pull never --wait
 ```
 
 Compose runs the database migration service before starting the web process.
-Back up the `pskit_data` volume before upgrading an existing installation.
+Run `scripts/backup_runtime.sh` before upgrading an existing installation.
 When upgrading from 0.1.0, the oldest account is promoted to administrator only
 if the database does not already contain an administrator.
 

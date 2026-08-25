@@ -6,18 +6,19 @@ import math
 from pathlib import Path
 from uuid import UUID
 
-from Bio.PDB import PDBIO, MMCIFParser, PDBParser, Select
+from Bio.PDB import MMCIFParser, PDBIO, PDBParser, Select
 from Bio.PDB.Chain import Chain
 from Bio.PDB.Residue import Residue
 from sqlalchemy.orm import Session
 
 from app.artifacts.service import (
     register_local_artifact,
-    resolve_owned_local_artifact,
+    resolve_owned_local_artifact_reference,
     session_artifact_dir,
 )
 from app.db.models import User
 from app.tools.external import ToolExecutionError
+
 
 PROTEIN_RESIDUES = {
     "ALA",
@@ -51,10 +52,12 @@ NUCLEIC_RESIDUES = DNA_RESIDUES | RNA_RESIDUES
 def parse_structure(path: Path, file_format: str):
     fmt = file_format.lower().strip()
     if fmt == "cif":
-        return MMCIFParser(QUIET=True).get_structure(path.stem, str(path))
-    if fmt == "pdb":
-        return PDBParser(QUIET=True).get_structure(path.stem, str(path))
-    raise ToolExecutionError("format must be cif or pdb")
+        parser = MMCIFParser(QUIET=True)
+    elif fmt == "pdb":
+        parser = PDBParser(QUIET=True)
+    else:
+        raise ToolExecutionError("format must be cif or pdb")
+    return parser.get_structure(path.stem, str(path))
 
 
 def first_model(structure):
@@ -123,7 +126,9 @@ class FragmentSelect(Select):
         resseq = int(residue.id[1])
         if self.start is not None and resseq < self.start:
             return False
-        return not (self.end is not None and resseq > self.end)
+        if self.end is not None and resseq > self.end:
+            return False
+        return True
 
 
 def save_selected(structure, output_file: Path, selector: Select) -> None:
@@ -168,18 +173,23 @@ def min_residue_distance(a: Residue, b: Residue) -> float:
         coord_a = atom_a.get_coord()
         for atom_b in residue_atoms(b):
             coord_b = atom_b.get_coord()
-            dist = float(
-                math.sqrt(sum((coord_a[index] - coord_b[index]) ** 2 for index in range(3)))
-            )
-            min_distance = min(min_distance, dist)
+            dist = float(math.sqrt(sum((coord_a[index] - coord_b[index]) ** 2 for index in range(3))))
+            if dist < min_distance:
+                min_distance = dist
     return min_distance
 
 
-def resolve_input_structure_path(db: Session, user: User, artifact_id: str) -> Path:
+def resolve_input_structure_path(db: Session, user: User, path: str) -> Path:
     try:
-        return resolve_owned_local_artifact(db, user, artifact_id)
+        return resolve_owned_local_artifact_reference(
+            db,
+            user,
+            file_path=path,
+        )
     except (FileNotFoundError, NotImplementedError, ValueError) as exc:
-        raise ToolExecutionError(str(exc)) from exc
+        raise ToolExecutionError(
+            "Input structure must be a registered artifact owned by the current user"
+        ) from exc
 
 
 def split_pdb_by_chain(
@@ -187,10 +197,10 @@ def split_pdb_by_chain(
     user: User,
     session_id: UUID,
     tool_call_id: str,
-    artifact_id: str,
+    pdb_path: str,
     file_format: str,
 ) -> dict:
-    input_path = resolve_input_structure_path(db, user, artifact_id)
+    input_path = resolve_input_structure_path(db, user, pdb_path)
     structure = parse_structure(input_path, file_format)
     out_dir = session_artifact_dir(user.id, session_id, tool_call_id)
     artifacts = []
@@ -198,9 +208,7 @@ def split_pdb_by_chain(
         chain_id = chain.id.strip() or "blank"
         output_file = out_dir / f"{input_path.stem}_chain_{chain_id}.pdb"
         save_selected(structure, output_file, ChainSelect(chain.id))
-        artifact = register_local_artifact(
-            db, user, session_id, None, output_file, "structure", "chemical/x-pdb"
-        )
+        artifact = register_local_artifact(db, user, session_id, None, output_file, "structure", "chemical/x-pdb")
         artifacts.append(
             {
                 "chain": chain.id,
@@ -219,10 +227,10 @@ def split_complex(
     user: User,
     session_id: UUID,
     tool_call_id: str,
-    artifact_id: str,
+    pdb_path: str,
     file_format: str,
 ) -> dict:
-    input_path = resolve_input_structure_path(db, user, artifact_id)
+    input_path = resolve_input_structure_path(db, user, pdb_path)
     structure = parse_structure(input_path, file_format)
     out_dir = session_artifact_dir(user.id, session_id, tool_call_id)
     outputs = []
@@ -233,9 +241,7 @@ def split_complex(
         output_file = out_dir / filename
         save_selected(structure, output_file, MoleculeTypeSelect(molecule_type))
         if output_file.exists() and output_file.stat().st_size > 0:
-            artifact = register_local_artifact(
-                db, user, session_id, None, output_file, "structure", "chemical/x-pdb"
-            )
+            artifact = register_local_artifact(db, user, session_id, None, output_file, "structure", "chemical/x-pdb")
             outputs.append(
                 {
                     "molecule_type": molecule_type,
@@ -253,13 +259,13 @@ def extract_fragment(
     user: User,
     session_id: UUID,
     tool_call_id: str,
-    artifact_id: str,
+    pdb_path: str,
     chain: str,
     file_format: str,
     start: int | None = None,
     end: int | None = None,
 ) -> dict:
-    input_path = resolve_input_structure_path(db, user, artifact_id)
+    input_path = resolve_input_structure_path(db, user, pdb_path)
     structure = parse_structure(input_path, file_format)
     chain_ids = {item.id for item in first_model(structure)}
     if chain not in chain_ids:
@@ -268,9 +274,7 @@ def extract_fragment(
     range_suffix = f"_{start or 'start'}_{end or 'end'}"
     output_file = out_dir / f"{input_path.stem}_chain_{chain}{range_suffix}.pdb"
     save_selected(structure, output_file, FragmentSelect(chain, start, end))
-    artifact = register_local_artifact(
-        db, user, session_id, None, output_file, "structure", "chemical/x-pdb"
-    )
+    artifact = register_local_artifact(db, user, session_id, None, output_file, "structure", "chemical/x-pdb")
     return {
         "input": str(input_path),
         "chain": chain,
@@ -288,13 +292,13 @@ def calculate_contact_map(
     user: User,
     session_id: UUID,
     tool_call_id: str,
-    artifact_id: str,
+    pdb_path: str,
     file_format: str,
     chain: str | None = None,
     mode: str = "d",
     k: int | None = None,
 ) -> dict:
-    input_path = resolve_input_structure_path(db, user, artifact_id)
+    input_path = resolve_input_structure_path(db, user, pdb_path)
     structure = parse_structure(input_path, file_format)
     residues = []
     for chain_obj in first_model(structure):
@@ -332,9 +336,7 @@ def calculate_contact_map(
     output_file = out_dir / f"contact_map_{input_path.stem}.json"
     output = {"axis": axis, "values": values, "mode": mode, "chain": chain}
     output_file.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
-    artifact = register_local_artifact(
-        db, user, session_id, None, output_file, "json", "application/json"
-    )
+    artifact = register_local_artifact(db, user, session_id, None, output_file, "json", "application/json")
     return {
         "input": str(input_path),
         "residue_count": len(axis),
@@ -350,11 +352,11 @@ def annotate_binding_pairs(
     user: User,
     session_id: UUID,
     tool_call_id: str,
-    artifact_id: str,
+    pdb_path: str,
     file_format: str,
     cutoff: float = 3.5,
 ) -> dict:
-    input_path = resolve_input_structure_path(db, user, artifact_id)
+    input_path = resolve_input_structure_path(db, user, pdb_path)
     structure = parse_structure(input_path, file_format)
     protein_residues = []
     nucleic_residues = []
@@ -365,7 +367,7 @@ def annotate_binding_pairs(
             elif is_nucleic_residue(residue):
                 nucleic_residues.append((chain_obj, residue))
 
-    pairs: list[dict[str, str | float]] = []
+    pairs = []
     for protein_chain, protein_residue in protein_residues:
         for nucleic_chain, nucleic_residue in nucleic_residues:
             dist = min_residue_distance(protein_residue, nucleic_residue)
@@ -376,7 +378,7 @@ def annotate_binding_pairs(
                         "distance": round(dist, 3),
                     }
                 )
-    pairs.sort(key=lambda item: float(item["distance"]))
+    pairs.sort(key=lambda item: item["distance"])
 
     out_dir = session_artifact_dir(user.id, session_id, tool_call_id)
     output_file = out_dir / f"{input_path.stem}_binding_pairs.csv"

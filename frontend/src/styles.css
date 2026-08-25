@@ -721,6 +721,64 @@ textarea:focus {
   margin: 0;
 }
 
+.task-artifacts {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.metric-grid article {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #edf8fa;
+}
+
+.metric-grid strong {
+  font-size: 1.6rem;
+}
+
+.admin-user-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-user-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto minmax(260px, auto);
+  gap: 14px;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+}
+
+.admin-user-row > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.admin-user-row small {
+  overflow-wrap: anywhere;
+}
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .task-progress {
   display: grid;
   gap: 6px;
@@ -823,6 +881,14 @@ textarea:focus {
     grid-template-columns: 1fr;
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .admin-user-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-actions {
+    justify-content: flex-start;
   }
 
   .auth-panel,

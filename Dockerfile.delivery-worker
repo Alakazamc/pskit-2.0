@@ -1,9 +1,0 @@
-FROM pskit2-science-demo:pskit2-0.2.1-task-compat
-
-USER root
-COPY server-overlay/backend/app/middleware/auth_abuse.py /app/backend/app/middleware/auth_abuse.py
-COPY backend/app/security_headers.py /app/backend/app/security_headers.py
-COPY scripts/patch_delivery_hardening.py /tmp/patch_delivery_hardening.py
-RUN python /tmp/patch_delivery_hardening.py /app/backend \
-    && python -m compileall -q /app/backend/app
-USER pskit

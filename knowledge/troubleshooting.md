@@ -43,6 +43,7 @@ is limited to regular UTF-8 files; download binary or large outputs through
 
 ## Registration / 注册
 
-With `REGISTRATION_MODE=first_user`, only the first account can self-register
-and it becomes administrator. Later users must be created through the admin API.
-Use `open` only on a trusted deployment, or `disabled` to close registration.
+With `REGISTRATION_MODE=open`, users can self-register. The first administrator
+must also submit the server-only `INITIAL_ADMIN_BOOTSTRAP_TOKEN`. Administrators
+can disable users and revoke sessions in `/admin/users`; use `disabled` to close
+public registration.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import httpx
 
@@ -18,11 +19,38 @@ def compact_message_content(value: object) -> str:
     return "" if value is None else str(value)
 
 
+def parse_stream_line(line: str) -> tuple[bool, str | None]:
+    if not line.startswith("data:"):
+        return False, None
+    raw = line.removeprefix("data:").strip()
+    if not raw:
+        return False, None
+    if raw == "[DONE]":
+        return True, None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return False, None
+    choices = data.get("choices") or []
+    if not choices:
+        return False, None
+    delta = choices[0].get("delta") or {}
+    content = delta.get("content")
+    return False, content if isinstance(content, str) and content else None
+
+
 class OpenAICompatibleClient:
     def __init__(self) -> None:
         self.settings = get_settings()
 
-    def chat(self, messages: list[dict], tools: bool = True) -> dict:
+    def chat(
+        self,
+        messages: list[dict],
+        tools: bool = True,
+        tool_schemas: list[dict] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        thinking: bool | None = None,
+    ) -> dict:
         if not self.settings.llm_api_key:
             raise LlmUnavailable("LLM_API_KEY is not configured")
         payload: dict = {
@@ -32,11 +60,22 @@ class OpenAICompatibleClient:
             "max_tokens": 1200,
         }
         if tools:
-            payload["tools"] = openai_tool_schemas()
-            payload["tool_choice"] = "auto"
+            payload["tools"] = tool_schemas if tool_schemas is not None else openai_tool_schemas()
+            payload["tool_choice"] = tool_choice if tool_choice is not None else "auto"
+        provider_hint = (
+            f"{self.settings.llm_model_id} {self.settings.chat_completions_url}".lower()
+        )
+        # wzf：DeepSeek V4 的思考模式与指定函数 tool_choice 不兼容；
+        # 仅对 DeepSeek 请求发送该扩展字段，避免破坏其他 OpenAI 兼容服务。
+        if thinking is not None and "deepseek" in provider_hint:
+            payload["thinking"] = {
+                "type": "enabled" if thinking else "disabled",
+            }
 
         try:
-            with httpx.Client(timeout=90) as client:
+            with httpx.Client(
+                timeout=getattr(self.settings, "llm_request_timeout_seconds", 90)
+            ) as client:
                 response = client.post(
                     self.settings.chat_completions_url,
                     headers={"Authorization": f"Bearer {self.settings.llm_api_key}"},
@@ -57,6 +96,53 @@ class OpenAICompatibleClient:
             raise LlmUnavailable("LLM API returned no choices")
         return choices[0].get("message") or {}
 
+    def stream_chat_sync(self, messages: list[dict]):
+        if not self.settings.llm_api_key:
+            raise LlmUnavailable("LLM_API_KEY is not configured")
+
+        payload = {
+            "model": self.settings.llm_model_id,
+            "messages": messages,
+            "temperature": 0.2,
+            "max_tokens": 1200,
+            "stream": True,
+        }
+        timeout = httpx.Timeout(
+            connect=30,
+            read=getattr(self.settings, "llm_stream_read_timeout_seconds", 120),
+            write=30,
+            pool=30,
+        )
+
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                with client.stream(
+                    "POST",
+                    self.settings.chat_completions_url,
+                    headers={"Authorization": f"Bearer {self.settings.llm_api_key}"},
+                    json=payload,
+                ) as response:
+                    if response.status_code >= 400:
+                        body = response.read().decode("utf-8", errors="replace")
+                        raise LlmUnavailable(
+                            f"LLM API error {response.status_code}: {body[:500]}"
+                        )
+                    for line in response.iter_lines():
+                        done, content = parse_stream_line(line)
+                        if content:
+                            yield content
+                        if done:
+                            break
+        except LlmUnavailable:
+            raise
+        except httpx.RequestError as exc:
+            raise LlmUnavailable(
+                "LLM streaming API unreachable. "
+                f"url={self.settings.chat_completions_url}; "
+                f"reason={exc}. "
+                "Check server outbound network, campus gateway, or configure an accessible proxy endpoint."
+            ) from exc
+
     async def stream_chat(self, messages: list[dict]):
         if not self.settings.llm_api_key:
             raise LlmUnavailable("LLM_API_KEY is not configured")
@@ -70,44 +156,31 @@ class OpenAICompatibleClient:
         }
         timeout = httpx.Timeout(
             connect=30,
-            read=self.settings.llm_stream_read_timeout_seconds,
+            read=getattr(self.settings, "llm_stream_read_timeout_seconds", 120),
             write=30,
             pool=30,
         )
 
         try:
-            async with (
-                httpx.AsyncClient(timeout=timeout) as client,
-                client.stream(
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                async with client.stream(
                     "POST",
                     self.settings.chat_completions_url,
                     headers={"Authorization": f"Bearer {self.settings.llm_api_key}"},
                     json=payload,
-                ) as response,
-            ):
-                if response.status_code >= 400:
-                    body = (await response.aread()).decode("utf-8", errors="replace")
-                    raise LlmUnavailable(f"LLM API error {response.status_code}: {body[:500]}")
+                ) as response:
+                    if response.status_code >= 400:
+                        body = (await response.aread()).decode("utf-8", errors="replace")
+                        raise LlmUnavailable(
+                            f"LLM API error {response.status_code}: {body[:500]}"
+                        )
 
-                async for line in response.aiter_lines():
-                    if not line.startswith("data:"):
-                        continue
-                    raw = line.removeprefix("data:").strip()
-                    if not raw or raw == "[DONE]":
-                        if raw == "[DONE]":
+                    async for line in response.aiter_lines():
+                        done, content = parse_stream_line(line)
+                        if content:
+                            yield content
+                        if done:
                             break
-                        continue
-                    try:
-                        data = json.loads(raw)
-                    except json.JSONDecodeError:
-                        continue
-                    choices = data.get("choices") or []
-                    if not choices:
-                        continue
-                    delta = choices[0].get("delta") or {}
-                    content = delta.get("content")
-                    if isinstance(content, str) and content:
-                        yield content
         except LlmUnavailable:
             raise
         except httpx.RequestError as exc:
@@ -124,7 +197,17 @@ def default_system_prompt(retrieved_knowledge: list[dict]) -> str:
         "You are PSKit 2.0's bioinformatics agent.",
         "Use available tools for concrete molecular lookup, structure download, result reading, and analysis steps.",
         "You may call multiple tools across several turns when a user request needs lookup, download, analysis, and reporting.",
-        "When the user asks for a report, call generate_session_report so the report is returned as a downloadable artifact.",
+        "Treat persisted execution bookkeeping as internal server state, never as a user-facing workflow or prerequisite.",
+        "The server resolves attribution from the active agent session. Never ask the user to create, select, bind, or provide an internal execution record or identifier.",
+        "For homology analysis, sequence and structure searches are independent required branches; for candidate work, CORAL RNA and PepCCD peptide are independent required branches.",
+        "For candidate generation, call generate_coral_candidates or generate_pepccd_candidates as soon as the required scientific input is known; queuing them does not require a user-selected execution record or scoring configuration.",
+        "Long-running tools only enqueue work. After one or more long tasks are queued, stop the current turn; the client will automatically resume when they finish, unless the user is actively editing a draft.",
+        "Use persisted task facts to avoid duplicate work, but do not ask the user to manipulate stages or internal records. Only actual tool validation or execution errors block a step.",
+        "Avoid repeating an identical tool call when it is unnecessary, but you may call the same tool again when the user requests it, the prior result is insufficient, or a retry is needed.",
+        "For artifact-backed tools such as predict_binding_sites, reuse the registered artifact_id returned by download_pdb_file or a previous structure tool. Prefer artifact_id over pdb_path, and never invent, reconstruct, or copy a host filesystem path.",
+        "For read_result_file, use an exact server-provided artifact_id. A task_id is not an artifact_id, and a filename or download URL is not a file_path. When completed-task artifacts are listed in system context, read the relevant artifact directly instead of generating a report to rediscover it; prefer candidates.json for candidate content unless raw output is explicitly requested.",
+        "When a persisted execution context is attached, use the report tool appropriate to that context; otherwise use generate_session_report.",
+        "Candidate scoring is optional downstream work. Do not invent weights, directions, or thresholds. If ranking is not explicitly requested or no configuration is available, defer ranking without blocking upstream lookup, structure analysis, or candidate generation.",
         "Do not invent files, model paths, or tool outputs.",
         "When using retrieved PSKit knowledge, mention the relevant source names briefly.",
     ]
@@ -135,4 +218,8 @@ def default_system_prompt(retrieved_knowledge: list[dict]) -> str:
             heading = item.get("heading") or ""
             content = compact_message_content(item.get("content"))[:1200]
             lines.append(f"[{index}] {source} / {heading}\n{content}")
+    lines.append(
+        "\nFinal product contract: keep the conversation focused on scientific inputs and outputs. "
+        "Never turn internal persistence, task linkage, or ranking configuration into a prerequisite for upstream work."
+    )
     return "\n".join(lines)

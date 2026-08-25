@@ -4,6 +4,7 @@ from app.auth.dependencies import get_current_user
 from app.db.models import User
 from app.tools.catalog import list_tools
 
+
 router = APIRouter(prefix="/api/tools", tags=["tools"])
 
 

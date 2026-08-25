@@ -3,7 +3,7 @@ set -eu
 
 root_dir="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 env_file="${1:-.env.docker}"
-version="${PSKIT_VERSION:-0.2.0}"
+version="${PSKIT_VERSION:-0.3.0}"
 case "$env_file" in
   /*) ;;
   *) env_file="$root_dir/$env_file" ;;

@@ -1,7 +1,0 @@
-FROM pskit2-science-demo:pskit2-0.2.0-af3-guard
-
-USER root
-COPY patch_task_attempt_compat.py /tmp/patch_task_attempt_compat.py
-RUN python /tmp/patch_task_attempt_compat.py /app/backend/app/db/models.py \
-    && python -m py_compile /app/backend/app/tasks/worker.py /app/backend/app/db/models.py
-USER pskit

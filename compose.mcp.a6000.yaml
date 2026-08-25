@@ -1,21 +1,20 @@
 services:
   rag-index:
-    image: pskit2:0.2.2-delivery
+    image: ${PSKIT_IMAGE:-pskit2:0.3.0}
     command: ["python", "/app/scripts/build_rag_index.py"]
     working_dir: /app/backend
     env_file:
       - .env.docker
-      - .env.mcp
     environment:
       PSKIT_ALLOW_LEGACY_PORT_10706: "true"
       BIND_PORT: "10706"
-      DATABASE_URL: sqlite:////app/backend/data/pskit2.sqlite3
-      DATA_DIR: /app/backend/data
-      ARTIFACT_DIR: /app/backend/data/artifacts
+      DATABASE_URL: ${PSKIT_DATABASE_URL:-sqlite:////app/backend/data/pskit2.sqlite3}
+      DATA_DIR: ${PSKIT_DATA_DIR:-/app/backend/data}
+      ARTIFACT_DIR: ${PSKIT_ARTIFACT_DIR:-/app/backend/data/artifacts}
       KNOWLEDGE_DIR: /app/knowledge
       QDRANT_URL: http://qdrant:6333
     volumes:
-      - pskit_data:/app/backend/data
+      - ${PSKIT_DATA_VOLUME:-pskit_data}:${PSKIT_DATA_DIR:-/app/backend/data}
     networks:
       - pskit
     depends_on:
@@ -30,12 +29,10 @@ services:
       - ALL
 
   web:
-    image: pskit2:0.2.2-delivery
+    image: ${PSKIT_IMAGE:-pskit2:0.3.0}
     depends_on:
       rag-index:
         condition: service_completed_successfully
-    env_file:
-      - .env.mcp
     environment:
       PSKIT_ALLOW_LEGACY_PORT_10706: "true"
       REGISTRATION_MODE: "open"
@@ -43,25 +40,24 @@ services:
       COOKIE_SECURE: "true"
       PSKIT_MAX_ACTIVE_SESSIONS_PER_USER: "5"
       PSKIT_MAX_ACTIVE_TASKS_PER_USER: "4"
-      PSKIT_MAX_ACTIVE_AF3_PER_USER: "1"
+      PSKIT_MAX_ACTIVE_AF3_PER_USER: "10"
+      PSKIT_MAX_GLOBAL_ACTIVE_TASKS: "100"
+      PSKIT_MAX_GLOBAL_ACTIVE_AF3: "20"
       SCIENCE_READINESS_REQUIRED: "true"
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:10706/api/ready"]
   worker:
-    image: pskit2-science-demo:pskit2-0.2.2-delivery
+    image: ${PSKIT_SCIENCE_IMAGE:-pskit2-science:0.3.0}
     depends_on:
       web:
         condition: service_started
-    env_file:
-      - .env.mcp
     environment:
-      ARTIFACT_DIR: "/var/lib/docker/volumes/pskit2-v020-smoke_pskit_data/_data/artifacts"
-      PEPCCD_MCP_URL: "http://172.31.178.238:8787/mcp"
-      PEPCCD_MCP_TOOL_NAME: "pepccd_generate_peptides"
+      ARTIFACT_DIR: ${PSKIT_ARTIFACT_DIR:-/app/backend/data/artifacts}
       PSKIT_AF3_DB_DIR: "/home/public/database/alphafold3"
       PSKIT_AF3_MODEL_DIR: "/data/hzeng/af3/model-parameters"
       PSKIT_AF3_IMAGE: "alphafold3:3.0.1"
-      PSKIT_AF3_GPU_DEVICE: "0"
+      PSKIT_AF3_GPU_DEVICE: ${PSKIT_AF3_GPU_DEVICE:-0}
+      PSKIT_AF3_ALLOWED_GPU_DEVICES: ${PSKIT_AF3_ALLOWED_GPU_DEVICES:-0}
       PSKIT_AF3_MIN_FREE_MEMORY_MIB: "40000"
       PSKIT_FOLDSEEK_DB: "/data1/kxchen/pskit-science-databases/foldseek-af3-pdb/pdb"
       PSKIT_SEQUENCE_SEARCH_BACKEND: "jackhmmer-docker"
@@ -75,4 +71,3 @@ services:
       - /home/public/database/alphafold3:/home/public/database/alphafold3:ro
       - /data/hzeng/af3/model-parameters:/data/hzeng/af3/model-parameters:ro
       - /data1/kxchen/pskit-science-databases/foldseek-af3-pdb:/data1/kxchen/pskit-science-databases/foldseek-af3-pdb:ro
-      - pskit_data:/var/lib/docker/volumes/pskit2-v020-smoke_pskit_data/_data

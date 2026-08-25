@@ -1,7 +1,7 @@
 name: ${COMPOSE_PROJECT_NAME:-pskit2}
 
 x-pskit-common: &pskit-common
-  image: ${PSKIT_IMAGE:-pskit2:0.2.0}
+  image: ${PSKIT_IMAGE:-pskit2:0.3.0}
   build:
     context: .
     dockerfile: Dockerfile
@@ -11,15 +11,15 @@ x-pskit-common: &pskit-common
     PSKIT_BIND: 0.0.0.0:10706
     BIND_HOST: 0.0.0.0
     BIND_PORT: "10706"
-    DATABASE_URL: sqlite:////app/backend/data/pskit2.sqlite3
-    DATA_DIR: /app/backend/data
-    ARTIFACT_DIR: /app/backend/data/artifacts
+    DATABASE_URL: ${PSKIT_DATABASE_URL:-sqlite:////app/backend/data/pskit2.sqlite3}
+    DATA_DIR: ${PSKIT_DATA_DIR:-/app/backend/data}
+    ARTIFACT_DIR: ${PSKIT_ARTIFACT_DIR:-/app/backend/data/artifacts}
     KNOWLEDGE_DIR: /app/knowledge
     FRONTEND_DIST_DIR: /app/frontend/dist
     QDRANT_URL: http://qdrant:6333
-    READINESS_REQUIRE_QDRANT: "true"
+    READINESS_REQUIRE_QDRANT: ${READINESS_REQUIRE_QDRANT:-false}
   volumes:
-    - pskit_data:/app/backend/data
+    - ${PSKIT_DATA_VOLUME:-pskit_data}:${PSKIT_DATA_DIR:-/app/backend/data}
   networks:
     - pskit
   restart: unless-stopped
@@ -28,6 +28,14 @@ x-pskit-common: &pskit-common
   cap_drop:
     - ALL
   stop_grace_period: 30s
+  pids_limit: 512
+  tmpfs:
+    - /tmp:size=512m,mode=1777
+  logging:
+    driver: json-file
+    options:
+      max-size: ${PSKIT_LOG_MAX_SIZE:-20m}
+      max-file: ${PSKIT_LOG_MAX_FILES:-5}
 
 services:
   migrate:
@@ -47,8 +55,10 @@ services:
         condition: service_completed_successfully
       qdrant:
         condition: service_healthy
+    cpus: ${PSKIT_WEB_CPUS:-4}
+    mem_limit: ${PSKIT_WEB_MEMORY:-4g}
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:10706/api/health/ready"]
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:10706/api/ready"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -58,8 +68,13 @@ services:
     <<: *pskit-common
     command: ["python", "-m", "app.tasks.worker", "forever"]
     depends_on:
-      web:
+      migrate:
+        condition: service_completed_successfully
+      qdrant:
         condition: service_healthy
+    cpus: ${PSKIT_WORKER_CPUS:-16}
+    mem_limit: ${PSKIT_WORKER_MEMORY:-32g}
+    pids_limit: 4096
     healthcheck:
       test:
         - CMD
@@ -85,6 +100,14 @@ services:
     networks:
       - pskit
     restart: unless-stopped
+    cpus: ${PSKIT_QDRANT_CPUS:-4}
+    mem_limit: ${PSKIT_QDRANT_MEMORY:-8g}
+    pids_limit: 1024
+    logging:
+      driver: json-file
+      options:
+        max-size: ${PSKIT_LOG_MAX_SIZE:-20m}
+        max-file: ${PSKIT_LOG_MAX_FILES:-5}
     security_opt:
       - no-new-privileges:true
     healthcheck:

@@ -11,7 +11,7 @@ RUN npm run build
 
 FROM ${PYTHON_IMAGE} AS runtime
 
-ARG PSKIT_VERSION=0.2.0
+ARG PSKIT_VERSION=0.3.0
 ARG APP_UID=10001
 ARG APP_GID=10001
 
@@ -51,6 +51,7 @@ RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps /app/bac
 
 COPY knowledge/ /app/knowledge/
 COPY scripts/migrate_db.py /app/scripts/migrate_db.py
+COPY scripts/build_rag_index.py /app/scripts/build_rag_index.py
 COPY --from=frontend-builder /app/frontend/dist/ /app/frontend/dist/
 
 RUN mkdir -p /app/backend/data/artifacts /app/backend/data/qdrant-local \
@@ -63,7 +64,7 @@ EXPOSE 10706
 VOLUME ["/app/backend/data"]
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
-    CMD curl --fail --silent --show-error http://127.0.0.1:10706/api/health/ready >/dev/null || exit 1
+    CMD curl --fail --silent --show-error http://127.0.0.1:10706/api/ready >/dev/null || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10706"]

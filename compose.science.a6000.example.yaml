@@ -7,8 +7,13 @@
 
 services:
   worker:
-    image: ${PSKIT_SCIENCE_IMAGE:-pskit2-science-demo:f2e346b005c0-full}
-    build: null
+    image: ${PSKIT_SCIENCE_IMAGE:-pskit2-science:0.3.0}
+    build:
+      context: .
+      dockerfile: Dockerfile.science
+      args:
+        PSKIT_SCIENCE_BASE_IMAGE: ${PSKIT_SCIENCE_BASE_IMAGE:-pskit2-science-demo:f2e346b005c0-full}
+        PSKIT_VERSION: ${PSKIT_VERSION:-0.3.0}
     environment:
       PSKIT_LEGACY_ROOT: /opt/pskit-legacy
       PSKIT_LEGACY_PYTHON: /opt/pskit-legacy-venv/bin/python
@@ -19,6 +24,7 @@ services:
       PSKIT_AF3_MODEL_DIR: /opt/alphafold3/models
       PSKIT_AF3_IMAGE: ${PSKIT_AF3_IMAGE:-alphafold3:3.0.1}
       PSKIT_AF3_GPU_DEVICE: ${PSKIT_AF3_GPU_DEVICE:-0}
+      PSKIT_AF3_ALLOWED_GPU_DEVICES: ${PSKIT_AF3_ALLOWED_GPU_DEVICES:-0}
     volumes:
       - ${PSKIT_LEGACY_ROOT_HOST:-/data1/kxchen/pskit}:/opt/pskit-legacy:ro
       - ${PSKIT_MODEL_PARAMETERS_HOST:-/data1/kxchen/pskit-data/model_parameters}:/opt/pskit-models:ro

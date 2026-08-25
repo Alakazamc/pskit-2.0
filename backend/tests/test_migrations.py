@@ -62,5 +62,7 @@ def test_legacy_database_is_upgraded_and_bootstraps_admin(tmp_path: Path):
 
     assert "attempt_count" in task_columns
     assert "app_state" in tables
+    assert "agent_turns" in tables
+    assert "auth_rate_limit_buckets" in tables
     assert role == ("admin",)
-    assert version == ("0002",)
+    assert version == ("0003",)

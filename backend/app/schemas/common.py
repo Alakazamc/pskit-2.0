@@ -11,4 +11,7 @@ class HealthResponse(BaseModel):
     ok: bool
     service: str
     version: str
-    checks: dict[str, str] | None = None
+
+
+class ReadinessResponse(HealthResponse):
+    checks: list[StatusItem]
