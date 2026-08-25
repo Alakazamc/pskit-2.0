@@ -22,6 +22,16 @@ stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 destination="$backup_root/$stamp"
 mkdir -p "$destination/config"
 chmod 700 "$backup_root" "$destination" "$destination/config"
+backup_complete=0
+cleanup_incomplete_backup() {
+  if (( backup_complete == 0 )) && [[ -d "$destination" ]]; then
+    case "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$destination")" in
+      "$backup_root"/20??????T??????Z) rm -rf -- "$destination" ;;
+      *) echo "Refusing to clean unexpected backup path: $destination" >&2 ;;
+    esac
+  fi
+}
+trap cleanup_incomplete_backup EXIT INT TERM
 
 compose=(docker compose --env-file "$env_file")
 IFS=':' read -r -a compose_files <<< "${PSKIT_COMPOSE_FILES:-compose.yaml}"
@@ -69,11 +79,13 @@ with sqlite3.connect(source) as source_db, sqlite3.connect(target) as target_db:
     if target_db.execute("PRAGMA quick_check").fetchone()[0] != "ok":
         raise SystemExit("SQLite backup quick_check failed")
 PY
-docker cp "$web_id:/tmp/pskit2.sqlite3.backup" "$destination/pskit2.sqlite3"
+docker exec "$web_id" sh -c 'cat /tmp/pskit2.sqlite3.backup' \
+  > "$destination/pskit2.sqlite3"
 docker exec "$web_id" rm -f /tmp/pskit2.sqlite3.backup
 
 docker exec "$web_id" sh -c 'tar -C "$ARTIFACT_DIR" -czf /tmp/pskit2-artifacts.tar.gz .'
-docker cp "$web_id:/tmp/pskit2-artifacts.tar.gz" "$destination/artifacts.tar.gz"
+docker exec "$web_id" sh -c 'cat /tmp/pskit2-artifacts.tar.gz' \
+  > "$destination/artifacts.tar.gz"
 docker exec "$web_id" rm -f /tmp/pskit2-artifacts.tar.gz
 
 docker exec -i "$web_id" python - /tmp/pskit2-qdrant.snapshot /tmp/pskit2-qdrant.json <<'PY'
@@ -113,8 +125,10 @@ with httpx.Client(timeout=120) as client:
         f"{base}/collections/{quote(collection, safe='')}/snapshots/{quote(name, safe='')}"
     ).raise_for_status()
 PY
-docker cp "$web_id:/tmp/pskit2-qdrant.snapshot" "$destination/qdrant.snapshot"
-docker cp "$web_id:/tmp/pskit2-qdrant.json" "$destination/qdrant.json"
+docker exec "$web_id" sh -c 'cat /tmp/pskit2-qdrant.snapshot' \
+  > "$destination/qdrant.snapshot"
+docker exec "$web_id" sh -c 'cat /tmp/pskit2-qdrant.json' \
+  > "$destination/qdrant.json"
 docker exec "$web_id" rm -f /tmp/pskit2-qdrant.snapshot /tmp/pskit2-qdrant.json
 
 (
@@ -128,4 +142,5 @@ if [[ "$retention_days" =~ ^[0-9]+$ ]] && (( retention_days > 0 )); then
     -name '20??????T??????Z' -mtime "+$retention_days" -exec rm -rf -- {} +
 fi
 
+backup_complete=1
 echo "backup=$destination"
