@@ -4,7 +4,7 @@
 
 交付版本：`0.3.0`
 
-源码提交：`612102b`
+交付实现提交：`fb74611`
 
 线上地址：<https://pskit.bioailab.net>
 
@@ -34,7 +34,7 @@ PSKit 2.0 `0.3.0` 已部署到 A6000 生产服务器。公网健康与就绪接�
 | 12 | 健康路径错误、Web/Worker 启动依赖可能成环 | 统一 `/api/ready`；Worker 不反向等待 Web healthy | 冷启动后两容器自动 healthy | 已修复 |
 | 13 | Coral/PepCCD 配置分散且 PepCCD URL 被 overlay 写死 | URL、工具名统一进入权限 600 的服务器环境文件，Compose 不再写死私有地址 | 两个 MCP 工具发现和真实任务均成功 | 已修复 |
 | 14 | 备份不覆盖 MCP 配置，也没有失败目录清理 | 备份 SQLite、产物、Qdrant、Compose 和额外环境文件；加 SHA-256 与保留策略 | 最新备份 4 项校验通过，配置权限 600 | 已修复 |
-| 15 | `/tmp` 改为 tmpfs 后 `docker cp` 无法取出备份 | 改用 `docker exec` 二进制流导出；失败自动删除不完整目录 | systemd 备份服务返回 SUCCESS | 已修复 |
+| 15 | `/tmp` 改为 tmpfs 后 `docker cp` 无法取出备份 | 改用 `docker exec` 二进制流导出；失败自动删除不完整目录 | 备份脚本成功并通过四类文件 SHA-256 校验 | 已修复 |
 | 16 | 容器缺少资源和日志边界 | 增加 CPU、内存、PID、tmpfs、停止宽限期和 json-file 轮转 | Compose 模型及线上容器验证通过 | 已修复 |
 | 17 | 依赖、类型和镜像缺少发布门禁 | 固定锁文件，加入 Ruff、Mypy、pip-audit、npm audit、测试、Compose 和镜像构建门禁 | 本地全部门禁通过，无已知依赖漏洞 | 已修复 |
 | 18 | Windows 打包的 Bash 脚本出现 `sh\r` | 增加 `.gitattributes`，强制 shell/systemd/Docker 资产使用 LF | A6000 smoke 脚本可直接执行 | 已修复 |
