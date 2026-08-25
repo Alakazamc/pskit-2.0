@@ -1,0 +1,7 @@
+* text=auto
+
+# Linux container and server entrypoints must remain executable on checkout.
+*.sh text eol=lf
+Dockerfile* text eol=lf
+*.service text eol=lf
+*.timer text eol=lf
