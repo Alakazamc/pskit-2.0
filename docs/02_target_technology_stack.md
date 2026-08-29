@@ -2,7 +2,7 @@
 
 This document describes the current PSKit 2.0 implementation and the production hardening targets.
 
-If there are questions or issues, please contact **Alakazamc on WeChat**.
+If there are questions or issues, please open a GitHub issue.
 
 ## Implemented Stack
 

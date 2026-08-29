@@ -2,7 +2,7 @@
 
 This guide explains how to deploy PSKit 2.0 for development, A6000 intranet demos, and production-style server operation.
 
-If you run into deployment issues, please contact **Alakazamc on WeChat**.
+If you run into deployment issues, please open a GitHub issue.
 
 ## 1. Prerequisites
 
@@ -68,7 +68,7 @@ vim .env
 Minimum required values for Agent chat:
 
 ```text
-PSKIT_BIND=172.31.199.38:10716
+PSKIT_BIND=127.0.0.1:10716
 LLM_BASE_URL=https://api.deepseek.com/v1
 LLM_MODEL_ID=deepseek-v4-flash
 LLM_API_KEY=replace-me
@@ -110,7 +110,7 @@ PSKIT_AF3_DB_DIR=/home/public/database/alphafold3
 PSKIT_AF3_MODEL_DIR=/data/hzeng/af3/model-parameters
 PSKIT_AF3_IMAGE=alphafold3:3.0.1
 PSKIT_AF3_GPU_DEVICE=0
-REMOTE_RNA_EXPERT_SSE_URL=http://172.31.226.126:8099/sse
+REMOTE_RNA_EXPERT_SSE_URL=http://127.0.0.1:8099/sse
 ```
 
 ## 4. Install Dependencies
@@ -164,7 +164,7 @@ No-sudo background startup:
 
 ```bash
 cd /data1/kxchen/pskit-2.0
-PSKIT_BIND=172.31.199.38:10716 scripts/pskit2_ctl.sh start
+PSKIT_BIND=127.0.0.1:10716 scripts/pskit2_ctl.sh start
 ```
 
 Check status:
@@ -196,7 +196,7 @@ scripts/pskit2_ctl.sh restart
 A6000 intranet access:
 
 ```text
-http://172.31.199.38:10716/agent
+http://127.0.0.1:10716/agent
 ```
 
 For public or cross-network access, put Caddy/Nginx in front of the service and enable HTTPS. Keep the account system enabled.
@@ -217,7 +217,7 @@ Normal users can use Agent, tasks, tools, files, and reports, but only for their
 Health:
 
 ```bash
-curl http://172.31.199.38:10716/api/health
+curl http://127.0.0.1:10716/api/health
 ```
 
 Backend smoke:
@@ -325,4 +325,4 @@ If GitHub upload fails because no account is authenticated, finish `gh auth logi
 
 ## 12. Contact
 
-If there are questions or issues, please contact **Alakazamc on WeChat**.
+If there are questions or issues, please open a GitHub issue.

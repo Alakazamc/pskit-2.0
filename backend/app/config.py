@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     rerank_api_key: str | None = None
 
     serpapi_api_key: str | None = None
-    remote_rna_expert_sse_url: str = "http://172.31.226.126:8099/sse"
+    remote_rna_expert_sse_url: str = "http://127.0.0.1:8099/sse"
     rcsb_search_url: str = "https://search.rcsb.org/rcsbsearch/v2/query"
     rcsb_data_base: str = "https://data.rcsb.org/rest/v1/core/entry"
     rcsb_files_base: str = "https://files.rcsb.org/download"

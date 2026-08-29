@@ -20,13 +20,13 @@ Typical A6000 run:
 ```bash
 cp .env.example .env
 # edit .env without committing secrets
-PSKIT_BIND=172.31.199.38:10706 scripts/start_a6000.sh
+PSKIT_BIND=127.0.0.1:10706 scripts/start_a6000.sh
 ```
 
 For a no-sudo background deployment on A6000, prefer the control script:
 
 ```bash
-PSKIT_BIND=172.31.199.38:10716 scripts/pskit2_ctl.sh start
+PSKIT_BIND=127.0.0.1:10716 scripts/pskit2_ctl.sh start
 scripts/pskit2_ctl.sh status
 scripts/pskit2_ctl.sh logs 120
 scripts/pskit2_ctl.sh stop

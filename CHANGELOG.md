@@ -23,5 +23,5 @@
 ### Deployment
 
 - PSKit 2.0 部署至 A6000。
-- 当前访问地址：`http://172.31.199.38:10716/agent`
+- 当前访问地址：`http://127.0.0.1:10716/agent`
 - GitHub：`https://github.com/Alakazamc/pskit-2.0`

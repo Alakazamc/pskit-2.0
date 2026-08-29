@@ -4,7 +4,7 @@ PSKit 2.0 is a full-stack BioAI Agent workbench for protein-nucleic-acid analysi
 
 The project is designed for A6000 single-server deployment while keeping the original PSKit scientific runtime reusable through `PSKIT_LEGACY_ROOT`.
 
-If you have questions about deployment or collaboration, please contact **Alakazamc on WeChat**.
+If you have questions about deployment or collaboration, please open a GitHub issue.
 
 ## Highlights
 
@@ -119,13 +119,13 @@ scripts/pskit2_ctl.sh stop
 For a direct A6000 intranet deployment:
 
 ```bash
-PSKIT_BIND=172.31.199.38:10716 scripts/pskit2_ctl.sh start
+PSKIT_BIND=127.0.0.1:10716 scripts/pskit2_ctl.sh start
 ```
 
 Then access:
 
 ```text
-http://172.31.199.38:10716/agent
+http://127.0.0.1:10716/agent
 ```
 
 The developer laptop does not need to stay online when PSKit binds directly to the A6000 intranet IP.
@@ -226,4 +226,4 @@ gh repo create <owner>/<repo> --private --source=. --remote=origin --push
 
 ## Contact
 
-If there are questions or issues, please contact **Alakazamc on WeChat**.
+If there are questions or issues, please open a GitHub issue.

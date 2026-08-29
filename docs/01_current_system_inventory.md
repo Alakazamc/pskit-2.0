@@ -11,7 +11,7 @@ Current PSKit is deployed on A6000:
 Current internal URL:
 
 ```text
-http://172.31.199.38:10706/agent
+http://127.0.0.1:10706/agent
 ```
 
 The current server is native A6000 deployment rather than a long-lived Docker-only deployment.

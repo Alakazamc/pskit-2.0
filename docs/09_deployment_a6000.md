@@ -2,7 +2,7 @@
 
 This document records the recommended A6000 deployment for PSKit 2.0.
 
-If there are questions or issues, please contact **Alakazamc on WeChat**.
+If there are questions or issues, please open a GitHub issue.
 
 ## Goal
 
@@ -11,7 +11,7 @@ Run PSKit 2.0 directly on A6000 so other computers on the same intranet can acce
 Current demo URL pattern:
 
 ```text
-http://172.31.199.38:10716/agent
+http://127.0.0.1:10716/agent
 ```
 
 ## Runtime Layout
@@ -37,7 +37,7 @@ Important runtime files:
 ## Minimum Environment
 
 ```text
-PSKIT_BIND=172.31.199.38:10716
+PSKIT_BIND=127.0.0.1:10716
 DATABASE_URL=sqlite:///./data/pskit2.sqlite3
 
 LLM_BASE_URL=https://api.deepseek.com/v1
@@ -80,7 +80,7 @@ PSKIT_AF3_MODEL_DIR=/data/hzeng/af3/model-parameters
 PSKIT_AF3_IMAGE=alphafold3:3.0.1
 PSKIT_AF3_GPU_DEVICE=0
 
-REMOTE_RNA_EXPERT_SSE_URL=http://172.31.226.126:8099/sse
+REMOTE_RNA_EXPERT_SSE_URL=http://127.0.0.1:8099/sse
 ```
 
 ## Start and Stop
@@ -89,7 +89,7 @@ Start:
 
 ```bash
 cd /data1/kxchen/pskit-2.0
-PSKIT_BIND=172.31.199.38:10716 scripts/pskit2_ctl.sh start
+PSKIT_BIND=127.0.0.1:10716 scripts/pskit2_ctl.sh start
 ```
 
 Status:
@@ -137,13 +137,13 @@ QDRANT_VECTOR_SIZE=1024
 Health:
 
 ```bash
-curl http://172.31.199.38:10716/api/health
+curl http://127.0.0.1:10716/api/health
 ```
 
 Frontend:
 
 ```bash
-curl http://172.31.199.38:10716/agent
+curl http://127.0.0.1:10716/agent
 ```
 
 Backend compile:

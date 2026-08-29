@@ -1,4 +1,4 @@
 [[servers]]
 name = "remote_rna_expert"
-url = "http://172.31.226.126:8099/sse"
+url = "http://127.0.0.1:8099/sse"
 tool_prefix = "remote_rna_expert__"
