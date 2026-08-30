@@ -1,5 +1,4 @@
 import pytest
-
 from app.tools.external import ToolExecutionError, build_rcsb_full_text_payload
 
 

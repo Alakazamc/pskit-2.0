@@ -136,13 +136,15 @@ class Settings(BaseSettings):
     )
     task_subprocess_timeout_seconds: int = Field(default=1800, ge=10, le=86400)
     pskit_af3_timeout_seconds: int = Field(
-        default=3600,
+        # Full protein/RNA database searches can exceed one hour on a shared
+        # A6000 host even when the task is healthy and making progress.
+        default=7200,
         ge=60,
         le=86400,
         alias="PSKIT_AF3_TIMEOUT_SECONDS",
     )
     task_mcp_timeout_seconds: int = Field(default=900, ge=10, le=7200)
-    task_stale_after_seconds: int = Field(default=7200, ge=60, le=172800)
+    task_stale_after_seconds: int = Field(default=14400, ge=60, le=172800)
     task_heartbeat_seconds: int = Field(default=10, ge=5, le=300)
     task_max_attempts: int = Field(default=2, ge=1, le=10)
     worker_readiness_required: bool = True
