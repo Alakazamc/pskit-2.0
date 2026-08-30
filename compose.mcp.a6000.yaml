@@ -45,7 +45,8 @@ services:
       PSKIT_MAX_GLOBAL_ACTIVE_AF3: "20"
       SCIENCE_READINESS_REQUIRED: "true"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:10706/api/ready"]
+      # Keep Docker liveness independent from optional external science services.
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:10706/api/health"]
   worker:
     image: ${PSKIT_SCIENCE_IMAGE:-pskit2-science:0.3.0}
     depends_on:

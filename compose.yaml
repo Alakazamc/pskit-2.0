@@ -59,7 +59,9 @@ services:
     cpus: ${PSKIT_WEB_CPUS:-4}
     mem_limit: ${PSKIT_WEB_MEMORY:-4g}
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:10706/api/ready"]
+      # Container health is a liveness signal. External MCP/model readiness is
+      # reported separately by /api/ready and must not mark the Web process dead.
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:10706/api/health"]
       interval: 10s
       timeout: 5s
       retries: 10

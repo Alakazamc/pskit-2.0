@@ -65,7 +65,7 @@ EXPOSE 10706
 VOLUME ["/app/backend/data"]
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
-    CMD curl --fail --silent --show-error http://127.0.0.1:10706/api/ready >/dev/null || exit 1
+    CMD curl --fail --silent --show-error http://127.0.0.1:10706/api/health >/dev/null || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10706"]
