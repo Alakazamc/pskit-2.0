@@ -1296,10 +1296,13 @@ def write_candidate_outputs(output_dir: Path, result: dict) -> None:
 
 
 def candidate_generator_version(metadata: dict) -> str | None:
-    for key in ("server_version", "library_version", "model_version", "version"):
-        value = metadata.get(key)
-        if value is not None:
-            return str(value)
+    for source in (metadata, metadata.get("result_metadata")):
+        if not isinstance(source, dict):
+            continue
+        for key in ("server_version", "library_version", "model_version", "version"):
+            value = source.get(key)
+            if value is not None:
+                return str(value)
     return None
 
 
@@ -1501,6 +1504,7 @@ def run_alphafold3_task(
     (output_dir / "input").mkdir(parents=True, exist_ok=True)
     params_path = output_dir / "params.json"
     write_params(params_path, params)
+    run_attempted = False
     try:
         try:
             with af3_gpu_lock(lock_root, gpu_device):
@@ -1516,9 +1520,11 @@ def run_alphafold3_task(
                         f"AlphaFold3 GPU {gpu_device} 已有活动容器 "
                         f"({len(baseline)} 个)，请等待其结束后再重试"
                     )
+                legacy_python = legacy_python_executable()
+                run_attempted = True
                 result = run_command(
                     [
-                        legacy_python_executable(),
+                        legacy_python,
                         "-m",
                         "pskit.ai.run_pskit",
                         str(params_path),
@@ -1534,7 +1540,18 @@ def run_alphafold3_task(
             if classified is not exc:
                 raise classified from exc
             raise
-    finally:
+    except Exception:
+        if run_attempted:
+            try:
+                normalize_af3_output_tree(output_dir)
+            except Exception as normalization_error:
+                logger.warning(
+                    "AF3 output normalization failed after task failure task_id=%s error_type=%s",
+                    task.id,
+                    normalization_error.__class__.__name__,
+                )
+        raise
+    else:
         normalize_af3_output_tree(output_dir)
     raise_if_legacy_error(output_dir)
     structure_files = sorted(
@@ -1675,7 +1692,7 @@ def normalize_af3_output_tree(output_dir: Path) -> None:
         )
 
 
-async def call_remote_rna_expert(args: dict) -> dict:
+async def call_remote_rna_expert(args: dict) -> object:
     try:
         from mcp import ClientSession
         from mcp.client.sse import sse_client
@@ -1722,23 +1739,10 @@ async def call_remote_rna_expert(args: dict) -> dict:
             safe_mcp_exception_message("CORAL MCP", exc)
         ) from exc
 
-    if getattr(result, "isError", False):
-        raise TaskWorkerError("CORAL MCP returned a tool-level error")
-    structured = getattr(result, "structuredContent", None)
-    if isinstance(structured, dict):
-        return structured
-
-    content = getattr(result, "content", None) or []
-    for item in content:
-        text = getattr(item, "text", None)
-        if text:
-            try:
-                parsed = json.loads(text)
-            except json.JSONDecodeError:
-                raise TaskWorkerError("CORAL MCP returned non-JSON content")
-            if isinstance(parsed, dict):
-                return parsed
-    raise TaskWorkerError("CORAL MCP returned no structured result")
+    try:
+        return extract_mcp_result(result, source_label="CORAL MCP")
+    except MCPAdapterError as exc:
+        raise TaskWorkerError(str(exc)) from exc
 
 
 async def call_pepccd_mcp(args: dict) -> object:
@@ -1763,13 +1767,10 @@ async def call_pepccd_mcp(args: dict) -> object:
             async with ClientSession(read_stream, write_stream) as session:
                 await session.initialize()
                 tools = await session.list_tools()
-                try:
-                    tool_name = select_pepccd_mcp_tool_name(
-                        tools.tools,
-                        configured_name=settings.pepccd_mcp_tool_name,
-                    )
-                except MCPAdapterError as exc:
-                    raise TaskWorkerError(str(exc)) from exc
+                tool_name = select_pepccd_mcp_tool_name(
+                    tools.tools,
+                    configured_name=settings.pepccd_mcp_tool_name,
+                )
                 return await session.call_tool(tool_name, payload)
 
     try:
@@ -1781,6 +1782,10 @@ async def call_pepccd_mcp(args: dict) -> object:
         raise TaskWorkerError(
             f"PepCCD MCP timed out after {timeout_seconds} seconds"
         ) from exc
+    except TaskWorkerError:
+        raise
+    except MCPAdapterError as exc:
+        raise TaskWorkerError(str(exc)) from exc
     except Exception as exc:
         raise TaskWorkerError(
             safe_mcp_exception_message("PepCCD MCP", exc)
