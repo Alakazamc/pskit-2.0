@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createAgentConversation } from "./agentConversation";
-import { ApiError, activeAgentTurn, api, recoverAgentTurn, streamAgentMessage, type AgentMessage, type AgentSession, type AgentStreamResult, type StreamEvent } from "./api";
+import { ApiError, activeAgentTurn, api, recoverAgentTurn, streamAgentMessage, type AgentMessage, type AgentSession, type AgentStreamResult, type StreamEvent, type Task } from "./api";
 
 vi.mock("./api", async (original) => ({
   ...await original<typeof import("./api")>(),
@@ -18,6 +18,13 @@ const session = (id: string): AgentSession => ({ id, title: id, created_at: "202
 const message = (id: string, metadata: Record<string, unknown> = {}): AgentMessage => ({
   id, role: "assistant", content: id, metadata, created_at: "2026-01-01",
 });
+const task = (id: string, sessionId: string): Task => ({
+  id, session_id: sessionId, tool_call_id: null, task_type: "predict_interaction",
+  status: "succeeded", progress: 1, error_type: null, error_message: null,
+  input: null, output: null, retry_of_task_id: null, retry_task_id: null,
+  artifacts: [{ id: `${id}-artifact`, kind: "result", filename: `${id}.pdb`, mime_type: null, size_bytes: 1, download_url: `/api/files/${id}-artifact/download` }],
+  created_at: "2026-01-01", updated_at: "2026-01-01", started_at: null, finished_at: null,
+});
 const success: AgentStreamResult = { status: "succeeded" };
 
 beforeEach(() => {
@@ -31,6 +38,58 @@ beforeEach(() => {
 });
 
 describe("Agent conversation lifecycle", () => {
+  it("offers an editable follow-up draft only for a new terminal task", async () => {
+    vi.mocked(api.sessionHistory).mockResolvedValue([{
+      ...message("user request"), role: "user", created_at: "2026-01-01T12:00:00Z",
+    }]);
+    vi.mocked(api.tasks).mockResolvedValue([
+      { ...task("old", "A"), finished_at: "2026-01-01T11:59:00Z" },
+      { ...task("running", "A"), status: "running", finished_at: null },
+    ]);
+    const chat = createAgentConversation();
+    await chat.selectSession("A");
+    expect(chat.followUpTask.value).toBe(null);
+
+    vi.mocked(api.tasks).mockResolvedValue([{ ...task("completed", "A"), finished_at: "2026-01-01T12:01:00Z" }]);
+    await chat.loadTasks();
+    expect(chat.followUpTask.value?.id).toBe("completed");
+    chat.draftTaskFollowUp();
+    expect(chat.input.value).toContain("解读本会话已完成任务 completed");
+    expect(streamAgentMessage).not.toHaveBeenCalled();
+
+    vi.mocked(api.tasks).mockResolvedValue([{ ...task("failed", "A"), status: "failed", finished_at: "2026-01-01T12:02:00Z" }]);
+    await chat.loadTasks();
+    chat.input.value = "";
+    chat.draftTaskFollowUp();
+    expect(chat.input.value).toContain("分析失败原因");
+    expect(streamAgentMessage).not.toHaveBeenCalled();
+  });
+
+  it("requests tasks for the current session and ignores a stale prior-session page", async () => {
+    const oldTasks = deferred<Task[]>();
+    vi.mocked(api.tasks).mockImplementation((query) => query?.sessionId === "A"
+      ? oldTasks.promise : Promise.resolve([task("B-result", "B")]));
+    const chat = createAgentConversation();
+    const openingA = chat.selectSession("A");
+    await chat.selectSession("B");
+    oldTasks.resolve([task("A-result", "A")]);
+    await openingA;
+    expect(api.tasks).toHaveBeenCalledWith({ sessionId: "A" });
+    expect(api.tasks).toHaveBeenCalledWith({ sessionId: "B" });
+    expect(chat.artifacts.value.map((artifact) => artifact.filename)).toEqual(["B-result.pdb"]);
+  });
+
+  it("refreshes history when a turn finishes between history and active-turn requests", async () => {
+    vi.mocked(api.sessionHistory)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([message("completed answer")]);
+    const chat = createAgentConversation();
+    await chat.selectSession("A");
+    await vi.waitFor(() => expect(chat.messages.value.map((item) => item.content)).toEqual(["completed answer"]));
+    expect(api.sessionHistory).toHaveBeenCalledTimes(2);
+    expect(activeAgentTurn).toHaveBeenCalledTimes(1);
+  });
+
   it("discards stale history when users switch sessions quickly", async () => {
     const historyA = deferred<AgentMessage[]>();
     vi.mocked(api.sessionHistory).mockImplementation((id) => id === "A" ? historyA.promise : Promise.resolve([message("B answer")]));

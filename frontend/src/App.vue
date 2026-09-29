@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
 import { useAuthStore } from "./stores/auth";
@@ -7,6 +7,7 @@ import { useAuthStore } from "./stores/auth";
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const logoutError = ref("");
 
 const navItems = computed(() => [
   { to: "/", label: "首页", public: true },
@@ -29,7 +30,13 @@ const roleLabel = computed(() => {
 });
 
 async function logout() {
-  await auth.logout();
+  logoutError.value = "";
+  try {
+    await auth.logout();
+  } catch {
+    logoutError.value = "退出结果无法确认，页面仍保留登录状态；请重试或刷新。";
+    return;
+  }
   await router.push({ name: "login" });
 }
 </script>
@@ -96,6 +103,14 @@ async function logout() {
           </RouterLink>
         </div>
       </header>
+
+      <p
+        v-if="logoutError"
+        class="error-line"
+        role="alert"
+      >
+        {{ logoutError }}
+      </p>
 
       <RouterView />
     </main>

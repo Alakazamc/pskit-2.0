@@ -116,7 +116,7 @@ def public_message_metadata(metadata: object) -> dict:
     public = {
         key: value
         for key, value in metadata.items()
-        if not str(key).startswith("_internal_")
+        if not str(key).startswith("_internal_") and key != DISPATCH_METADATA_KEY
     }
     events = public.get("events")
     if isinstance(events, list):
@@ -206,7 +206,6 @@ def expire_stale_agent_turns_for_admission(
     """Bound quota cleanup without touching live queued or running work."""
 
     now = now_utc()
-    stale_before = now - timedelta(seconds=get_settings().agent_turn_stale_seconds)
     expired_count = 0
     running_candidates = db.scalars(
         select(AgentTurn)
@@ -225,7 +224,6 @@ def expire_stale_agent_turns_for_admission(
         select(AgentTurn)
         .where(
             AgentTurn.status == "queued",
-            AgentTurn.updated_at < stale_before,
             AgentTurn.lease_expires_at.is_not(None),
             AgentTurn.lease_expires_at < now,
         )

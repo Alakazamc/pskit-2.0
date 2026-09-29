@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import {
   ApiError, activeAgentTurn, api, createClientId, recoverAgentTurn,
   streamAgentMessage, streamErrorMessage,
-  type AgentMessage, type AgentSession, type AgentStreamResult, type StreamEvent, type Task,
+  type ActiveAgentTurn, type AgentMessage, type AgentSession, type AgentStreamResult, type StreamEvent, type Task,
 } from "./api";
 
 type ArtifactEvent = { artifact_id: string; filename?: string; download_url?: string };
@@ -38,6 +38,16 @@ export function createAgentConversation(onMessagesChanged: () => void = () => un
   const pendingApproval = ref<Approval | null>(null);
   const activeSession = computed(() => sessions.value.find((item) => item.id === activeSessionId.value));
   const tasks = computed(() => allTasks.value.filter((task) => task.session_id === activeSessionId.value));
+  const followUpTask = computed(() => {
+    const lastUserMessage = [...messages.value].reverse().find((message) => message.role === "user");
+    if (!lastUserMessage) return null;
+    const lastUserAt = Date.parse(lastUserMessage.created_at);
+    if (!Number.isFinite(lastUserAt)) return null;
+    return tasks.value
+      .filter((task) => ["succeeded", "failed"].includes(task.status)
+        && Date.parse(task.finished_at || "") > lastUserAt)
+      .sort((left, right) => Date.parse(right.finished_at || "") - Date.parse(left.finished_at || ""))[0] || null;
+  });
   const artifacts = computed(() => [...new Map([
     ...messageArtifacts.value,
     ...tasks.value.flatMap((task) => task.artifacts.map((artifact) => ({
@@ -48,7 +58,7 @@ export function createAgentConversation(onMessagesChanged: () => void = () => un
   let revision = 0;
   let disposed = false;
   let subscription: AbortController | undefined;
-  let tasksRequest: Promise<void> | undefined;
+  let tasksRequest: { sessionId: string; promise: Promise<void> } | undefined;
 
   function isCurrent(sessionId: string, version: number) {
     return !disposed && activeSessionId.value === sessionId && revision === version;
@@ -67,17 +77,23 @@ export function createAgentConversation(onMessagesChanged: () => void = () => un
   }
 
   function loadTasks(): Promise<void> {
-    if (disposed) return Promise.resolve();
+    const sessionId = activeSessionId.value;
+    if (disposed || !sessionId) return Promise.resolve();
     // Polling and stream events share a single request so slow responses cannot
-    // overwrite newer task state or accumulate an unbounded request backlog.
-    tasksRequest ??= api.tasks().then((loaded) => {
-      if (disposed) return;
+    // overwrite newer task state or accumulate a backlog for one session.
+    if (tasksRequest?.sessionId === sessionId) return tasksRequest.promise;
+    const version = revision;
+    const promise = api.tasks({ sessionId }).then((loaded) => {
+      if (!isCurrent(sessionId, version)) return;
       allTasks.value = loaded;
       taskError.value = "";
     }).catch((err: unknown) => {
-      if (!disposed) taskError.value = err instanceof ApiError ? err.message : "无法刷新任务状态";
-    }).finally(() => { tasksRequest = undefined; });
-    return tasksRequest;
+      if (isCurrent(sessionId, version)) taskError.value = err instanceof ApiError ? err.message : "无法刷新任务状态";
+    }).finally(() => {
+      if (tasksRequest?.promise === promise) tasksRequest = undefined;
+    });
+    tasksRequest = { sessionId, promise };
+    return promise;
   }
 
   function hydrateHistory(history: AgentMessage[]) {
@@ -149,14 +165,12 @@ export function createAgentConversation(onMessagesChanged: () => void = () => un
     }
   }
 
-  async function resumeActiveTurn(sessionId: string, version: number) {
+  async function resumeActiveTurn(sessionId: string, version: number, active: ActiveAgentTurn) {
     if (!isCurrent(sessionId, version) || sending.value) return;
     const controller = new AbortController();
     subscription = controller;
     sending.value = true;
     try {
-      const active = await activeAgentTurn(sessionId, controller.signal);
-      if (!active || !isCurrent(sessionId, version)) return;
       notice.value = "服务器仍在执行上一条消息，正在恢复进度…";
       const result = await recoverAgentTurn(active.turn_id, (event) => {
         if (isCurrent(sessionId, version)) handleStreamEvent(event);
@@ -192,7 +206,16 @@ export function createAgentConversation(onMessagesChanged: () => void = () => un
     loading.value = true;
     try {
       await Promise.all([loadHistory(sessionId, version), loadTasks()]);
-      if (isCurrent(sessionId, version)) void resumeActiveTurn(sessionId, version);
+      if (!isCurrent(sessionId, version)) return;
+      const active = await activeAgentTurn(sessionId);
+      if (!isCurrent(sessionId, version)) return;
+      if (active) {
+        void resumeActiveTurn(sessionId, version, active);
+      } else {
+        // The turn can finish after the first history snapshot but before the
+        // active lookup. Its final message is committed before the key clears.
+        await loadHistory(sessionId, version);
+      }
     } catch (err) {
       if (isCurrent(sessionId, version)) error.value = err instanceof ApiError ? err.message : "无法加载对话";
     } finally {
@@ -313,6 +336,15 @@ export function createAgentConversation(onMessagesChanged: () => void = () => un
     if (approval) return sendMessage(approval);
   }
 
+  function draftTaskFollowUp() {
+    const task = followUpTask.value;
+    if (!task || sending.value || loading.value) return;
+    const prompt = task.status === "failed"
+      ? `请根据本会话任务 ${task.id} 的错误信息分析失败原因，并给出排障或安全重试建议。`
+      : `请解读本会话已完成任务 ${task.id} 的结果和关联文件，说明关键发现、证据、局限与下一步建议。`;
+    input.value = input.value.trim() ? `${input.value.trim()}\n${prompt}` : prompt;
+  }
+
   function dispose() {
     disposed = true;
     detach();
@@ -321,7 +353,7 @@ export function createAgentConversation(onMessagesChanged: () => void = () => un
   return {
     sessions, activeSessionId, activeSession, messages, input, loading, sending,
     error, notice, taskError, sources, ragBackend, artifacts, events, tasks,
-    streamingAnswer, suggestions, pendingApproval,
-    boot, selectSession, newSession, loadTasks, sendMessage, approvePending, dispose,
+    streamingAnswer, suggestions, pendingApproval, followUpTask,
+    boot, selectSession, newSession, loadTasks, sendMessage, approvePending, draftTaskFollowUp, dispose,
   };
 }

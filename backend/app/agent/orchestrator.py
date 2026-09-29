@@ -31,6 +31,24 @@ from app.tools.catalog import openai_tool_schemas
 
 logger = logging.getLogger(__name__)
 
+INDEPENDENT_ACTIVE_TASK_ACTIONS = frozenset(
+    {
+        "search_pdb",
+        "fetch_pdb_info",
+        "download_pdb_file",
+        "search_uniprot",
+        "fetch_uniprot_entry",
+        "search_rnacentral",
+        "fetch_rnacentral_entry",
+        "serpapi_search",
+        "list_task_artifacts",
+        "read_result_file",
+        "generate_session_report",
+        "generate_harness_report",
+        "generate_research_report",
+    }
+)
+
 
 class AgentPlanningContractError(RuntimeError):
     def __init__(self, required_tool: str, actual_tools: list[str]) -> None:
@@ -228,6 +246,11 @@ def compact_tool_result(result: dict, max_chars: int) -> str:
         "task_id",
         "task_type",
         "status",
+        "error_type",
+        "offset",
+        "limit",
+        "total_count",
+        "next_offset",
         "artifact_id",
         "filename",
         "download_url",
@@ -247,16 +270,44 @@ def compact_tool_result(result: dict, max_chars: int) -> str:
     }
     if visible_result.get("tasks"):
         summary["tasks"] = task_summaries_from_result(visible_result)
-    return json.dumps(
-        {
-            "truncated": True,
-            "original_character_count": len(raw),
-            "summary": summary,
-            "instruction": "结果已截断；需要细节时读取对应任务/结果文件，或使用更窄的查询参数。",
-        },
-        ensure_ascii=False,
-        default=str,
-    )
+    payload = {
+        "truncated": True,
+        "original_character_count": len(raw),
+        "summary": summary,
+        "instruction": "结果已截断；需要细节时读取对应任务/结果文件，或使用更窄的查询参数。",
+    }
+    artifacts = visible_result.get("artifacts")
+    if isinstance(artifacts, list):
+        payload["instruction"] = (
+            "结果已截断；只依据列出的产物 ID 读取文件。"
+            "若有 next_offset，用同一 task_id 和该值作为 offset 继续查询；不要猜测省略的 ID。"
+        )
+        summary["artifact_count"] = len(artifacts)
+        summary["artifacts"] = []
+        summary["artifacts_omitted"] = len(artifacts)
+        for artifact in artifacts[:8]:
+            if not isinstance(artifact, dict) or not artifact.get("artifact_id"):
+                continue
+            item = {
+                key: artifact[key]
+                for key in ("artifact_id", "filename", "kind")
+                if artifact.get(key) is not None
+            }
+            if "filename" in item:
+                item["filename"] = re.split(r"[/\\]", str(item["filename"]))[-1]
+            summary["artifacts"].append(item)
+            summary["artifacts_omitted"] = len(artifacts) - len(summary["artifacts"])
+            if summary["artifacts_omitted"] and "offset" in visible_result:
+                # The tool's next_offset skips the entire page. A compacted page
+                # must resume after the last ID actually shown to the model.
+                summary["next_offset"] = visible_result["offset"] + len(summary["artifacts"])
+            if len(json.dumps(payload, ensure_ascii=False, default=str)) > max_chars:
+                summary["artifacts"].pop()
+                summary["artifacts_omitted"] = len(artifacts) - len(summary["artifacts"])
+                if "offset" in visible_result:
+                    summary["next_offset"] = visible_result["offset"] + len(summary["artifacts"])
+                break
+    return json.dumps(payload, ensure_ascii=False, default=str)
 
 
 def safe_tool_event_result(result: dict[str, Any]) -> dict[str, Any]:
@@ -521,6 +572,36 @@ def completed_session_task_artifact_facts(
     return facts
 
 
+def recent_failed_session_task_facts(
+    runtime: AgentRuntime,
+    *,
+    limit: int = 6,
+) -> list[dict[str, str | None]]:
+    """Give the planner bounded failure codes without raw worker diagnostics."""
+
+    if runtime.session is None:
+        return []
+    tasks = runtime.db.scalars(
+        select(Task)
+        .where(
+            Task.user_id == runtime.user.id,
+            Task.session_id == runtime.session.id,
+            Task.status == "failed",
+        )
+        .order_by(Task.updated_at.desc())
+        .limit(limit)
+    ).all()
+    return [
+        {
+            "task_id": str(task.id),
+            "task_type": task.task_type,
+            "status": task.status,
+            "error_type": task.error_type,
+        }
+        for task in tasks
+    ]
+
+
 def record_research_tool_evidence(
     runtime: AgentRuntime,
     *,
@@ -706,6 +787,23 @@ def plan_next_action_node(runtime: AgentRuntime):
                 ]
             else:
                 planning_messages = [artifact_guidance, *planning_messages]
+        failed_tasks = recent_failed_session_task_facts(runtime)
+        if failed_tasks:
+            failure_guidance = {
+                "role": "system",
+                "content": (
+                    "以下是本会话最近失败任务的服务端安全状态，不含原始异常或服务器路径："
+                    f"{json.dumps(failed_tasks, ensure_ascii=False, separators=(',', ':'))}。"
+                    "error_type 只是诊断类别；没有对应结果时不要声称模型已完成推理，"
+                    "也不要猜测更具体的失败原因。"
+                ),
+            }
+            if planning_messages and planning_messages[0].get("role") == "system":
+                planning_messages = [
+                    planning_messages[0], failure_guidance, *planning_messages[1:]
+                ]
+            else:
+                planning_messages = [failure_guidance, *planning_messages]
         active_task_ids = list(
             dict.fromkeys(
                 [
@@ -718,33 +816,47 @@ def plan_next_action_node(runtime: AgentRuntime):
                 ]
             )
         )
+        if active_task_ids:
+            tool_schemas = [
+                schema
+                for schema in tool_schemas
+                if schema.get("function", {}).get("name")
+                in INDEPENDENT_ACTIVE_TASK_ACTIONS
+            ]
+            active_guidance = {
+                "role": "system",
+                "content": (
+                    "本会话已有未完成的后台科研任务。仍可回答独立问题、检索公开数据库、"
+                    "读取已登记的结果文件或生成阶段报告；本轮不得再次提交后台任务，也不得把"
+                    "未完成任务当作已取得的科研结果。"
+                ),
+            }
+            if planning_messages and planning_messages[0].get("role") == "system":
+                planning_messages = [
+                    planning_messages[0], active_guidance, *planning_messages[1:]
+                ]
+            else:
+                planning_messages = [active_guidance, *planning_messages]
         required_tool = explicit_required_tool(
             str(state.get("latest_user_message") or ""),
             catalog_actions,
         )
-        if required_tool is not None:
-            tool_schemas = [
-                schema
-                for schema in tool_schemas
-                if schema.get("function", {}).get("name") == required_tool
-            ]
-            events.append(
-                make_event(
-                    "planner_contract",
-                    required_tool=required_tool,
-                    mode="named_tool_choice",
-                )
-            )
-        if policy_decision is not None:
-            # 完整策略事实只保存在服务端消息元数据，供内部反馈/Q-table 复核；
-            # SSE 与历史 API 通过 public_agent_event 输出脱敏执行摘要。
-            events.append(make_event("strategy_policy", **policy_decision))
-        if active_task_ids and runtime.approved_tool_call is None:
+        approved_name = (
+            tool_call_name_and_args(runtime.approved_tool_call)[0]
+            if runtime.approved_tool_call is not None
+            else None
+        )
+        requested_action = approved_name or required_tool
+        if (
+            active_task_ids
+            and requested_action is not None
+            and requested_action not in INDEPENDENT_ACTIVE_TASK_ACTIONS
+        ):
             assistant = {
                 "role": "assistant",
                 "content": (
                     "本会话仍有长任务在队列中或执行中。"
-                    "本轮不重复提交工具，待任务结束后再从持久化事实继续。"
+                    "为避免重复提交，本轮暂不执行新的后台科研工具。"
                 ),
             }
             events.extend(
@@ -752,7 +864,7 @@ def plan_next_action_node(runtime: AgentRuntime):
                     make_event(
                         "agent_waiting",
                         task_ids=active_task_ids,
-                        message="本会话仍有长任务执行中；已阻止重复规划。",
+                        message="本会话仍有长任务执行中；已阻止重复提交。",
                     ),
                     make_event(
                         "agent_step",
@@ -775,6 +887,23 @@ def plan_next_action_node(runtime: AgentRuntime):
                 "final_answer": state.get("final_answer"),
                 "pending_events": events,
             }
+        if required_tool is not None:
+            tool_schemas = [
+                schema
+                for schema in tool_schemas
+                if schema.get("function", {}).get("name") == required_tool
+            ]
+            events.append(
+                make_event(
+                    "planner_contract",
+                    required_tool=required_tool,
+                    mode="named_tool_choice",
+                )
+            )
+        if policy_decision is not None:
+            # 完整策略事实只保存在服务端消息元数据，供内部反馈/Q-table 复核；
+            # SSE 与历史 API 通过 public_agent_event 输出脱敏执行摘要。
+            events.append(make_event("strategy_policy", **policy_decision))
         if runtime.approved_tool_call is not None:
             approved_call = dict(runtime.approved_tool_call)
             assistant = {
@@ -806,6 +935,7 @@ def plan_next_action_node(runtime: AgentRuntime):
                     normalize_assistant_message(assistant),
                 ],
                 "tool_calls": [approved_call],
+                "active_task_ids": active_task_ids,
                 "max_tool_calls": int(state.get("tool_call_count") or 0) + 1,
                 "final_answer": state.get("final_answer"),
                 "pending_events": events,
@@ -849,6 +979,7 @@ def plan_next_action_node(runtime: AgentRuntime):
             "llm_response": assistant,
             "messages": messages,
             "tool_calls": tool_calls,
+            "active_task_ids": active_task_ids,
             # wzf：显式工具契约一轮只允许一个真实动作；执行后利用既有上限路由
             # 直接进入 Synthesizer，避免同步工具被同一用户指令反复强制调用。
             "max_tool_calls": (
@@ -880,12 +1011,32 @@ def execute_tools_node(runtime: AgentRuntime):
         max_result_chars = int(state.get("max_tool_result_chars") or 8000)
         waiting_for_tasks = False
         waiting_for_approval = False
+        blocked_by_active_task = False
+        existing_active_task_ids = set(state.get("active_task_ids") or [])
         pending_approval = state.get("pending_approval")
 
         for call in state.get("tool_calls", []):
             call_id = call.get("id") or f"call_{len(events)}"
             name, raw_args = tool_call_name_and_args(call)
             fingerprint = tool_call_fingerprint(name, raw_args)
+            if existing_active_task_ids and name not in INDEPENDENT_ACTIVE_TASK_ACTIONS:
+                error = {
+                    "error_type": "active_task_blocks_tool",
+                    "tool": name,
+                    "arguments_hash": fingerprint,
+                    "message": "本会话已有后台任务，本轮只允许独立检索和读取已完成结果。",
+                }
+                diagnostics.append(error)
+                events.append(make_event("error", error=error))
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "content": json.dumps(error, ensure_ascii=False),
+                    }
+                )
+                blocked_by_active_task = True
+                continue
             failed_fingerprints = {
                 item.get("arguments_hash")
                 for item in diagnostics
@@ -1160,6 +1311,9 @@ def execute_tools_node(runtime: AgentRuntime):
             "waiting_for_tasks": waiting_for_tasks,
             "waiting_for_approval": waiting_for_approval,
             "pending_approval": pending_approval,
+            "max_tool_calls": (
+                tool_call_count if blocked_by_active_task else max_tool_calls
+            ),
             "pending_events": events,
         }
 

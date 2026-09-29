@@ -74,6 +74,30 @@ test("an expired session returns to login and resumes the protected destination"
   await expect(page.locator(".user-chip")).toContainText("test-user");
 });
 
+test("failed logout keeps the authenticated view without claiming the server session is valid", async ({ page }) => {
+  let failLogout = true;
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/auth/me") return route.fulfill({ json: user });
+    if (path === "/api/tasks") return route.fulfill({ json: [] });
+    if (path === "/api/auth/logout") return failLogout
+      ? route.abort("failed")
+      : route.fulfill({ json: { ok: true } });
+    return route.fulfill({ status: 404 });
+  });
+  await page.goto("/tasks");
+  await expect(page.locator(".user-chip")).toContainText("test-user");
+  await page.getByRole("button", { name: "退出登录" }).click();
+  await expect(page.getByRole("alert")).toContainText("退出结果无法确认");
+  await expect(page).toHaveURL(/\/tasks$/);
+  await expect(page.locator(".user-chip")).toContainText("test-user");
+
+  failLogout = false;
+  await page.getByRole("button", { name: "退出登录" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.locator(".user-chip")).toHaveCount(0);
+});
+
 test("guest and incorrect-password 401 responses stay on login without a redirect loop", async ({ page }) => {
   let meRequests = 0;
   await page.route("**/api/**", async (route) => {

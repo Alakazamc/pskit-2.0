@@ -1,5 +1,5 @@
-#!/usr/bin/env sh
-set -eu
+#!/usr/bin/env bash
+set -euo pipefail
 
 root_dir="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 env_file="${1:-.env.docker}"
@@ -46,8 +46,11 @@ done
 mkdir -p "$root_dir/dist"
 bundle="$root_dir/dist/pskit2-${version}-linux-amd64-images.tar.gz"
 checksum="$bundle.sha256"
+partial_bundle="$bundle.partial.$$"
+trap 'rm -f -- "$partial_bundle"' EXIT
 
-docker save $images | gzip -9 >"$bundle"
+docker save $images | gzip -9 >"$partial_bundle"
+mv -- "$partial_bundle" "$bundle"
 (
   cd "$(dirname "$bundle")"
   sha256sum "$(basename "$bundle")" >"$(basename "$checksum")"

@@ -66,7 +66,7 @@ from app.research.service import (
     link_task_to_research_run,
     refresh_research_run_progress,
 )
-from app.tasks.service import create_queued_task
+from app.tasks.service import TaskQuotaExceeded, create_queued_task
 from app.tools.reports import generate_research_report
 
 
@@ -688,6 +688,22 @@ def create_candidate(
 ):
     research_run = load_owned_run(db, user, research_run_id)
     candidate_track = load_track(db, research_run, payload.track)
+    if payload.iteration > candidate_track.current_iteration:
+        af3_started = db.scalar(
+            select(ResearchTaskLink.id)
+            .join(Candidate, Candidate.id == ResearchTaskLink.candidate_id)
+            .where(
+                ResearchTaskLink.research_run_id == research_run.id,
+                ResearchTaskLink.role == "af3",
+                Candidate.candidate_track_id == candidate_track.id,
+            )
+            .limit(1)
+        )
+        if af3_started is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot advance a candidate track iteration after AF3 submission",
+            )
     if payload.parent_candidate_id:
         parent = load_owned_candidate(db, user, research_run, payload.parent_candidate_id)
         if parent.track != payload.track:
@@ -802,6 +818,8 @@ def score_candidate_track(
         "iteration": effective_iteration,
     }
     candidate_track.updated_at = now_utc()
+    # Progress uses SQL aggregate counts; this Session does not autoflush.
+    db.flush()
     refresh_research_run_progress(db, research_run)
     db.commit()
     return TrackScoreResponse(
@@ -873,28 +891,36 @@ def create_af3_batch(
             reused_count += 1
         else:
             candidate_entity_type = "rna" if track == "rna" else "protein"
-            task = create_queued_task(
-                db,
-                user,
-                "run_alphafold3",
-                {
-                    "research_run_id": str(research_run.id),
-                    "candidate_id": str(candidate.id),
-                    "target_hash": target_hash,
-                    "candidate_sequence_hash": hashlib.sha256(
-                        candidate.sequence.encode("utf-8")
-                    ).hexdigest(),
-                    "job_name": f"{track}_{str(candidate.id)[:8]}",
-                    "entities": [
-                        {"type": "protein", "sequence": target_sequence},
-                        {"type": candidate_entity_type, "sequence": candidate.sequence},
-                    ],
-                    "model_seed": payload.model_seed,
-                    "num_diffusion_samples": payload.num_diffusion_samples,
-                },
-                session_id=research_run.session_id,
-                commit=False,
-            )
+            try:
+                task = create_queued_task(
+                    db,
+                    user,
+                    "run_alphafold3",
+                    {
+                        "research_run_id": str(research_run.id),
+                        "candidate_id": str(candidate.id),
+                        "target_hash": target_hash,
+                        "candidate_sequence_hash": hashlib.sha256(
+                            candidate.sequence.encode("utf-8")
+                        ).hexdigest(),
+                        "job_name": f"{track}_{str(candidate.id)[:8]}",
+                        "entities": [
+                            {"type": "protein", "sequence": target_sequence},
+                            {"type": candidate_entity_type, "sequence": candidate.sequence},
+                        ],
+                        "model_seed": payload.model_seed,
+                        "num_diffusion_samples": payload.num_diffusion_samples,
+                    },
+                    session_id=research_run.session_id,
+                    commit=False,
+                )
+            except TaskQuotaExceeded as exc:
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=str(exc),
+                    headers={"Retry-After": "30"},
+                ) from exc
             candidate.af3_task_id = task.id
             submitted_count += 1
         try:

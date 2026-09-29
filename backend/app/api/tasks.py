@@ -287,10 +287,18 @@ def list_tasks(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    session_id: UUID | None = None,
 ):
+    if session_id is not None:
+        session = db.get(AgentSession, session_id)
+        if session is None or session.user_id != user.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    filters = [Task.user_id == user.id]
+    if session_id is not None:
+        filters.append(Task.session_id == session_id)
     tasks = db.scalars(
         select(Task)
-        .where(Task.user_id == user.id)
+        .where(*filters)
         .order_by(Task.created_at.desc())
         .offset(offset)
         .limit(limit)

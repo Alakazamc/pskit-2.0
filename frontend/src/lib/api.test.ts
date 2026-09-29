@@ -151,9 +151,11 @@ describe("apiFetch", () => {
   });
 
   it("passes pagination to the task API", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response("[]"));
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response("[]")));
     vi.stubGlobal("fetch", fetchMock);
     await api.tasks({ limit: 21, offset: 100 });
     expect(fetchMock).toHaveBeenCalledWith("/api/tasks?limit=21&offset=100", expect.any(Object));
+    await api.tasks({ sessionId: "old-session" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/tasks?session_id=old-session", expect.any(Object));
   });
 });

@@ -208,9 +208,14 @@ export const api = {
       method: "DELETE",
     }),
   tools: () => apiFetch<{ tools: ToolSpec[] }>("/api/tools"),
-  tasks: (page?: { limit: number; offset: number }) => apiFetch<Task[]>(
-    page ? `/api/tasks?limit=${page.limit}&offset=${page.offset}` : "/api/tasks",
-  ),
+  tasks: (query?: { limit?: number; offset?: number; sessionId?: string }) => {
+    const params = new URLSearchParams();
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    if (query?.offset !== undefined) params.set("offset", String(query.offset));
+    if (query?.sessionId) params.set("session_id", query.sessionId);
+    const suffix = params.toString();
+    return apiFetch<Task[]>(`/api/tasks${suffix ? `?${suffix}` : ""}`);
+  },
   task: (taskId: string, includeDetails = false) =>
     apiFetch<Task>(`/api/tasks/${taskId}?include_details=${includeDetails}`),
   retryTask: (taskId: string) =>
