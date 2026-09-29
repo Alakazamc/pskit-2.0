@@ -15,23 +15,30 @@ if [ ! -f "$env_file" ]; then
 fi
 
 cd "$root_dir"
-docker compose --env-file "$env_file" config --quiet
+set -- docker compose --env-file "$env_file"
+old_ifs="$IFS"
+IFS=:
+for compose_file in ${PSKIT_COMPOSE_FILES:-compose.yaml}; do
+  set -- "$@" --file "$compose_file"
+done
+IFS="$old_ifs"
+"$@" config --quiet
 if [ "${PSKIT_EXPORT_SKIP_BUILD:-0}" = "1" ]; then
   echo "Using existing local application image (PSKIT_EXPORT_SKIP_BUILD=1)"
 else
-  docker compose --env-file "$env_file" build web worker
+  "$@" build web worker
 fi
 
-qdrant_image="$(docker compose --env-file "$env_file" config --images | awk '/^qdrant\/qdrant:/{print; exit}')"
+qdrant_image="$("$@" config --images | awk '/^qdrant\/qdrant:/{print; exit}')"
 if [ -z "$qdrant_image" ]; then
   echo "Could not resolve the Qdrant image from Compose" >&2
   exit 2
 fi
 if ! docker image inspect "$qdrant_image" >/dev/null 2>&1; then
-  docker compose --env-file "$env_file" pull qdrant
+  "$@" pull qdrant
 fi
 
-images="$(docker compose --env-file "$env_file" config --images | sort -u)"
+images="$("$@" config --images | sort -u)"
 for image in $images; do
   docker image inspect "$image" >/dev/null
 done

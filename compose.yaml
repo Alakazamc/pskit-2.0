@@ -12,9 +12,9 @@ x-pskit-common: &pskit-common
     PSKIT_BIND: 0.0.0.0:10706
     BIND_HOST: 0.0.0.0
     BIND_PORT: "10706"
-    DATABASE_URL: ${PSKIT_DATABASE_URL:-sqlite:////app/backend/data/pskit2.sqlite3}
+    DATABASE_URL: ${PSKIT_DATABASE_URL:-sqlite:///${PSKIT_DATA_DIR:-/app/backend/data}/pskit2.sqlite3}
     DATA_DIR: ${PSKIT_DATA_DIR:-/app/backend/data}
-    ARTIFACT_DIR: ${PSKIT_ARTIFACT_DIR:-/app/backend/data/artifacts}
+    ARTIFACT_DIR: ${PSKIT_ARTIFACT_DIR:-${PSKIT_DATA_DIR:-/app/backend/data}/artifacts}
     KNOWLEDGE_DIR: /app/knowledge
     FRONTEND_DIST_DIR: /app/frontend/dist
     QDRANT_URL: http://qdrant:6333

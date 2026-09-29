@@ -1,4 +1,6 @@
-ARG PSKIT_SCIENCE_BASE_IMAGE=pskit2-science-demo:f2e346b005c0-full
+# Required: a locally available/licensed science runtime with the legacy venv,
+# tini, and the pskit user. Model weights and upstream runtimes are not packaged.
+ARG PSKIT_SCIENCE_BASE_IMAGE
 FROM ${PSKIT_SCIENCE_BASE_IMAGE}
 
 ARG PSKIT_VERSION=0.3.0

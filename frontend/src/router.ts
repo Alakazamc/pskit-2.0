@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteLocationNormalized } from "vue-router";
 
 import { useAuthStore } from "./stores/auth";
+import { setAuthenticationFailureHandler } from "./lib/api";
 import AboutView from "./views/AboutView.vue";
 import AgentView from "./views/AgentView.vue";
 import AdminUsersView from "./views/AdminUsersView.vue";
@@ -29,6 +30,12 @@ const router = createRouter({
 function redirectTarget(to: RouteLocationNormalized) {
   return { name: "login", query: { redirect: to.fullPath } };
 }
+
+setAuthenticationFailureHandler(async () => {
+  useAuthStore().clearSession();
+  const current = router.currentRoute.value;
+  if (current.meta.requiresAuth) await router.replace(redirectTarget(current));
+});
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore();

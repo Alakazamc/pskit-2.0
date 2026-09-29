@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.pytest-tmp*/
 .mypy_cache/
 .ruff_cache/
 build/
@@ -36,6 +37,9 @@ secrets/
 /backend/uploads/
 /logs/
 /backend/logs/
+/backups/
+/frontend/test-results/
+/frontend/playwright-report/
 *.sqlite
 *.sqlite3
 *.db

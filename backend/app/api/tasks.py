@@ -1,7 +1,9 @@
 from uuid import UUID
+from collections import defaultdict
+from collections.abc import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -118,21 +120,14 @@ def redact_task_payload(payload: dict | None) -> dict | None:
     return redact(payload)
 
 
-def serialize_task(
-    db: Session,
+def _task_response(
     task: Task,
+    artifacts: Sequence[Artifact],
+    retry_of: TaskRetry | None,
+    retry_to: TaskRetry | None,
     *,
     include_details: bool = False,
 ) -> TaskResponse:
-    artifacts = db.scalars(
-        select(Artifact)
-        .where(Artifact.task_id == task.id, Artifact.user_id == task.user_id)
-        .order_by(Artifact.created_at.asc())
-    ).all()
-    retry_of = db.scalar(
-        select(TaskRetry).where(TaskRetry.child_task_id == task.id)
-    )
-    retry_to = db.get(TaskRetry, task.id)
     return TaskResponse(
         id=str(task.id),
         session_id=str(task.session_id) if task.session_id else None,
@@ -156,6 +151,35 @@ def serialize_task(
         started_at=task.started_at.isoformat() if task.started_at else None,
         finished_at=task.finished_at.isoformat() if task.finished_at else None,
     )
+
+
+def serialize_tasks(
+    db: Session, tasks: Sequence[Task], *, include_details: bool = False,
+) -> list[TaskResponse]:
+    if not tasks:
+        return []
+    task_ids = [task.id for task in tasks]
+    artifacts_by_task = defaultdict(list)
+    for artifact in db.scalars(
+        select(Artifact).where(Artifact.task_id.in_(task_ids)).order_by(Artifact.created_at)
+    ):
+        artifacts_by_task[(artifact.task_id, artifact.user_id)].append(artifact)
+    retries = db.scalars(select(TaskRetry).where(or_(
+        TaskRetry.parent_task_id.in_(task_ids), TaskRetry.child_task_id.in_(task_ids),
+    ))).all()
+    retry_of = {retry.child_task_id: retry for retry in retries}
+    retry_to = {retry.parent_task_id: retry for retry in retries}
+    return [
+        _task_response(
+            task, artifacts_by_task[(task.id, task.user_id)],
+            retry_of.get(task.id), retry_to.get(task.id), include_details=include_details,
+        )
+        for task in tasks
+    ]
+
+
+def serialize_task(db: Session, task: Task, *, include_details: bool = False) -> TaskResponse:
+    return serialize_tasks(db, [task], include_details=include_details)[0]
 
 
 @router.post("", response_model=TaskResponse)
@@ -271,7 +295,7 @@ def list_tasks(
         .offset(offset)
         .limit(limit)
     ).all()
-    return [serialize_task(db, task) for task in tasks]
+    return serialize_tasks(db, tasks)
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

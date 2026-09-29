@@ -161,6 +161,18 @@ class Settings(BaseSettings):
     agent_max_tool_calls: int = Field(default=24, ge=1, le=100)
     agent_max_tool_result_chars: int = Field(default=8000, ge=1000, le=100000)
     agent_max_concurrent_runs: int = Field(default=4, ge=1, le=32)
+    max_active_agent_turns_per_user: int = Field(
+        default=4,
+        ge=1,
+        le=100,
+        alias="PSKIT_MAX_ACTIVE_AGENT_TURNS_PER_USER",
+    )
+    max_global_active_agent_turns: int = Field(
+        default=16,
+        ge=1,
+        le=1000,
+        alias="PSKIT_MAX_GLOBAL_ACTIVE_AGENT_TURNS",
+    )
     agent_sse_heartbeat_seconds: float = Field(default=15, ge=1, le=60)
     agent_turn_stale_seconds: int = Field(default=900, ge=60, le=7200)
     agent_history_recent_messages: int = Field(default=12, ge=4, le=50)

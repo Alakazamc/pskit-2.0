@@ -9,18 +9,41 @@ const tasks = ref<Task[]>([]);
 const loading = ref(true);
 const error = ref("");
 const retryingTaskId = ref("");
+const page = ref(0);
+const pageSize = 20;
+const hasNextPage = ref(false);
 let pollTimer: number | undefined;
+let requestVersion = 0;
+let pendingPage: number | undefined;
+let disposed = false;
 
 async function loadTasks(silent = false) {
+  const requestedPage = page.value;
+  if (disposed || (silent && pendingPage === requestedPage)) return;
+  const version = ++requestVersion;
+  pendingPage = requestedPage;
   if (!silent) loading.value = true;
   try {
-    tasks.value = await api.tasks();
+    const loaded = await api.tasks({ limit: pageSize + 1, offset: requestedPage * pageSize });
+    if (disposed || version !== requestVersion) return;
+    tasks.value = loaded.slice(0, pageSize);
+    hasNextPage.value = loaded.length > pageSize;
     error.value = "";
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : "无法加载任务";
+    if (!disposed && version === requestVersion) error.value = err instanceof ApiError ? err.message : "无法加载任务";
   } finally {
-    if (!silent) loading.value = false;
+    if (!disposed && version === requestVersion) {
+      pendingPage = undefined;
+      loading.value = false;
+    }
   }
+}
+
+async function changePage(delta: number) {
+  if (loading.value || page.value + delta < 0) return;
+  page.value += delta;
+  tasks.value = [];
+  await loadTasks();
 }
 
 async function retryTask(task: Task) {
@@ -44,9 +67,12 @@ function formatBytes(size: number) {
 
 onMounted(async () => {
   await loadTasks();
-  pollTimer = window.setInterval(() => void loadTasks(true), 3000);
+  if (!disposed) pollTimer = window.setInterval(() => void loadTasks(true), 3000);
 });
-onUnmounted(() => window.clearInterval(pollTimer));
+onUnmounted(() => {
+  disposed = true;
+  window.clearInterval(pollTimer);
+});
 </script>
 
 <template>
@@ -72,8 +98,8 @@ onUnmounted(() => window.clearInterval(pollTimer));
     </p>
     <EmptyState
       v-else-if="!loading && tasks.length === 0"
-      title="暂无任务"
-      body="在智能体中调用模型工具后，会在这里生成排队任务。"
+      :title="page === 0 ? '暂无任务' : '本页暂无任务'"
+      :body="page === 0 ? '在智能体中调用模型工具后，会在这里生成排队任务。' : '可以返回上一页查看较新的任务。'"
     />
     <div
       v-else
@@ -130,5 +156,25 @@ onUnmounted(() => window.clearInterval(pollTimer));
         <small v-else-if="task.retry_task_id">已创建重试任务 {{ task.retry_task_id }}</small>
       </article>
     </div>
+    <nav
+      class="panel-header"
+      aria-label="任务分页"
+    >
+      <button
+        class="ghost-button"
+        :disabled="loading || page === 0"
+        @click="changePage(-1)"
+      >
+        上一页
+      </button>
+      <span aria-live="polite">第 {{ page + 1 }} 页 · 每页 {{ pageSize }} 条</span>
+      <button
+        class="ghost-button"
+        :disabled="loading || !hasNextPage"
+        @click="changePage(1)"
+      >
+        下一页
+      </button>
+    </nav>
   </section>
 </template>

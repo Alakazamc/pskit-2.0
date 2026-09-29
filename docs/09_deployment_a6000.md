@@ -259,3 +259,17 @@ tail -n 20 logs/health.log
 This runs health verification every five minutes and a verified backup every
 day at 03:20 Asia/Shanghai. The jobs use per-task locks so a slow run cannot
 overlap its next invocation.
+
+The checked-in defaults target `http://127.0.0.1:10716`, `compose.yaml`, and
+the repository's `backups/` directory. Put persistent server overrides in a
+private `.env.schedule` file before installing cron; the runner loads it on
+every invocation. For example, set `PSKIT_HEALTH_URL`, `PSKIT_BACKUP_ROOT`,
+`PSKIT_COMPOSE_FILES` (colon-separated overlays), and
+`PSKIT_EXTRA_CONFIG_FILES` (optional extra private configuration paths).
+The Compose project name normally comes from `.env.docker`; set
+`COMPOSE_PROJECT_NAME` only if this deployment needs an explicit override.
+
+Run `scripts/run_scheduled_job.sh backup` once before relying on the schedule,
+then run its `health` check. An instance using keyword retrieval may have no
+Qdrant collection yet; that absence is recorded in backup metadata and does
+not prevent backing up its database and artifacts.

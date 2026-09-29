@@ -140,6 +140,95 @@ class AgentTurnHeartbeat:
             self.thread.join(timeout=2)
 
 
+class AgentDispatchHeartbeat:
+    """Keep an executor-queued turn distinguishable from an orphan after restart."""
+
+    def __init__(self, turn_id: UUID) -> None:
+        self.turn_id = turn_id
+        self.owner = f"dispatcher:{os.getpid()}:{uuid4()}"
+        self.stop_event = threading.Event()
+        self.thread: threading.Thread | None = None
+        settings = get_settings()
+        self.lease_seconds = max(
+            30.0,
+            min(
+                float(settings.agent_turn_stale_seconds),
+                float(settings.agent_sse_heartbeat_seconds) * 4,
+            ),
+        )
+
+    def start(self) -> None:
+        db = SessionLocal()
+        try:
+            now = now_utc()
+            claimed = db.execute(
+                update(AgentTurn)
+                .where(
+                    AgentTurn.id == self.turn_id,
+                    AgentTurn.status == "queued",
+                    AgentTurn.lease_owner.in_(
+                        ("dispatcher:new-request", "dispatcher:recovery")
+                    ),
+                )
+                .values(
+                    lease_owner=self.owner,
+                    lease_expires_at=now + timedelta(seconds=self.lease_seconds),
+                    updated_at=now,
+                )
+            )
+            db.commit()
+            if claimed.rowcount != 1:
+                raise AgentExecutionError(
+                    "Agent 轮次已不在等待队列，禁止重复调度"
+                )
+        finally:
+            db.close()
+
+        interval = max(1.0, self.lease_seconds / 3)
+
+        def heartbeat() -> None:
+            while not self.stop_event.wait(interval):
+                session = SessionLocal()
+                try:
+                    now = now_utc()
+                    refreshed = session.execute(
+                        update(AgentTurn)
+                        .where(
+                            AgentTurn.id == self.turn_id,
+                            AgentTurn.status == "queued",
+                            AgentTurn.lease_owner == self.owner,
+                        )
+                        .values(
+                            updated_at=now,
+                            lease_expires_at=now
+                            + timedelta(seconds=self.lease_seconds),
+                        )
+                    )
+                    session.commit()
+                    if refreshed.rowcount != 1:
+                        self.stop_event.set()
+                except Exception:
+                    session.rollback()
+                    logger.exception(
+                        "Agent 排队调度租约更新失败 turn_id=%s",
+                        self.turn_id,
+                    )
+                finally:
+                    session.close()
+
+        self.thread = threading.Thread(
+            target=heartbeat,
+            name=f"pskit-agent-dispatch-heartbeat-{str(self.turn_id)[:8]}",
+            daemon=True,
+        )
+        self.thread.start()
+
+    def stop(self) -> None:
+        self.stop_event.set()
+        if self.thread is not None and self.thread is not threading.current_thread():
+            self.thread.join(timeout=2)
+
+
 def get_agent_executor() -> ThreadPoolExecutor:
     global _agent_executor
     if _agent_executor is None:
@@ -726,6 +815,7 @@ async def stream_agent_turn_events(
     queue: asyncio.Queue[dict[str, Any] | object] = asyncio.Queue()
     accepting_events = threading.Event()
     accepting_events.set()
+    dispatch_heartbeat: AgentDispatchHeartbeat | None = None
 
     def enqueue(item: dict[str, Any] | object) -> None:
         if accepting_events.is_set():
@@ -736,6 +826,8 @@ async def stream_agent_turn_events(
 
     def worker() -> None:
         try:
+            if dispatch_heartbeat is not None:
+                dispatch_heartbeat.stop()
             run_agent_turn_worker(request, enqueue)
         finally:
             _release_agent_turn_schedule(request.turn_id)
@@ -746,13 +838,21 @@ async def stream_agent_turn_events(
             "该 Agent 轮次已在当前进程调度，禁止重复加入执行队列"
         )
     try:
+        dispatch_heartbeat = AgentDispatchHeartbeat(request.turn_id)
+        dispatch_heartbeat.start()
         future = loop.run_in_executor(executor or get_agent_executor(), worker)
     except Exception:
+        if dispatch_heartbeat is not None:
+            dispatch_heartbeat.stop()
         _release_agent_turn_schedule(request.turn_id)
         raise
-    future.add_done_callback(
-        lambda completed: _consume_executor_result(completed, request.turn_id)
-    )
+
+    def consume_result(completed) -> None:
+        if dispatch_heartbeat is not None:
+            dispatch_heartbeat.stop()
+        _consume_executor_result(completed, request.turn_id)
+
+    future.add_done_callback(consume_result)
 
     try:
         while True:

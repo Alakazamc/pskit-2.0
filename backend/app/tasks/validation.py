@@ -12,7 +12,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.tools.mcp_adapters import MCPAdapterError, build_pepccd_mcp_payload
+from app.tools.mcp_adapters import PepCCDParameters
 
 
 def normalized_sequence(value: str, *, alphabet: set[str], label: str) -> str:
@@ -168,6 +168,12 @@ class Alphafold3Input(ResearchBoundInput):
         return self
 
 
+class PepCCDInput(PepCCDParameters):
+    model_config = ConfigDict(extra="forbid")
+    research_run_id: UUID
+    iteration: int | None = Field(default=None, ge=0)
+
+
 TASK_INPUT_MODELS: dict[str, type[BaseModel]] = {
     "predict_binding_sites": BindingSiteInput,
     "predict_interaction": InteractionInput,
@@ -175,44 +181,14 @@ TASK_INPUT_MODELS: dict[str, type[BaseModel]] = {
     "search_sequence_homologs": SequenceHomologyInput,
     "search_structure_homologs": StructureHomologyInput,
     "generate_coral_candidates": CoralInput,
+    "generate_pepccd_candidates": PepCCDInput,
     "run_alphafold3": Alphafold3Input,
 }
-
-
-def validate_pepccd_input(input_json: dict) -> dict:
-    allowed = {
-        "research_run_id",
-        "protein_sequence",
-        "num_peptides",
-        "peptide_length",
-        "sample_batch_size",
-        "temperature",
-        "seed",
-        "device",
-        "iteration",
-    }
-    unknown = sorted(set(input_json) - allowed)
-    if unknown:
-        raise ValueError(f"Unsupported PepCCD input fields: {', '.join(unknown)}")
-    research_run_id = UUID(str(input_json.get("research_run_id") or ""))
-    try:
-        payload = build_pepccd_mcp_payload(input_json)
-    except MCPAdapterError as exc:
-        raise ValueError(str(exc)) from exc
-    result = {
-        "research_run_id": str(research_run_id),
-        **payload,
-    }
-    if input_json.get("iteration") is not None:
-        result["iteration"] = int(input_json["iteration"])
-    return result
 
 
 def validate_task_input(task_type: str, input_json: dict) -> dict:
     if not isinstance(input_json, dict):
         raise ValueError("Task input must be an object")
-    if task_type == "generate_pepccd_candidates":
-        return validate_pepccd_input(input_json)
     model = TASK_INPUT_MODELS.get(task_type)
     if model is None:
         raise ValueError(f"Unsupported worker task type: {task_type}")

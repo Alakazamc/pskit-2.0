@@ -2,6 +2,12 @@
 set -Eeuo pipefail
 
 root_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ -f "$root_dir/.env.schedule" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  . "$root_dir/.env.schedule"
+  set +a
+fi
 job="${1:-}"
 state_dir="${PSKIT_SCHEDULE_STATE_DIR:-$root_dir/.runtime/schedule}"
 log_dir="${PSKIT_SCHEDULE_LOG_DIR:-$root_dir/logs}"
@@ -34,16 +40,15 @@ fi
 run_job() {
   case "$job" in
     health)
-      PSKIT_HEALTH_URL="${PSKIT_HEALTH_URL:-https://pskit.bioailab.net}" \
-      PSKIT_BACKUP_ROOT="${PSKIT_BACKUP_ROOT:-/data1/enine/pskit-backups}" \
+      PSKIT_HEALTH_URL="${PSKIT_HEALTH_URL:-http://127.0.0.1:10716}" \
+      PSKIT_BACKUP_ROOT="${PSKIT_BACKUP_ROOT:-$root_dir/backups}" \
       PSKIT_DISK_PATH="${PSKIT_DISK_PATH:-/}" \
         "$root_dir/scripts/healthcheck_runtime.sh"
       ;;
     backup)
-      COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-pskit2-v020-smoke}" \
-      PSKIT_COMPOSE_FILES="${PSKIT_COMPOSE_FILES:-compose.yaml:compose.science.server.yaml:compose.gateway.server.yaml:compose.mcp.a6000.yaml}" \
-      PSKIT_EXTRA_CONFIG_FILES="${PSKIT_EXTRA_CONFIG_FILES:-.env.mcp}" \
-      PSKIT_BACKUP_ROOT="${PSKIT_BACKUP_ROOT:-/data1/enine/pskit-backups}" \
+      PSKIT_COMPOSE_FILES="${PSKIT_COMPOSE_FILES:-compose.yaml}" \
+      PSKIT_EXTRA_CONFIG_FILES="${PSKIT_EXTRA_CONFIG_FILES:-}" \
+      PSKIT_BACKUP_ROOT="${PSKIT_BACKUP_ROOT:-$root_dir/backups}" \
         "$root_dir/scripts/backup_runtime.sh" "$root_dir/.env.docker"
       ;;
   esac

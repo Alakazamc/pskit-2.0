@@ -1,12 +1,12 @@
 import json
-import threading
 from uuid import UUID
 from uuid import NAMESPACE_URL, uuid5
 
-from sqlalchemy import event, func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.db.locks import acquire_transaction_lock
 
 from app.db.models import (
     Candidate,
@@ -36,34 +36,6 @@ LONG_RUNNING_TOOL_NAMES = WORKER_TASK_NAMES | {"submit_research_top10_af3"}
 
 class TaskQuotaExceeded(ValueError):
     pass
-
-
-_sqlite_task_admission_lock = threading.Lock()
-_TASK_ADMISSION_LOCK_INFO_KEY = "pskit_task_admission_lock"
-
-
-@event.listens_for(Session, "after_transaction_end")
-def _release_task_admission_lock(db: Session, transaction) -> None:
-    if getattr(transaction, "parent", None) is not None:
-        return
-    lock = db.info.pop(_TASK_ADMISSION_LOCK_INFO_KEY, None)
-    if lock is not None:
-        lock.release()
-
-
-def _acquire_task_admission_lock(db: Session) -> None:
-    """Serialize quota check + insert for SQLite; use a DB lock on PostgreSQL."""
-
-    if db.info.get(_TASK_ADMISSION_LOCK_INFO_KEY) is not None:
-        return
-    dialect = db.get_bind().dialect.name
-    if dialect == "postgresql":
-        db.execute(text("SELECT pg_advisory_xact_lock(578248731)"))
-        return
-    if dialect != "sqlite":
-        raise RuntimeError(f"Unsupported task-admission database: {dialect}")
-    _sqlite_task_admission_lock.acquire()
-    db.info[_TASK_ADMISSION_LOCK_INFO_KEY] = _sqlite_task_admission_lock
 
 
 def _enforce_task_quotas(db: Session, user: User, task_type: str) -> None:
@@ -119,7 +91,7 @@ def create_queued_task(
     if task_type not in WORKER_TASK_NAMES:
         raise ValueError(f"Unsupported worker task type: {task_type}")
     input_json = validate_task_input(task_type, input_json)
-    _acquire_task_admission_lock(db)
+    acquire_transaction_lock(db, "tasks.admission")
     deterministic_id = None
     research_run_id = input_json.get("research_run_id")
     if deduplicate and (research_run_id or operation_id):
@@ -185,15 +157,15 @@ def create_retry_task(
 ) -> Task:
     """为失败尝试创建唯一后继；重复请求返回同一后继任务。"""
 
+    if parent.user_id != user.id:
+        raise ValueError("Task retry owner mismatch")
+    acquire_transaction_lock(db, "tasks.admission")
     existing_retry = db.get(TaskRetry, parent.id)
     if existing_retry is not None:
         existing_child = db.get(Task, existing_retry.child_task_id)
         if existing_child is None or existing_child.user_id != user.id:
             raise ValueError("Retry chain is inconsistent")
         return existing_child
-    if parent.user_id != user.id:
-        raise ValueError("Task retry owner mismatch")
-    _acquire_task_admission_lock(db)
     _enforce_task_quotas(db, user, parent.task_type)
     attempt_no = int((parent.output_json or {}).get("_worker_attempt", 0))
     child_id = uuid5(NAMESPACE_URL, f"pskit-task-retry:{parent.id}")

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
+from typing import Literal
+
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 
 class MCPAdapterError(RuntimeError):
@@ -27,39 +30,31 @@ PEPCCD_MCP_INPUT_FIELDS = frozenset(
 )
 
 
-def build_pepccd_mcp_payload(args: dict) -> dict:
-    protein_sequence = "".join(
-        character
-        for character in str(args.get("protein_sequence") or "")
-        if not character.isspace() and character != "-"
-    ).upper()
-    if not protein_sequence:
-        raise MCPAdapterError("protein_sequence is required")
-    if len(protein_sequence) > 4096:
-        raise MCPAdapterError("protein_sequence must contain at most 4096 residues")
+class PepCCDParameters(BaseModel):
+    """One validation contract for queue admission and the remote MCP request."""
 
-    payload = {
-        "protein_sequence": protein_sequence,
-        "num_peptides": int(args.get("num_peptides", 10)),
-        "peptide_length": int(args.get("peptide_length", 15)),
-        "sample_batch_size": int(args.get("sample_batch_size", 100)),
-        "temperature": float(args.get("temperature", 1.0)),
-        "seed": int(args["seed"]) if args.get("seed") is not None else None,
-        "device": str(args.get("device", "cuda:0")),
-    }
-    if not 1 <= payload["num_peptides"] <= 1000:
-        raise MCPAdapterError("num_peptides must be between 1 and 1000")
-    if not 1 <= payload["peptide_length"] <= 40:
-        raise MCPAdapterError("peptide_length must be between 1 and 40")
-    if not 1 <= payload["sample_batch_size"] <= 500:
-        raise MCPAdapterError("sample_batch_size must be between 1 and 500")
-    if not 0 < payload["temperature"] <= 5:
-        raise MCPAdapterError("temperature must be greater than 0 and at most 5")
-    if payload["seed"] is not None and not 0 <= payload["seed"] <= 4294967295:
-        raise MCPAdapterError("seed must be between 0 and 4294967295")
-    if payload["device"] not in {"cuda:0", "cuda:1", "cpu"}:
-        raise MCPAdapterError("device must be one of cuda:0, cuda:1, or cpu")
-    return payload
+    protein_sequence: str = Field(min_length=1, max_length=4096, pattern=r"^[ACDEFGHIKLMNPQRSTVWY]+$")
+    num_peptides: int = Field(default=10, ge=1, le=1000)
+    peptide_length: int = Field(default=15, ge=1, le=40)
+    sample_batch_size: int = Field(default=100, ge=1, le=500)
+    temperature: float = Field(default=1.0, gt=0, le=5)
+    seed: int | None = Field(default=None, ge=0, le=4294967295)
+    device: Literal["cuda:0", "cuda:1", "cpu"] = "cuda:0"
+
+    @field_validator("protein_sequence", mode="before")
+    @classmethod
+    def normalize_protein(cls, value):
+        if isinstance(value, str):
+            return "".join(value.split()).replace("-", "").upper()
+        return value
+
+
+def build_pepccd_mcp_payload(args: dict) -> dict:
+    try:
+        return PepCCDParameters.model_validate(args).model_dump(mode="json")
+    except ValidationError as exc:
+        fields = sorted({str(error["loc"][0]) for error in exc.errors()})
+        raise MCPAdapterError(f"Invalid PepCCD input fields: {', '.join(fields)}") from exc
 
 
 def _tool_name(tool: object) -> str:

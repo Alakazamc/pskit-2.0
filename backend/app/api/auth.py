@@ -12,6 +12,7 @@ from app.auth.passwords import hash_password, verify_password
 from app.auth.sessions import create_session, delete_session
 from app.config import get_settings
 from app.db.models import SystemState, User, now_utc
+from app.db.locks import acquire_transaction_lock
 from app.db.session import get_db
 from app.network import client_ip
 from app.schemas.auth import AuthRequest, UserResponse
@@ -93,6 +94,7 @@ def registration_status(db: Session = Depends(get_db)):
 
 @router.post("/register", response_model=UserResponse)
 def register(payload: AuthRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+    acquire_transaction_lock(db, "auth.bootstrap")
     existing = db.scalar(select(User).where(User.username == payload.username))
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid username or password")

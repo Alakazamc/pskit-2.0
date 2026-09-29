@@ -1,118 +1,21 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { nextTick, onMounted, onUnmounted, ref } from "vue";
 
 import EmptyState from "../components/EmptyState.vue";
 import MarkdownMessage from "../components/MarkdownMessage.vue";
 import StatusPill from "../components/StatusPill.vue";
-import {
-  ApiError,
-  activeAgentTurn,
-  api,
-  recoverAgentTurn,
-  streamAgentMessage,
-  type AgentMessage,
-  type AgentSession,
-  type StreamEvent,
-  type Task,
-} from "../lib/api";
+import { createAgentConversation } from "../lib/agentConversation";
 
-type ArtifactEvent = {
-  artifact_id: string;
-  filename?: string;
-  download_url?: string;
-};
-
-type SourceEvent = {
-  source?: string;
-  heading?: string;
-  score?: number;
-  content?: string;
-};
-
-type ToolEvent = {
-  type: string;
-  name?: string;
-  tool_call_id?: string;
-  task_id?: string;
-  task_type?: string;
-  status?: string;
-};
-
-const sessions = ref<AgentSession[]>([]);
-const activeSessionId = ref("");
-const messages = ref<AgentMessage[]>([]);
-const input = ref("");
-const loading = ref(true);
-const sending = ref(false);
-const error = ref("");
-const sources = ref<SourceEvent[]>([]);
-const ragBackend = ref("none");
-const artifacts = ref<ArtifactEvent[]>([]);
-const events = ref<ToolEvent[]>([]);
-const tasks = ref<Task[]>([]);
-const streamingAnswer = ref("");
-const suggestions = ref<string[]>([]);
 const messageListRef = ref<HTMLElement | null>(null);
+const conversation = createAgentConversation(() => void scrollToBottom());
+const {
+  sessions, activeSessionId, activeSession, messages, input, loading, sending,
+  error, notice, taskError, sources, ragBackend, artifacts, events, tasks,
+  streamingAnswer, suggestions, pendingApproval,
+  newSession, selectSession, approvePending,
+} = conversation;
 let taskPollTimer: number | undefined;
-let recovering = false;
-
-const activeSession = computed(() => sessions.value.find((item) => item.id === activeSessionId.value));
-
-async function loadSessions() {
-  sessions.value = await api.sessions();
-  if (!activeSessionId.value && sessions.value.length > 0) {
-    activeSessionId.value = sessions.value[0]?.id || "";
-  }
-}
-
-async function loadHistory() {
-  if (!activeSessionId.value) return;
-  messages.value = await api.sessionHistory(activeSessionId.value);
-  await scrollToBottom();
-}
-
-async function loadTasks() {
-  let loadedTasks: Task[];
-  try {
-    loadedTasks = await api.tasks();
-  } catch (err) {
-    error.value = err instanceof ApiError ? err.message : "无法刷新任务状态";
-    return;
-  }
-  tasks.value = loadedTasks;
-  const taskArtifacts = tasks.value
-    .filter((task) => !task.session_id || task.session_id === activeSessionId.value)
-    .flatMap((task) => task.artifacts)
-    .map((artifact) => ({
-      artifact_id: artifact.id,
-      filename: artifact.filename,
-      download_url: artifact.download_url,
-    }));
-  const merged = new Map(
-    [...artifacts.value, ...taskArtifacts].map((artifact) => [artifact.artifact_id, artifact]),
-  );
-  artifacts.value = [...merged.values()];
-}
-
-async function resumeActiveTurn() {
-  if (!activeSessionId.value || recovering || sending.value) return;
-  const active = await activeAgentTurn(activeSessionId.value);
-  if (!active) return;
-  recovering = true;
-  sending.value = true;
-  error.value = "检测到服务器仍在执行上一条消息，正在恢复进度…";
-  try {
-    await recoverAgentTurn(active.turn_id, handleStreamEvent);
-    await Promise.all([loadHistory(), loadSessions(), loadTasks()]);
-    streamingAnswer.value = "";
-    error.value = "";
-  } catch (err) {
-    error.value = err instanceof ApiError ? err.message : "无法恢复服务器任务";
-  } finally {
-    recovering = false;
-    sending.value = false;
-  }
-}
+let disposed = false;
 
 async function scrollToBottom() {
   await nextTick();
@@ -121,166 +24,23 @@ async function scrollToBottom() {
   }
 }
 
-async function boot() {
-  loading.value = true;
-  error.value = "";
-  try {
-    await loadSessions();
-    if (!activeSessionId.value) {
-      const session = await api.createSession("新对话");
-      sessions.value.unshift(session);
-      activeSessionId.value = session.id;
-    }
-    await Promise.all([loadHistory(), loadTasks()]);
-    void resumeActiveTurn();
-  } catch (err) {
-    error.value = err instanceof ApiError ? err.message : "无法加载智能体";
-  } finally {
-    loading.value = false;
-  }
-}
-
-async function newSession() {
-  const session = await api.createSession("新对话");
-  sessions.value.unshift(session);
-  activeSessionId.value = session.id;
-  messages.value = [];
-  sources.value = [];
-  artifacts.value = [];
-  events.value = [];
-  streamingAnswer.value = "";
-  suggestions.value = [];
-}
-
-async function selectSession(sessionId: string) {
-  activeSessionId.value = sessionId;
-  sources.value = [];
-  artifacts.value = [];
-  events.value = [];
-  streamingAnswer.value = "";
-  suggestions.value = [];
-  await loadHistory();
-  await loadTasks();
-  void resumeActiveTurn();
-}
-
-function handleStreamEvent(event: StreamEvent) {
-  if (event.type === "agent_step") {
-    events.value.unshift({
-      type: "agent_step",
-      name: String(event.label || "执行步骤"),
-      status: String(event.status || ""),
-    });
-    return;
-  }
-  if (event.type === "message_delta") {
-    streamingAnswer.value += String(event.delta || "");
-    void scrollToBottom();
-    return;
-  }
-  if (event.type === "suggestions") {
-    suggestions.value = Array.isArray(event.items) ? event.items.map((item) => String(item)) : [];
-    return;
-  }
-  if (event.type === "knowledge_sources") {
-    sources.value = (event.sources as SourceEvent[]) || [];
-    ragBackend.value = String(event.backend || "unknown");
-    return;
-  }
-  if (event.type === "artifact_created") {
-    const artifact = event.artifact as ArtifactEvent | undefined;
-    if (artifact) artifacts.value.unshift(artifact);
-    return;
-  }
-  if (event.type === "task_created") {
-    events.value.unshift({
-      type: "task_created",
-      task_id: String(event.task_id || ""),
-      task_type: String(event.task_type || ""),
-      status: String(event.status || ""),
-    });
-    void loadTasks();
-    return;
-  }
-  if (event.type === "task_update") {
-    events.value.unshift({
-      type: "task_update",
-      task_id: String(event.task_id || ""),
-      task_type: String(event.task_type || ""),
-      status: String(event.status || ""),
-    });
-    void loadTasks();
-    return;
-  }
-  if (event.type === "tool_call_started" || event.type === "tool_call_finished") {
-    events.value.unshift({
-      type: event.type,
-      name: String(event.name || ""),
-      tool_call_id: String(event.tool_call_id || ""),
-    });
-    return;
-  }
-  if (event.type === "error") {
-    events.value.unshift({ type: "error", status: JSON.stringify(event.error || event.message || event) });
-  }
+function sendMessage() {
+  return conversation.sendMessage();
 }
 
 function useSuggestion(suggestion: string) {
   input.value = suggestion;
 }
 
-async function sendMessage() {
-  const content = input.value.trim();
-  if (!content || !activeSessionId.value || sending.value) return;
-  sending.value = true;
-  input.value = "";
-  error.value = "";
-  streamingAnswer.value = "";
-  suggestions.value = [];
-  messages.value.push({
-    id: `local-${Date.now()}`,
-    role: "user",
-    content,
-    created_at: new Date().toISOString(),
-    metadata: {},
-  });
-  void scrollToBottom();
-  const turnId = crypto.randomUUID();
-  try {
-    await streamAgentMessage(activeSessionId.value, content, handleStreamEvent, turnId);
-    await Promise.all([loadHistory(), loadSessions(), loadTasks()]);
-    streamingAnswer.value = "";
-  } catch (err) {
-    if (err instanceof ApiError && ![0, 409].includes(err.status)) {
-      error.value = err.message;
-      sending.value = false;
-      return;
-    }
-    try {
-      const active = await activeAgentTurn(activeSessionId.value);
-      if (active) {
-        await recoverAgentTurn(active.turn_id, handleStreamEvent);
-      }
-      await Promise.all([loadHistory(), loadSessions(), loadTasks()]);
-      streamingAnswer.value = "";
-      error.value = "";
-    } catch (recoveryError) {
-      error.value = recoveryError instanceof ApiError
-        ? recoveryError.message
-        : err instanceof ApiError
-          ? err.message
-          : "消息连接中断；服务器可能仍在运行，请稍后刷新本会话";
-    }
-  } finally {
-    sending.value = false;
-  }
-}
-
 onMounted(async () => {
-  await boot();
-  taskPollTimer = window.setInterval(() => void loadTasks(), 3000);
+  await conversation.boot();
+  if (!disposed) taskPollTimer = window.setInterval(() => void conversation.loadTasks(), 3000);
 });
-onUnmounted(() => window.clearInterval(taskPollTimer));
+onUnmounted(() => {
+  disposed = true;
+  window.clearInterval(taskPollTimer);
+  conversation.dispose();
+});
 </script>
 
 <template>
@@ -290,6 +50,7 @@ onUnmounted(() => window.clearInterval(taskPollTimer));
         <strong>对话记录</strong>
         <button
           class="mini-button"
+          :disabled="loading"
           @click="newSession"
         >
           新建
@@ -320,6 +81,13 @@ onUnmounted(() => window.clearInterval(taskPollTimer));
         class="error-line"
       >
         {{ error }}
+      </p>
+      <p
+        v-if="notice"
+        class="muted"
+        role="status"
+      >
+        {{ notice }}
       </p>
       <EmptyState
         v-if="!loading && messages.length === 0"
@@ -362,6 +130,22 @@ onUnmounted(() => window.clearInterval(taskPollTimer));
           {{ suggestion }}
         </button>
       </div>
+      <div
+        v-if="pendingApproval"
+        class="rail-card"
+        role="region"
+        aria-label="待确认操作"
+      >
+        <strong>{{ pendingApproval.tool_name }} 需要确认</strong>
+        <p>{{ pendingApproval.message || "该工具可能消耗较多计算资源，确认后开始执行。" }}</p>
+        <button
+          class="primary-button"
+          :disabled="sending || loading"
+          @click="approvePending"
+        >
+          确认执行
+        </button>
+      </div>
       <form
         class="composer"
         @submit.prevent="sendMessage"
@@ -375,7 +159,7 @@ onUnmounted(() => window.clearInterval(taskPollTimer));
         />
         <button
           class="primary-button"
-          :disabled="sending || !input.trim()"
+          :disabled="sending || loading || !activeSessionId || !input.trim()"
         >
           发送
         </button>
@@ -392,8 +176,8 @@ onUnmounted(() => window.clearInterval(taskPollTimer));
           暂无工具事件。
         </div>
         <div
-          v-for="event in events.slice(0, 6)"
-          :key="`${event.type}-${event.tool_call_id}-${event.task_id}`"
+          v-for="(event, index) in events.slice(0, 6)"
+          :key="index"
           class="rail-row"
         >
           <strong>{{ event.name || event.task_type || event.type }}</strong>
@@ -442,6 +226,12 @@ onUnmounted(() => window.clearInterval(taskPollTimer));
 
       <div class="rail-card">
         <span class="card-label">最近任务</span>
+        <p
+          v-if="taskError"
+          class="error-line"
+        >
+          {{ taskError }}
+        </p>
         <div
           v-if="tasks.length === 0"
           class="muted"

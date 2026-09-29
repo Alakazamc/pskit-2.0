@@ -11,9 +11,12 @@ delivery="$root_dir/dist/pskit2-${version}-offline-delivery.tar"
 delivery_checksum="$delivery.sha256"
 file_list="$(mktemp /tmp/pskit-delivery-files.XXXXXX)"
 raw_list="$(mktemp /tmp/pskit-delivery-raw.XXXXXX)"
+manifest_dir="$(mktemp -d /tmp/pskit-delivery-manifest.XXXXXX)"
 
 cleanup() {
   rm -f "$file_list" "$raw_list"
+  rm -f "$manifest_dir/SOURCE_MANIFEST.txt"
+  rmdir "$manifest_dir"
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -27,31 +30,25 @@ else
 fi
 
 cd "$root_dir"
-find . \
-  \( -path './.git' \
-    -o -path './.mypy_cache' \
-    -o -path './.pytest_cache' \
-    -o -path './.ruff_cache' \
-    -o -path './backend/.mypy_cache' \
-    -o -path './backend/.pytest_cache' \
-    -o -path './backend/.ruff_cache' \
-    -o -path './backend/.venv' \
-    -o -path './backend/data' \
-    -o -path './data' \
-    -o -path './dist' \
-    -o -path './frontend/dist' \
-    -o -path './frontend/node_modules' \
-    -o -name '__pycache__' \) -prune \
-  -o -type f -print >"$raw_list"
+if git rev-parse --show-toplevel >/dev/null 2>&1 \
+  && [ -z "$(git rev-parse --show-prefix)" ]; then
+  git -c core.quotepath=false ls-files >"$raw_list"
+elif [ -f SOURCE_MANIFEST.txt ]; then
+  # A prior offline delivery carries the same explicit source allowlist.
+  cat SOURCE_MANIFEST.txt >"$raw_list"
+else
+  echo "Export requires a Git checkout or the original SOURCE_MANIFEST.txt" >&2
+  exit 2
+fi
 
 sed 's,^\./,,' "$raw_list" | sort | while IFS= read -r path; do
   case "$path" in
     .env.example|.env.docker.example)
       ;;
-    .env|.env.*|.runtime.env|*.pem|*.key|*.sqlite|*.sqlite3|*.db|*.pth|*.pt|*.safetensors|*.onnx)
+    .env|.env.*|*/.env|*/.env.*|.runtime.env|*/.runtime.env|*.pem|*.key|*.sqlite|*.sqlite3|*.db|*.pth|*.pt|*.safetensors|*.onnx)
       continue
       ;;
-    backend/data/*|data/*|tasks/*|artifacts/*|uploads/*|logs/*|model_parameters/*|references/*)
+    backend/data/*|data/*|tasks/*|artifacts/*|uploads/*|logs/*|model_parameters/*|references/*|secrets/*|*/secrets/*|backups/*|.runtime/*|.audit-data/*)
       continue
       ;;
     DEPLOYMENT.md|docs/*|scripts/start_a6000.sh)
@@ -61,16 +58,22 @@ sed 's,^\./,,' "$raw_list" | sort | while IFS= read -r path; do
       continue
       ;;
   esac
+  case "$path" in
+    /*|../*|*/../*|SOURCE_MANIFEST.txt) continue ;;
+  esac
+  [ -f "$path" ] && [ ! -L "$path" ] || continue
   printf '%s\n' "$path"
 done >"$file_list"
 
+cp "$file_list" "$manifest_dir/SOURCE_MANIFEST.txt"
 printf '%s\n' \
   "dist/$image_name" \
   "dist/$image_name.sha256" >>"$file_list"
 
 tar -cf "$delivery" \
   --transform="s,^,pskit2-${version}/," \
-  -T "$file_list"
+  -T "$file_list" \
+  -C "$manifest_dir" SOURCE_MANIFEST.txt
 
 (
   cd "$(dirname "$delivery")"

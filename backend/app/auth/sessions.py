@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.db.locks import acquire_transaction_lock
 from app.db.models import AuthSession, User, ensure_utc, now_utc
 
 
@@ -27,6 +28,7 @@ def create_session(
     settings = get_settings()
     now = now_utc()
     maximum = max(1, int(os.getenv("PSKIT_MAX_ACTIVE_SESSIONS_PER_USER", "5")))
+    acquire_transaction_lock(db, f"auth.sessions:{user.id}")
     active = db.scalars(
         select(AuthSession)
         .where(AuthSession.user_id == user.id)

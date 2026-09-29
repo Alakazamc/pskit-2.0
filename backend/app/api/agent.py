@@ -8,7 +8,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -33,6 +33,7 @@ from app.db.models import (
     ensure_utc,
     now_utc,
 )
+from app.db.locks import acquire_transaction_lock
 from app.db.session import SessionLocal, get_db
 from app.research.context import resolve_session_research_context
 from app.schemas.agent import (
@@ -45,6 +46,43 @@ from app.schemas.agent import (
 
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
+
+
+class AgentTurnQuotaExceeded(ValueError):
+    def __init__(self, error_type: str, message: str, limit: int):
+        super().__init__(message)
+        self.error_type = error_type
+        self.limit = limit
+
+
+def _enforce_agent_turn_quotas(db: Session, user: User) -> None:
+    settings = get_settings()
+    active_statuses = ("queued", "running")
+    global_active = db.scalar(
+        select(func.count())
+        .select_from(AgentTurn)
+        .where(AgentTurn.status.in_(active_statuses))
+    ) or 0
+    if global_active >= settings.max_global_active_agent_turns:
+        raise AgentTurnQuotaExceeded(
+            "agent_turn_global_limit",
+            "Agent 任务队列已满，请稍后重试。",
+            settings.max_global_active_agent_turns,
+        )
+    user_active = db.scalar(
+        select(func.count())
+        .select_from(AgentTurn)
+        .where(
+            AgentTurn.user_id == user.id,
+            AgentTurn.status.in_(active_statuses),
+        )
+    ) or 0
+    if user_active >= settings.max_active_agent_turns_per_user:
+        raise AgentTurnQuotaExceeded(
+            "agent_turn_user_limit",
+            "当前账号等待或运行中的 Agent 任务过多，请等待现有任务完成。",
+            settings.max_active_agent_turns_per_user,
+        )
 
 
 def agent_stream_response(stream) -> StreamingResponse:
@@ -110,7 +148,12 @@ def load_owned_session(db: Session, user: User, session_id: UUID) -> AgentSessio
     return session
 
 
-def expire_stale_agent_turn(db: Session, turn: AgentTurn) -> bool:
+def expire_stale_agent_turn(
+    db: Session,
+    turn: AgentTurn,
+    *,
+    commit: bool = True,
+) -> bool:
     """以租约或更新时间为条件原子回收失联轮次。"""
 
     if turn.status != "running":
@@ -147,10 +190,76 @@ def expire_stale_agent_turn(db: Session, turn: AgentTurn) -> bool:
         )
     )
     if expired.rowcount == 1:
-        db.commit()
+        if commit:
+            db.commit()
         return True
-    db.rollback()
+    if commit:
+        db.rollback()
     return False
+
+
+def expire_stale_agent_turns_for_admission(
+    db: Session,
+    *,
+    limit: int = 100,
+) -> int:
+    """Bound quota cleanup without touching live queued or running work."""
+
+    now = now_utc()
+    stale_before = now - timedelta(seconds=get_settings().agent_turn_stale_seconds)
+    expired_count = 0
+    running_candidates = db.scalars(
+        select(AgentTurn)
+        .where(AgentTurn.status == "running")
+        .order_by(AgentTurn.updated_at.asc())
+        .limit(limit)
+    ).all()
+    for turn in running_candidates:
+        if expire_stale_agent_turn(db, turn, commit=False):
+            expired_count += 1
+
+    remaining = max(limit - expired_count, 0)
+    if remaining == 0:
+        return expired_count
+    queued_candidates = db.scalars(
+        select(AgentTurn)
+        .where(
+            AgentTurn.status == "queued",
+            AgentTurn.updated_at < stale_before,
+            AgentTurn.lease_expires_at.is_not(None),
+            AgentTurn.lease_expires_at < now,
+        )
+        .order_by(AgentTurn.updated_at.asc())
+        .limit(remaining)
+    ).all()
+    for turn in queued_candidates:
+        # The local registry closes the tiny window between reserving a Future
+        # and starting its persistent dispatcher heartbeat. Other processes
+        # remain visible through their unexpired database dispatch lease.
+        if is_agent_turn_scheduled(turn.id):
+            continue
+        expired = db.execute(
+            update(AgentTurn)
+            .where(
+                AgentTurn.id == turn.id,
+                AgentTurn.status == "queued",
+                AgentTurn.updated_at == turn.updated_at,
+                AgentTurn.lease_owner == turn.lease_owner,
+                AgentTurn.lease_expires_at == turn.lease_expires_at,
+            )
+            .values(
+                status="failed",
+                error_code="agent_turn_dispatch_stale",
+                active_session_key=None,
+                lease_token=None,
+                lease_owner=None,
+                lease_expires_at=None,
+                finished_at=now,
+                updated_at=now,
+            )
+        )
+        expired_count += int(expired.rowcount == 1)
+    return expired_count
 
 
 def reserve_queued_turn_dispatch(db: Session, turn: AgentTurn) -> bool:
@@ -499,10 +608,6 @@ def send_message(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    session = load_owned_session(db, user, session_id)
-    # ADR 0012：不再由客户端绑定科研运行。已有研究上下文按会话只读解析；没有
-    # 上下文时保持为空，直到某个需要归属的科研工具首次执行才惰性建立。
-    research_run = resolve_session_research_context(db, user, session.id, create=False)
     request_hash = hashlib.sha256(
         json.dumps(
             {"content": payload.content, "approval_id": payload.approval_id},
@@ -510,6 +615,14 @@ def send_message(
             sort_keys=True,
         ).encode("utf-8")
     ).hexdigest()
+    # The transaction-scoped lock makes the quota check and insert one admission
+    # decision across every web process. It is deliberately acquired before DB
+    # reads so SQLite does not need to upgrade a stale read snapshot to a writer.
+    acquire_transaction_lock(db, "agents.admission")
+    session = load_owned_session(db, user, session_id)
+    # ADR 0012：不再由客户端绑定科研运行。已有研究上下文按会话只读解析；没有
+    # 上下文时保持为空，直到某个需要归属的科研工具首次执行才惰性建立。
+    research_run = resolve_session_research_context(db, user, session.id, create=False)
     existing_turn = db.scalar(
         select(AgentTurn).where(
             AgentTurn.user_id == user.id,
@@ -519,19 +632,29 @@ def send_message(
     )
     if existing_turn is not None:
         if existing_turn.request_hash != request_hash:
+            db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="turn_id has already been used for a different request",
             )
+        # Release the cross-process admission lock before the long-lived stream.
+        # Idempotent replay is allowed even while all new-turn slots are full.
+        db.commit()
         return agent_stream_response(stream_existing_agent_turn(existing_turn.id))
 
+    expire_stale_agent_turns_for_admission(db)
     active_key = f"{user.id}:{session.id}"
     active_turn = db.scalar(
         select(AgentTurn).where(AgentTurn.active_session_key == active_key)
     )
-    if active_turn is not None and expire_stale_agent_turn(db, active_turn):
+    if active_turn is not None and expire_stale_agent_turn(
+        db,
+        active_turn,
+        commit=False,
+    ):
         active_turn = None
     if active_turn is not None:
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -540,6 +663,19 @@ def send_message(
                 "turn_id": str(active_turn.client_turn_id),
             },
         )
+    try:
+        _enforce_agent_turn_quotas(db, user)
+    except AgentTurnQuotaExceeded as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "error_type": exc.error_type,
+                "message": str(exc),
+                "limit": exc.limit,
+            },
+            headers={"Retry-After": "5"},
+        ) from exc
 
     user_message = AgentMessage(
         session_id=session.id,

@@ -12,6 +12,10 @@ export const useAuthStore = defineStore("auth", {
     isAdmin: (state) => state.user?.role === "admin",
   },
   actions: {
+    clearSession() {
+      this.user = null;
+      this.loaded = true;
+    },
     async loadMe() {
       try {
         this.user = await api.me();
@@ -37,8 +41,7 @@ export const useAuthStore = defineStore("auth", {
       try {
         await api.logout();
       } finally {
-        this.user = null;
-        this.loaded = true;
+        this.clearSession();
       }
     },
   },

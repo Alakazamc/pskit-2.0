@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-base_url="${PSKIT_HEALTH_URL:-https://pskit.bioailab.net}"
-backup_root="${PSKIT_BACKUP_ROOT:-/data1/enine/pskit-backups}"
+root_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+base_url="${PSKIT_HEALTH_URL:-http://127.0.0.1:10716}"
+backup_root="${PSKIT_BACKUP_ROOT:-$root_dir/backups}"
 disk_path="${PSKIT_DISK_PATH:-/}"
 max_disk_percent="${PSKIT_MAX_DISK_PERCENT:-92}"
 max_backup_age_hours="${PSKIT_MAX_BACKUP_AGE_HOURS:-26}"

@@ -11,6 +11,11 @@ The core image is intentionally separate from the licensed BioAI runtime. On
 an A6000 host with the legacy PSKit tree, model parameters, Foldseek and DSSP
 already installed, start the science worker with the read-only overlay:
 
+Set `PSKIT_SCIENCE_BASE_IMAGE` in `.env.docker` to the licensed runtime image
+available on the build host. It must contain `/opt/pskit-legacy-venv`, `tini`,
+and the `pskit` user. The project does not publish that private base image or
+its model weights; a clean checkout alone can build only the core image.
+
 ```bash
 docker compose -f compose.yaml -f compose.science.a6000.example.yaml \
   --env-file .env.docker up -d --no-deps worker
@@ -29,6 +34,12 @@ the current legacy wrapper launches its image through Docker, so enabling it
 requires the separately documented `compose.alphafold3.a6000.example.yaml`
 overlay and an explicit security review:
 
+Set `PSKIT_DOCKER_GID` to `stat -c %g /var/run/docker.sock` on the host. For
+nested Docker mounts, set `PSKIT_DATA_VOLUME` and `PSKIT_DATA_DIR` to the same
+absolute host directory, owned by the science worker's UID. Leave
+`PSKIT_DATABASE_URL` and `PSKIT_ARTIFACT_DIR` unset to derive both from that
+directory. Existing overrides must be updated when moving the data directory.
+
 ```bash
 docker compose -f compose.yaml \
   -f compose.science.a6000.example.yaml \
@@ -38,6 +49,10 @@ docker compose -f compose.yaml \
 
 Never place provider keys or model weights in the repository. Keep them in
 the server-only `.env.docker` file and mounted data directories.
+
+The science overlay preserves the same absolute host/container paths for AF3
+database and model mounts. Keep this property in custom overlays: mounting
+Docker's socket does not expose container-only paths to Docker on the host.
 
 ## What is included
 
@@ -114,6 +129,13 @@ at `/admin/users`.
 docker compose --env-file .env.docker ps
 docker compose --env-file .env.docker logs --tail 100 web worker qdrant
 ```
+
+The smoke script needs Python 3 and curl. On a fresh database, export
+`PSKIT_SMOKE_BOOTSTRAP_TOKEN` with the server's initial bootstrap token first,
+or finish `/register` and use an existing test account through
+`PSKIT_SMOKE_USERNAME` / `PSKIT_SMOKE_PASSWORD`. The first smoke-created user
+becomes the administrator; run it only on a test installation when exercising
+first-admin bootstrap. It tests delivery/authentication, not model inference.
 
 PowerShell health check:
 
@@ -197,6 +219,27 @@ This creates `dist/pskit2-0.3.0-offline-delivery.tar` and its SHA-256 file.
 The outer archive is intentionally uncompressed because its largest member is
 already gzip-compressed.
 
+Only tracked source files (or the included `SOURCE_MANIFEST.txt` when
+re-exporting an offline delivery) are included. Untracked notes, runtime
+folders, nested `.env` files and `secrets/` are excluded. Commit intended
+source changes before exporting.
+
+To include an already provisioned science image, pass the same overlays used
+by that deployment:
+
+```bash
+PSKIT_COMPOSE_FILES=compose.yaml:compose.science.a6000.example.yaml \
+  ./scripts/export_offline_delivery.sh .env.docker
+```
+
+This includes the configured science image, but never the mounted legacy
+source, model weights or AF3 databases. Recipients must provision those
+licensed assets and configure the same overlays. The default core export
+does not include science images.
+The separate AF3 execution image (`PSKIT_AF3_IMAGE`) must also be provisioned
+on the recipient's Docker host; it is not a Compose service image and is not
+included by this exporter.
+
 If both images are already present and the build machine is offline, skip the
 rebuild and export the verified local images:
 
@@ -219,6 +262,7 @@ sha256sum -c pskit2-0.3.0-linux-amd64-images.tar.gz.sha256
 gzip -dc pskit2-0.3.0-linux-amd64-images.tar.gz | docker load
 cd ..
 cp .env.docker.example .env.docker
+# Edit .env.docker and set INITIAL_ADMIN_BOOTSTRAP_TOKEN (at least 24 random characters).
 docker compose --env-file .env.docker up -d --no-build --pull never --wait
 ```
 
@@ -226,6 +270,23 @@ Compose runs the database migration service before starting the web process.
 Run `scripts/backup_runtime.sh` before upgrading an existing installation.
 When upgrading from 0.1.0, the oldest account is promoted to administrator only
 if the database does not already contain an administrator.
+
+An older expanded database is stamped as revision 0003 only after verifying
+its existing columns, keys, indexes and constraints. Incompatible partial
+schemas are rejected with diagnostics instead of silently marked migrated;
+restore a known backup or apply an explicit repair before retrying.
+
+Backups default to the project's `backups/` directory. Artifacts and vector
+snapshots stream directly to that directory, outside the container's bounded
+`/tmp`. If no vector collection has been built, `qdrant.json` records
+`present: false` and the remaining application data is still backed up.
+Configure `PSKIT_BACKUP_ROOT`, `PSKIT_COMPOSE_FILES`, and optional
+`PSKIT_EXTRA_CONFIG_FILES` for a server's storage and overlays. Keep this
+directory private: it includes user data and server configuration.
+
+Agent admission is limited separately from scientific tasks:
+`PSKIT_MAX_ACTIVE_AGENT_TURNS_PER_USER=4` and
+`PSKIT_MAX_GLOBAL_ACTIVE_AGENT_TURNS=16` are the default concurrency caps.
 
 ## Security checklist
 

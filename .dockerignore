@@ -35,6 +35,10 @@ frontend/dist
 !frontend/dist/
 !frontend/dist/**
 secrets
+backups
+.runtime
+.audit-data
+backend/.pytest-tmp
 *.pem
 *.key
 .pytest_cache
