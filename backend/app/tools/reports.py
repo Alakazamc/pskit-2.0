@@ -28,7 +28,39 @@ from app.db.models import (
 
 def compact(value: object, limit: int = 1200) -> str:
     text = "" if value is None else str(value)
-    return text if len(text) <= limit else text[:limit] + "\n..."
+    return (
+        text
+        if len(text) <= limit
+        else text[:limit] + f"… [已截断 {len(text) - limit} 字符]"
+    )
+
+
+def research_evidence_lines(research_run: ResearchRun, *, max_items: int = 20) -> list[str]:
+    evidence = list(research_run.evidence_json or [])
+    lines = [
+        f"- 证据记录数：{len(evidence)}（以下最多展示 {max_items} 条；完整记录见 "
+        f"`GET /api/research-runs/{research_run.id}`）",
+    ]
+    for index, item in enumerate(evidence[:max_items], start=1):
+        if not isinstance(item, dict):
+            lines.append(f"- 证据 {index}：`{compact(item, 1200)}`")
+            continue
+        provenance = item.get("provenance") or {}
+        provenance_kind = provenance.get("kind") if isinstance(provenance, dict) else None
+        result = item.get("result_summary") or {}
+        task_status = result.get("status") if isinstance(result, dict) else None
+        lines.append(
+            f"- 证据 {index}：id=`{item.get('evidence_id') or '未记录'}`；"
+            f"来源=`{provenance_kind or '未记录'}`；"
+            f"阶段=`{item.get('stage_at_execution') or '未记录'}`；"
+            f"靶标哈希=`{item.get('target_hash') or '未记录'}`；"
+            f"工具=`{item.get('tool_name') or '未记录'}`；"
+            f"任务状态=`{task_status or '不适用'}`"
+        )
+        lines.append(f"  - 记录摘要：`{compact(item, 1200)}`")
+    if len(evidence) > max_items:
+        lines.append(f"- 另有 {len(evidence) - max_items} 条证据未在本报告展开，须通过上方 API 核对。")
+    return lines
 
 
 def generate_session_report(
@@ -223,11 +255,9 @@ def generate_research_report(
         "## 2. 阶段状态与证据",
         "",
         f"- 阶段状态：`{compact(report_stage_state, 5000)}`",
-        f"- 证据：`{compact(research_run.evidence_json, 5000)}`",
-        "",
-        "## 3. 候选生成、评分与筛选",
-        "",
     ]
+    lines.extend(research_evidence_lines(research_run))
+    lines.extend(["", "## 3. 候选生成、评分与筛选", ""])
     for track_name, label in (("rna", "RNA 候选轨道"), ("peptide", "多肽候选轨道")):
         track = next((item for item in tracks if item.track == track_name), None)
         rows = [item for item in candidates if item.track == track_name]
@@ -252,6 +282,27 @@ def generate_research_report(
                 f"{candidate.rank or '—'} | `{candidate.id}` | `{candidate.sequence}` | "
                 f"{candidate.generator_name} | {total_score} | {candidate.selection_status} | "
                 f"{candidate.af3_status or '未提交'} |"
+            )
+        lines.extend(["", "候选溯源（缺失字段明确标为未记录）：", ""])
+        for candidate in rows:
+            metadata = candidate.metadata_json or {}
+            lines.append(
+                f"- `{candidate.id}`：生成器版本=`{candidate.generator_version or '未记录'}`；"
+                f"生成任务 ID=`{candidate.generation_task_id or '未记录'}`；"
+                f"原始产物 ID=`{candidate.raw_artifact_id or '未记录'}`；"
+                f"参数哈希=`{candidate.parameters_hash or '未记录'}`；"
+                f"靶标哈希=`{metadata.get('target_hash') or '未记录'}`；"
+                f"迭代={candidate.iteration}；种子=`{candidate.seed if candidate.seed is not None else '未记录'}`"
+            )
+            lines.append(
+                f"  - 原始指标：`{compact(candidate.raw_metrics_json or {}, 800)}`；"
+                f"归一化指标：`{compact(candidate.normalized_metrics_json or {}, 800)}`；"
+                f"评分版本=`{candidate.score_config_version or '未记录'}`"
+            )
+            lines.append(
+                f"  - AF3 任务 ID=`{candidate.af3_task_id or '未提交'}`；"
+                f"结构产物 ID=`{candidate.af3_artifact_id or '未记录'}`；"
+                f"结果产物 ID=`{metadata.get('af3_result_artifact_id') or '未记录'}`"
             )
         lines.append("")
 

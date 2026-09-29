@@ -631,7 +631,18 @@ def update_research_run(
         timestamp = now_utc().isoformat()
         manual_evidence = updates.pop("evidence")
         target_hash = canonical_target_hash(research_run.target_json or {})
-        research_run.evidence_json = [
+        # PATCH replaces the manual annotations, not server-produced evidence.
+        # Tool execution records must remain available for later audit/reporting.
+        server_evidence = [
+            item
+            for item in research_run.evidence_json or []
+            if not (
+                isinstance(item, dict)
+                and isinstance(item.get("provenance"), dict)
+                and item["provenance"].get("kind") == "manual"
+            )
+        ]
+        research_run.evidence_json = server_evidence + [
             {
                 **item,
                 "evidence_id": str(

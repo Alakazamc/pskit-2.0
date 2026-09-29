@@ -66,6 +66,9 @@ For deployment or transfer to another machine, use the verified Docker path in
 [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md). The steps below are for native
 development.
 
+For the current A6000 installation, file locations, operating boundaries, and
+live scientific acceptance checklist, see the [Chinese operator handoff](docs/OPERATOR_HANDOFF_CN.md).
+
 ### 1. Clone
 
 ```bash
