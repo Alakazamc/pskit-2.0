@@ -265,8 +265,8 @@ class TrackScoreResponse(BaseModel):
 
 class CreateAf3BatchRequest(BaseModel):
     max_candidates: int = Field(default=10, ge=1, le=10)
-    model_seed: int = 42
-    num_diffusion_samples: int = Field(default=5, ge=1)
+    model_seed: int = Field(default=42, ge=0, le=4294967295)
+    num_diffusion_samples: int = Field(default=5, ge=1, le=20)
 
 
 class Af3BatchResponse(BaseModel):

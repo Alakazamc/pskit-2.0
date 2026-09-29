@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.agent.execution import recent_chat_messages
 from app.artifacts.service import register_local_artifact
-from app.db.models import AgentMessage, AgentSession, User, now_utc
+from app.db.models import AgentMessage, AgentSession, Task, User, now_utc
 from app.db.session import SessionLocal, init_db
 from app.config import get_settings
 from app.main import app
@@ -142,6 +142,57 @@ def test_task_session_ownership_is_enforced():
         },
     )
     assert forbidden.status_code == 404
+
+
+def test_task_list_filters_by_owned_session_before_pagination():
+    owner = TestClient(app)
+    other = TestClient(app)
+    owner_user = owner.post(
+        "/api/auth/register",
+        json={"username": "task_owner_" + uuid.uuid4().hex[:10], "password": "password123"},
+    ).json()
+    other.post(
+        "/api/auth/register",
+        json={"username": "task_other_" + uuid.uuid4().hex[:10], "password": "password123"},
+    )
+    old_session = owner.post("/api/agent/sessions", json={"title": "Old"}).json()["id"]
+    new_session = owner.post("/api/agent/sessions", json={"title": "New"}).json()["id"]
+    started = now_utc()
+    with SessionLocal() as db:
+        old_tasks = [
+            Task(
+                user_id=uuid.UUID(owner_user["id"]), session_id=uuid.UUID(old_session),
+                task_type="predict_interaction", status="succeeded",
+                created_at=started + timedelta(seconds=index),
+            )
+            for index in range(2)
+        ]
+        newer_tasks = [
+            Task(
+                user_id=uuid.UUID(owner_user["id"]), session_id=uuid.UUID(new_session),
+                task_type="predict_interaction", status="succeeded",
+                created_at=started + timedelta(seconds=index + 2),
+            )
+            for index in range(101)
+        ]
+        db.add_all([*old_tasks, *newer_tasks])
+        db.flush()
+        old_ids = [str(task.id) for task in old_tasks]
+        db.commit()
+
+    unfiltered = owner.get("/api/tasks")
+    assert unfiltered.status_code == 200
+    assert len(unfiltered.json()) == 100
+    assert all(item["id"] not in old_ids for item in unfiltered.json())
+
+    first = owner.get("/api/tasks", params={"session_id": old_session, "limit": 1, "offset": 0})
+    second = owner.get("/api/tasks", params={"session_id": old_session, "limit": 1, "offset": 1})
+    assert first.status_code == second.status_code == 200
+    assert [first.json()[0]["id"], second.json()[0]["id"]] == old_ids[::-1]
+    assert owner.get("/api/tasks", params={"session_id": old_session, "limit": 1, "offset": 2}).json() == []
+    assert len(owner.get("/api/tasks", params={"session_id": new_session, "limit": 200}).json()) == 101
+    assert other.get("/api/tasks", params={"session_id": old_session}).status_code == 404
+    assert owner.get("/api/tasks", params={"session_id": str(uuid.uuid4())}).status_code == 404
 
 
 def test_invalid_task_type_and_oversized_sequence_are_rejected():

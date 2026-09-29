@@ -181,9 +181,9 @@ def test_admission_reclaims_orphaned_queued_dispatch_after_restart(monkeypatch):
         orphan = db.query(AgentTurn).filter_by(client_turn_id=orphan_turn_id).one()
         orphan.lease_owner = "dispatcher:stopped-server"
         orphan.lease_expires_at = now_utc() - timedelta(seconds=1)
-        orphan.updated_at = now_utc() - timedelta(
-            seconds=settings.agent_turn_stale_seconds + 1
-        )
+        # The dispatch lease may expire soon after a crash, while the turn's
+        # updated_at is still recent. It must not occupy quota for 15 minutes.
+        orphan.updated_at = now_utc()
         db.commit()
         orphan_server_turn_id = orphan.id
     finally:
@@ -200,3 +200,30 @@ def test_admission_reclaims_orphaned_queued_dispatch_after_restart(monkeypatch):
         assert expired.error_code == "agent_turn_dispatch_stale"
     finally:
         db.close()
+
+
+def test_admission_preserves_queued_turn_with_local_future(monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "max_active_agent_turns_per_user", 10)
+    monkeypatch.setattr(settings, "max_global_active_agent_turns", 1)
+    first_user_id, first_sessions = _create_user_with_sessions("agent-local-future", 1)
+    second_user_id, second_sessions = _create_user_with_sessions("agent-local-waiter", 1)
+    _submit(first_user_id, first_sessions[0], uuid4())
+
+    with SessionLocal() as db:
+        queued = db.scalar(select(AgentTurn).where(AgentTurn.user_id == first_user_id))
+        assert queued is not None
+        queued_id = queued.id
+        queued.lease_expires_at = now_utc() - timedelta(seconds=1)
+        db.commit()
+
+    monkeypatch.setattr("app.api.agent.is_agent_turn_scheduled", lambda turn_id: turn_id == queued_id)
+    with pytest.raises(HTTPException) as limited:
+        _submit(second_user_id, second_sessions[0], uuid4())
+    assert limited.value.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+
+    with SessionLocal() as db:
+        preserved = db.get(AgentTurn, queued_id)
+        assert preserved is not None
+        assert preserved.status == "queued"
+        assert preserved.active_session_key is not None

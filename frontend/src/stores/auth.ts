@@ -38,11 +38,8 @@ export const useAuthStore = defineStore("auth", {
       this.loaded = true;
     },
     async logout() {
-      try {
-        await api.logout();
-      } finally {
-        this.clearSession();
-      }
+      await api.logout();
+      this.clearSession();
     },
   },
 });

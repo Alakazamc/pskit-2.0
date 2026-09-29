@@ -45,6 +45,10 @@ TOOL_CATALOG: tuple[ToolSpec, ...] = (
         long_running=True,
     ),
     ToolSpec("run_alphafold3", "Submit AlphaFold 3 structure prediction.", long_running=True),
+    ToolSpec(
+        "list_task_artifacts",
+        "List the status and registered artifact IDs for an owned task, including older tasks.",
+    ),
     ToolSpec("read_result_file", "Read a registered artifact/result file."),
     ToolSpec("generate_session_report", "Generate a Markdown report for the current agent session."),
     ToolSpec("generate_harness_report", "生成基于持久化 Harness 证据的只读报告。"),
@@ -109,6 +113,18 @@ def openai_tool_schemas(
                 "query": {"type": "string"},
                 "num": {"type": "integer"},
                 "engine": {"type": "string"},
+            },
+        },
+        "list_task_artifacts": {
+            "type": "object",
+            "required": ["task_id"],
+            "properties": {
+                "task_id": {
+                    "type": "string",
+                    "description": "Exact task UUID shown by a previous tool call or the task list.",
+                },
+                "offset": {"type": "integer", "minimum": 0, "default": 0},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 8},
             },
         },
         "read_result_file": {
@@ -200,10 +216,16 @@ def openai_tool_schemas(
         },
         "extract_empirical_features": {
             "type": "object",
-            "required": ["pdb_path"],
+            "anyOf": [
+                {"required": ["artifact_id"], "properties": {"artifact_id": {"type": "string"}}},
+                {"required": ["pdb_path"], "properties": {"pdb_path": {"type": "string"}}},
+            ],
             "properties": {
                 "pdb_path": {"type": "string"},
-                "artifact_id": {"type": "string"},
+                "artifact_id": {
+                    "type": "string",
+                    "description": "Preferred registered structure artifact UUID; use without pdb_path.",
+                },
                 "emp_feats": {"type": "string"},
                 "rosetta_relax": {"type": "boolean"},
             },
@@ -228,10 +250,16 @@ def openai_tool_schemas(
         },
         "search_structure_homologs": {
             "type": "object",
-            "required": ["pdb_path"],
+            "anyOf": [
+                {"required": ["artifact_id"], "properties": {"artifact_id": {"type": "string"}}},
+                {"required": ["pdb_path"], "properties": {"pdb_path": {"type": "string"}}},
+            ],
             "properties": {
                 "pdb_path": {"type": "string"},
-                "artifact_id": {"type": "string"},
+                "artifact_id": {
+                    "type": "string",
+                    "description": "Preferred registered structure artifact UUID; use without pdb_path.",
+                },
                 "chain": {"type": "string"},
                 "max_hits": {"type": "integer", "minimum": 1, "maximum": 500},
                 "evalue": {"type": "number"},

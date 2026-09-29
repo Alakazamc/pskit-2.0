@@ -25,6 +25,36 @@ BASH = (
 
 
 class DeliveryTests(unittest.TestCase):
+    @unittest.skipUnless(BASH and Path(BASH).exists(), "Bash required for image exporter test")
+    def test_failed_docker_save_does_not_publish_an_image_bundle(self):
+        with tempfile.TemporaryDirectory(prefix="pskit-image-export-test-") as temporary:
+            root = Path(temporary)
+            (root / "scripts").mkdir()
+            shutil.copy(PROJECT / "scripts/export_docker_bundle.sh", root / "scripts")
+            (root / ".env.docker").write_text("COMPOSE_PROJECT_NAME=pskit-test\n", encoding="utf-8")
+            fake_bin = root / "fake-bin"
+            fake_bin.mkdir()
+            docker = fake_bin / "docker"
+            docker.write_text(
+                "#!/usr/bin/env bash\n"
+                "if [[ \" $* \" == *\" config --images\"* ]]; then\n"
+                "  printf 'pskit2:test\\nqdrant/qdrant:v1.18.3\\n'\n"
+                "elif [[ \"$1\" == save ]]; then\n"
+                "  printf 'incomplete image data'\n"
+                "  exit 23\n"
+                "fi\n",
+                encoding="utf-8", newline="\n",
+            )
+            docker.chmod(0o755)
+            environment = {**os.environ, "PSKIT_EXPORT_SKIP_BUILD": "1", "PSKIT_FAKE_DOCKER_BIN": str(fake_bin)}
+            result = subprocess.run(
+                [BASH, "-c", "if command -v cygpath >/dev/null; then fake_bin=\"$(cygpath -u \"$PSKIT_FAKE_DOCKER_BIN\")\"; else fake_bin=\"$PSKIT_FAKE_DOCKER_BIN\"; fi; PATH=\"$fake_bin:$PATH\" bash scripts/export_docker_bundle.sh .env.docker"],
+                cwd=root, env=environment, capture_output=True, text=True, check=False,
+            )
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertFalse((root / "dist/pskit2-0.3.0-linux-amd64-images.tar.gz").exists())
+            self.assertFalse((root / "dist/pskit2-0.3.0-linux-amd64-images.tar.gz.sha256").exists())
+
     @unittest.skipUnless(BASH and Path(BASH).exists(), "Bash required for archive test")
     def test_archive_uses_source_allowlist_and_can_be_reexported(self):
         with tempfile.TemporaryDirectory(prefix="pskit-delivery-test-") as temporary:

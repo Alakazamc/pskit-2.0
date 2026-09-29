@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from typing import Literal, cast
 from uuid import UUID
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Candidate, ResearchRun, Task, User
+from app.db.models import Artifact, Candidate, ResearchRun, Task, User
 from app.research.context import (
     resolve_session_research_context,
     session_research_context_or_error,
@@ -253,6 +254,49 @@ def execute_tool(name: str, arguments: str | dict | None, context: ToolContext) 
             num=int(args.get("num", 5)),
             engine=args.get("engine", "google"),
         )
+    if name == "list_task_artifacts":
+        try:
+            task_id = UUID(str(args.get("task_id") or ""))
+        except ValueError as exc:
+            raise ToolExecutionError("task_id must be a valid UUID") from exc
+        offset = args.get("offset", 0)
+        limit = args.get("limit", 8)
+        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+            raise ToolExecutionError("offset must be a non-negative integer")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ToolExecutionError("limit must be an integer from 1 to 100")
+        task = context.db.get(Task, task_id)
+        if task is None or task.user_id != context.user.id:
+            raise ToolExecutionError("Task not found")
+        artifact_scope = (
+            Artifact.task_id == task.id,
+            Artifact.user_id == context.user.id,
+        )
+        total_count = context.db.scalar(
+            select(func.count(Artifact.id)).where(*artifact_scope)
+        ) or 0
+        artifacts = context.db.scalars(
+            select(Artifact)
+            .where(*artifact_scope)
+            .order_by(Artifact.created_at.asc(), Artifact.id.asc())
+            .offset(offset)
+            .limit(limit)
+        ).all()
+        return {
+            "status": task.status,
+            "error_type": task.error_type,
+            "offset": offset,
+            "total_count": total_count,
+            "next_offset": offset + len(artifacts) if offset + len(artifacts) < total_count else None,
+            "artifacts": [
+                {
+                    "artifact_id": str(artifact.id),
+                    "filename": artifact.filename,
+                    "kind": artifact.kind,
+                }
+                for artifact in artifacts
+            ],
+        }
     if name == "read_result_file":
         return read_result_file(
             context.db,

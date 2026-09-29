@@ -11,8 +11,8 @@ const conversation = createAgentConversation(() => void scrollToBottom());
 const {
   sessions, activeSessionId, activeSession, messages, input, loading, sending,
   error, notice, taskError, sources, ragBackend, artifacts, events, tasks,
-  streamingAnswer, suggestions, pendingApproval,
-  newSession, selectSession, approvePending,
+  streamingAnswer, suggestions, pendingApproval, followUpTask,
+  newSession, selectSession, approvePending, draftTaskFollowUp,
 } = conversation;
 let taskPollTimer: number | undefined;
 let disposed = false;
@@ -129,6 +129,21 @@ onUnmounted(() => {
         >
           {{ suggestion }}
         </button>
+      </div>
+      <div
+        v-if="followUpTask"
+        class="suggestion-row"
+        aria-label="长任务后续分析"
+      >
+        <button
+          class="suggestion-chip"
+          type="button"
+          :disabled="sending || loading"
+          @click="draftTaskFollowUp"
+        >
+          {{ followUpTask.status === "failed" ? "任务失败 · 填写排障提问" : "任务已完成 · 继续分析" }}
+        </button>
+        <small>仅填入草稿，不会自动发送</small>
       </div>
       <div
         v-if="pendingApproval"

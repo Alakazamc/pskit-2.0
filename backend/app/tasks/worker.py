@@ -290,7 +290,7 @@ def cleanup_new_af3_containers(
     baseline: set[str] | None,
     output_dir: Path,
 ) -> None:
-    """超时后只清理本次 AF3 启动的新容器，避免误杀其他任务。"""
+    """超时后仅清理能由任务输出挂载明确归属的 AF3 容器。"""
 
     if baseline is None:
         return
@@ -303,6 +303,14 @@ def cleanup_new_af3_containers(
     cleanup_log = output_dir / "af3_container_cleanup.log"
     lines = [f"image={image}", f"containers={','.join(new_containers)}"]
     for container_id in new_containers:
+        if not _af3_container_uses_task_output(container_id, output_dir):
+            # 时间差并不能证明归属：其他 Docker 用户可能恰好在此时启动同镜像。
+            lines.append(f"skip {container_id}: task output mount not verified")
+            logger.warning(
+                "AF3 超时清理跳过无法确认归属的容器 container=%s；请人工检查任务日志",
+                container_id,
+            )
+            continue
         for action in ("stop", "rm"):
             command = ["docker", action]
             if action == "stop":
@@ -328,6 +336,40 @@ def cleanup_new_af3_containers(
                     f"{action} {container_id} error={exc.__class__.__name__}"
                 )
     cleanup_log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _af3_container_uses_task_output(container_id: str, output_dir: Path) -> bool:
+    """通过唯一任务目录挂载确认容器归属；不确定时不停止容器。"""
+
+    try:
+        completed = subprocess.run(
+            ["docker", "inspect", "--format", "{{json .Mounts}}", container_id],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if completed.returncode != 0:
+        return False
+    try:
+        mounts = json.loads(completed.stdout or "null")
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(mounts, list):
+        return False
+    task_dir = output_dir.resolve()
+    for mount in mounts:
+        if not isinstance(mount, dict) or mount.get("Type") != "bind":
+            continue
+        for value in (mount.get("Source"), mount.get("Destination")):
+            if not isinstance(value, str) or not value:
+                continue
+            mount_path = Path(value).resolve()
+            if mount_path == task_dir or mount_path.is_relative_to(task_dir):
+                return True
+    return False
 
 
 def _decode_process_output(value: Any) -> str:
@@ -797,7 +839,7 @@ def run_external_command(
                 )
             raise TaskWorkerError(
                 f"Command timed out after {timeout} seconds. "
-                f"Process group and AF3 child container cleanup was attempted; "
+                f"Process group termination and verified AF3 container cleanup were attempted; "
                 f"see {stdout_path.name} and {stderr_path.name}."
             ) from exc
         stdout_path.write_text(stdout or "", encoding="utf-8")
