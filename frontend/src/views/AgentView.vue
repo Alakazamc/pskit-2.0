@@ -10,9 +10,9 @@ const messageListRef = ref<HTMLElement | null>(null);
 const conversation = createAgentConversation(() => void scrollToBottom());
 const {
   sessions, activeSessionId, activeSession, messages, input, loading, sending,
-  error, notice, taskError, sources, ragBackend, artifacts, events, tasks,
+  error, notice, taskError, sources, ragBackend, artifacts, events, tasks, hasMoreTasks, loadingMoreTasks,
   streamingAnswer, suggestions, pendingApproval, followUpTask,
-  newSession, selectSession, approvePending, draftTaskFollowUp,
+  newSession, selectSession, approvePending, draftTaskFollowUp, loadMoreTasks,
 } = conversation;
 let taskPollTimer: number | undefined;
 let disposed = false;
@@ -218,6 +218,32 @@ onUnmounted(() => {
         >
           {{ artifact.filename || artifact.artifact_id }}
         </a>
+        <details
+          v-if="artifacts.length > 6"
+          :key="activeSessionId"
+          class="rail-more"
+        >
+          <summary>查看另外 {{ artifacts.length - 6 }} 个结果文件</summary>
+          <a
+            v-for="artifact in artifacts.slice(6)"
+            :key="artifact.artifact_id"
+            class="artifact-link"
+            :href="artifact.download_url"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {{ artifact.filename || artifact.artifact_id }}
+          </a>
+        </details>
+        <button
+          v-if="hasMoreTasks"
+          class="mini-button rail-load-more"
+          type="button"
+          :disabled="loadingMoreTasks"
+          @click="loadMoreTasks"
+        >
+          {{ loadingMoreTasks ? "加载中…" : "加载更早任务与文件" }}
+        </button>
       </div>
 
       <div class="rail-card">
@@ -261,6 +287,21 @@ onUnmounted(() => {
           <strong>{{ task.task_type }}</strong>
           <StatusPill :status="task.status" />
         </article>
+        <details
+          v-if="tasks.length > 4"
+          :key="activeSessionId"
+          class="rail-more"
+        >
+          <summary>查看另外 {{ tasks.length - 4 }} 个任务</summary>
+          <article
+            v-for="task in tasks.slice(4)"
+            :key="task.id"
+            class="task-mini"
+          >
+            <strong>{{ task.task_type }}</strong>
+            <StatusPill :status="task.status" />
+          </article>
+        </details>
       </div>
     </aside>
   </section>

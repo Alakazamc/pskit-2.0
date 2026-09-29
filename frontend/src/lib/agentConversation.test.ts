@@ -38,6 +38,73 @@ beforeEach(() => {
 });
 
 describe("Agent conversation lifecycle", () => {
+  it("loads a 101st same-session task on demand and retains it during first-page polling", async () => {
+    const page = Array.from({ length: 101 }, (_, index) => task(`A-${index + 1}`, "A"));
+    vi.mocked(api.tasks).mockImplementation((query) => Promise.resolve(
+      query?.offset === 100 ? page.slice(100) : page,
+    ));
+    const chat = createAgentConversation();
+    await chat.selectSession("A");
+    expect(chat.tasks.value).toHaveLength(100);
+    expect(chat.hasMoreTasks.value).toBe(true);
+    expect(chat.artifacts.value.some((artifact) => artifact.filename === "A-101.pdb")).toBe(false);
+
+    await chat.loadMoreTasks();
+    expect(api.tasks).toHaveBeenCalledWith({ sessionId: "A", limit: 101, offset: 100 });
+    expect(chat.tasks.value).toHaveLength(101);
+    expect(chat.artifacts.value.some((artifact) => artifact.filename === "A-101.pdb")).toBe(true);
+    expect(chat.hasMoreTasks.value).toBe(false);
+
+    await chat.loadTasks();
+    expect(chat.tasks.value).toHaveLength(101);
+    expect(vi.mocked(api.tasks).mock.calls.filter(([query]) => query?.offset === 100)).toHaveLength(1);
+  });
+
+  it("keeps historical loading available when new tasks arrive during the last-page request", async () => {
+    const originalPage = Array.from({ length: 101 }, (_, index) => task(`A-${index + 1}`, "A"));
+    const delayedLastPage = deferred<Task[]>();
+    let firstPage = originalPage;
+    vi.mocked(api.tasks).mockImplementation((query) => query?.offset === 100
+      ? delayedLastPage.promise : Promise.resolve(firstPage));
+    const chat = createAgentConversation();
+    await chat.selectSession("A");
+    const loadingOlder = chat.loadMoreTasks();
+    firstPage = [task("new-arrival", "A"), ...originalPage.slice(0, 100)];
+    await chat.loadTasks();
+    delayedLastPage.resolve([originalPage[100]!]);
+    await loadingOlder;
+    expect(chat.hasMoreTasks.value).toBe(true);
+  });
+
+  it("ignores a historical page that finishes after switching sessions", async () => {
+    const oldPage = Array.from({ length: 101 }, (_, index) => task(`A-${index + 1}`, "A"));
+    const delayed = deferred<Task[]>();
+    vi.mocked(api.tasks).mockImplementation((query) => {
+      if (query?.sessionId === "B") return Promise.resolve([task("B-result", "B")]);
+      return query?.offset === 100 ? delayed.promise : Promise.resolve(oldPage);
+    });
+    const chat = createAgentConversation();
+    await chat.selectSession("A");
+    const loadingOlder = chat.loadMoreTasks();
+    await chat.selectSession("B");
+    delayed.resolve([oldPage[100]!]);
+    await loadingOlder;
+    expect(chat.activeSessionId.value).toBe("B");
+    expect(chat.loadingMoreTasks.value).toBe(false);
+    expect(chat.artifacts.value.map((artifact) => artifact.filename)).toEqual(["B-result.pdb"]);
+  });
+
+  it("shows the newest task and message files before older message files", async () => {
+    vi.mocked(api.sessionHistory).mockResolvedValue([
+      { ...message("old", { artifacts: [{ artifact_id: "old", filename: "old.pdb" }] }), created_at: "2026-01-01T00:00:00Z" },
+      { ...message("new", { artifacts: [{ artifact_id: "new", filename: "new.pdb" }] }), created_at: "2026-01-01T00:01:00Z" },
+    ]);
+    vi.mocked(api.tasks).mockResolvedValue([{ ...task("task", "A"), finished_at: "2026-01-01T00:02:00Z" }]);
+    const chat = createAgentConversation();
+    await chat.selectSession("A");
+    expect(chat.artifacts.value.map((artifact) => artifact.filename)).toEqual(["task.pdb", "new.pdb", "old.pdb"]);
+  });
+
   it("offers an editable follow-up draft only for a new terminal task", async () => {
     vi.mocked(api.sessionHistory).mockResolvedValue([{
       ...message("user request"), role: "user", created_at: "2026-01-01T12:00:00Z",
@@ -74,8 +141,8 @@ describe("Agent conversation lifecycle", () => {
     await chat.selectSession("B");
     oldTasks.resolve([task("A-result", "A")]);
     await openingA;
-    expect(api.tasks).toHaveBeenCalledWith({ sessionId: "A" });
-    expect(api.tasks).toHaveBeenCalledWith({ sessionId: "B" });
+    expect(api.tasks).toHaveBeenCalledWith({ sessionId: "A", limit: 101, offset: 0 });
+    expect(api.tasks).toHaveBeenCalledWith({ sessionId: "B", limit: 101, offset: 0 });
     expect(chat.artifacts.value.map((artifact) => artifact.filename)).toEqual(["B-result.pdb"]);
   });
 
