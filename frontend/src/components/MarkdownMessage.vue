@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DOMPurify from "dompurify";
 import { computed } from "vue";
 
 const props = defineProps<{
@@ -129,9 +130,19 @@ function renderMarkdown(value: string) {
   return blocks.join("");
 }
 
-const rendered = computed(() => renderMarkdown(props.content || ""));
+const rendered = computed(() =>
+  DOMPurify.sanitize(renderMarkdown(props.content || ""), {
+    ALLOWED_TAGS: ["a", "blockquote", "br", "code", "em", "h3", "h4", "h5", "li", "p", "pre", "strong", "ul"],
+    ALLOWED_ATTR: ["data-lang", "href", "rel", "target"],
+  }),
+);
 </script>
 
 <template>
-  <div class="markdown-message" v-html="rendered"></div>
+  <!-- eslint-disable vue/no-v-html -->
+  <!-- Content is escaped during Markdown parsing and sanitized with DOMPurify. -->
+  <div
+    class="markdown-message"
+    v-html="rendered"
+  />
 </template>

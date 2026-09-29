@@ -11,7 +11,11 @@ from Bio.PDB.Chain import Chain
 from Bio.PDB.Residue import Residue
 from sqlalchemy.orm import Session
 
-from app.artifacts.service import register_local_artifact, session_artifact_dir
+from app.artifacts.service import (
+    register_local_artifact,
+    resolve_owned_local_artifact_reference,
+    session_artifact_dir,
+)
 from app.db.models import User
 from app.tools.external import ToolExecutionError
 
@@ -175,11 +179,17 @@ def min_residue_distance(a: Residue, b: Residue) -> float:
     return min_distance
 
 
-def resolve_input_structure_path(path: str) -> Path:
-    resolved = Path(path).expanduser().resolve()
-    if not resolved.exists() or not resolved.is_file():
-        raise ToolExecutionError(f"Input structure file not found: {path}")
-    return resolved
+def resolve_input_structure_path(db: Session, user: User, path: str) -> Path:
+    try:
+        return resolve_owned_local_artifact_reference(
+            db,
+            user,
+            file_path=path,
+        )
+    except (FileNotFoundError, NotImplementedError, ValueError) as exc:
+        raise ToolExecutionError(
+            "Input structure must be a registered artifact owned by the current user"
+        ) from exc
 
 
 def split_pdb_by_chain(
@@ -190,7 +200,7 @@ def split_pdb_by_chain(
     pdb_path: str,
     file_format: str,
 ) -> dict:
-    input_path = resolve_input_structure_path(pdb_path)
+    input_path = resolve_input_structure_path(db, user, pdb_path)
     structure = parse_structure(input_path, file_format)
     out_dir = session_artifact_dir(user.id, session_id, tool_call_id)
     artifacts = []
@@ -220,7 +230,7 @@ def split_complex(
     pdb_path: str,
     file_format: str,
 ) -> dict:
-    input_path = resolve_input_structure_path(pdb_path)
+    input_path = resolve_input_structure_path(db, user, pdb_path)
     structure = parse_structure(input_path, file_format)
     out_dir = session_artifact_dir(user.id, session_id, tool_call_id)
     outputs = []
@@ -255,7 +265,7 @@ def extract_fragment(
     start: int | None = None,
     end: int | None = None,
 ) -> dict:
-    input_path = resolve_input_structure_path(pdb_path)
+    input_path = resolve_input_structure_path(db, user, pdb_path)
     structure = parse_structure(input_path, file_format)
     chain_ids = {item.id for item in first_model(structure)}
     if chain not in chain_ids:
@@ -288,7 +298,7 @@ def calculate_contact_map(
     mode: str = "d",
     k: int | None = None,
 ) -> dict:
-    input_path = resolve_input_structure_path(pdb_path)
+    input_path = resolve_input_structure_path(db, user, pdb_path)
     structure = parse_structure(input_path, file_format)
     residues = []
     for chain_obj in first_model(structure):
@@ -346,7 +356,7 @@ def annotate_binding_pairs(
     file_format: str,
     cutoff: float = 3.5,
 ) -> dict:
-    input_path = resolve_input_structure_path(pdb_path)
+    input_path = resolve_input_structure_path(db, user, pdb_path)
     structure = parse_structure(input_path, file_format)
     protein_residues = []
     nucleic_residues = []
@@ -387,4 +397,3 @@ def annotate_binding_pairs(
         "download_url": f"/api/files/{artifact.id}/download",
         "path": str(output_file),
     }
-

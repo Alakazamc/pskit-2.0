@@ -1,0 +1,24 @@
+# Required: a locally available/licensed science runtime with the legacy venv,
+# tini, and the pskit user. Model weights and upstream runtimes are not packaged.
+ARG PSKIT_SCIENCE_BASE_IMAGE
+FROM ${PSKIT_SCIENCE_BASE_IMAGE}
+
+ARG PSKIT_VERSION=0.3.0
+LABEL org.opencontainers.image.title="PSKit 2.0 science worker" \
+      org.opencontainers.image.version="${PSKIT_VERSION}"
+
+ENV PSKIT_ALLOW_LEGACY_PORT_10706=true
+
+USER root
+COPY backend/requirements.lock /app/backend/requirements.lock
+RUN python -m pip install --no-cache-dir --require-hashes -r /app/backend/requirements.lock
+COPY backend/pyproject.toml /app/backend/pyproject.toml
+COPY backend/app/ /app/backend/app/
+RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps /app/backend \
+    && python -m compileall -q /app/backend/app \
+    && python -m pip check
+USER pskit
+
+WORKDIR /app/backend
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["python", "-m", "app.tasks.worker", "forever"]

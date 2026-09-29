@@ -1,28 +1,35 @@
 # Models, Environment Variables, and Limits / 模型、环境变量与限制
 
-## Model directory / 模型目录
-`PSKIT_MODEL_PARAMETERS` controls the base model parameter directory. Docker images may not include model parameters, so mount or provide them separately.
+## Providers / 服务配置
 
-## Models / 模型
-INABe supports `pred_nbs` and `predict_binding_sites`. PAIR supports `pred_pni` and `predict_interaction`. ESM-2 650M/150M supports protein embeddings and features. SaProt depends on Foldseek. RNA-FM supports RNA representation. AlphaFold 3 requires Docker, GPU, databases, and model parameters.
+Chat uses `LLM_BASE_URL`, `LLM_MODEL_ID`, and `LLM_API_KEY`. Embeddings use
+`EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, and `EMBEDDING_API_KEY`. Qdrant uses
+`QDRANT_URL`, optional `QDRANT_API_KEY`, `QDRANT_COLLECTION`, and vector size and
+distance settings. SerpAPI and the remote RNA expert are optional.
 
-## Binary dependencies / 二进制依赖
-`PSKIT_FOLDSEEK` controls Foldseek. `PSKIT_DSSP` controls mkdssp/DSSP. Rosetta needs executables and `ROSETTA3_DB`. `PSKIT_PYTHON` can override the Python runtime.
+## Heavy runtime / 重型运行时
 
-## AF3 variables / AF3 变量
-AF3 variables include `PSKIT_AF3_DB_DIR`, `PSKIT_AF3_MODEL_DIR`, `PSKIT_AF3_IMAGE`, `PSKIT_AF3_GPU_DEVICE`, `PSKIT_AF3_LOCK_FILE`, and `PSKIT_AF3_EXTRA_ARGS`.
+`PSKIT_LEGACY_ROOT` and `PSKIT_MODEL_PARAMETERS` locate an optional compatible
+legacy runtime and model directory. `PSKIT_FOLDSEEK` and `PSKIT_DSSP` locate
+external binaries. AlphaFold 3 uses `PSKIT_AF3_DB_DIR`,
+`PSKIT_AF3_MODEL_DIR`, `PSKIT_AF3_IMAGE`, and `PSKIT_AF3_GPU_DEVICE`. These
+assets are not included in the core image.
 
-## RAG and embeddings / RAG 与 embedding
-Vector RAG uses Chroma and API embeddings. Important config values are embedding API URL, embedding model, Chroma URL, collection name, tenant, database, and API key env such as `SILICONFLOW_API_KEY`.
+The current task API runs INABe, PAIR, and AlphaFold 3 through the local science
+worker. CORAL and PepCCD run through separately managed MCP services. Set
+`REMOTE_RNA_EXPERT_SSE_URL` for CORAL's SSE transport and `PEPCCD_MCP_URL` plus
+`PEPCCD_MCP_TOOL_NAME` for PepCCD's Streamable HTTP transport. PSKit validates
+the advertised input schema before calling PepCCD and fails closed on ambiguity.
 
-## OpenAI-compatible proxy / LLM 代理
-Related variables include `OPENAI_API_KEY` for chat, `SILICONFLOW_API_KEY` for RAG embeddings, and direct provider URL settings in `agent_config/config.toml`.
+## Input and execution limits / 输入与执行限制
 
-## RCSB variables / RCSB 变量
-RCSB configuration includes `PSKIT_RCSB_SEARCH_URL`, `PSKIT_RCSB_FILES_BASE`, `PSKIT_RCSB_DATA_BASE`, `RCSB_PROXY_HOST`, and `RCSB_PROXY_PORT`.
+Serialized task input is limited to 1 MB and total sequence input to 20,000
+characters. AlphaFold 3 accepts at most 20 entities and 1–20 diffusion samples.
+Remote RNA generation accepts 1–50 samples. Subprocess, LLM stream, remote MCP,
+retry, and stale-task timeouts are configurable and finite.
 
-## SerpAPI variables / SerpAPI 变量
-Public web search uses `SERPAPI_API_KEY`. `PSKIT_SERPAPI_SEARCH_URL` can override the default SerpAPI endpoint for debugging or proxying.
+## Result access / 结果访问
 
-## Important limits / 重要限制
-Upload limit is 250 MB. Some ESM-2/SaProt paths reject sequences over 1000 residues. Web UI AF3 accepts up to 8 protein chains and sequence length up to 5000. `read_result_file` only reads text under Agent session artifacts. AF3 is GPU/Docker-heavy. Rosetta relax is opt-in only.
+Tools consume registered artifact IDs rather than server paths. Text preview is
+bounded and restricted to owned UTF-8 artifacts. Model outputs and binary files
+should be downloaded instead of read as text.

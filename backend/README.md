@@ -9,8 +9,8 @@ SQLAlchemy 2
 Alembic
 SQLite fallback / PostgreSQL-ready SQLAlchemy models
 httpx
-Local worker now; Celery/Redis target
-Local artifacts now; MinIO/S3 target
+Persistent SQL-polling worker with atomic claiming and stale-task recovery
+Ownership-checked local artifact storage
 LangGraph retrieval node plus OpenAI-compatible tool-call loop
 ```
 
@@ -40,10 +40,10 @@ Implemented:
 - SQLAlchemy models.
 - SQLite fallback for local smoke tests.
 - Auth register/login/logout/me.
-- First registered user becomes admin.
+- Bootstrap-token-protected initial administrator claim.
 - HttpOnly cookie sessions.
 - Health endpoint.
-- Admin doctor endpoint.
+- Admin doctor, user/session management, metrics, and audit events.
 - Tool catalog endpoint.
 - Qdrant-first RAG endpoint with keyword fallback.
 - Agent session/message SSE endpoint.
@@ -90,4 +90,6 @@ Run worker continuously:
 PYTHONPATH=. python3 -m app.tasks.worker forever
 ```
 
-Production deployment should use PostgreSQL, Redis/Celery, Qdrant, and MinIO instead of the SQLite/local filesystem fallback when the project moves beyond single-host A6000 operation.
+The supported 0.3.0 delivery is a single-host SQLite/local-artifact deployment.
+Before scaling to multiple hosts, design and test PostgreSQL locking, external
+object storage, and a dedicated distributed queue as a separate architecture.

@@ -12,3 +12,6 @@ class HealthResponse(BaseModel):
     service: str
     version: str
 
+
+class ReadinessResponse(HealthResponse):
+    checks: list[StatusItem]

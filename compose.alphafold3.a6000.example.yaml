@@ -1,0 +1,14 @@
+# AlphaFold 3 opt-in overlay for an A6000 host.
+#
+# The PSKit legacy AF3 wrapper launches the configured AF3 image through the
+# Docker CLI. This overlay therefore exposes the host Docker socket to the
+# science worker. Review this privilege boundary with the server owner before
+# enabling it; keep this file separate from the normal science-worker start.
+
+services:
+  worker:
+    group_add:
+      - ${PSKIT_DOCKER_GID:?Set the host docker.sock group ID before enabling AlphaFold3}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker:ro

@@ -5,17 +5,25 @@ const props = defineProps<{
   mode: "login" | "register";
   error?: string;
   loading?: boolean;
+  bootstrapRequired?: boolean;
+  submitDisabled?: boolean;
 }>();
 
 const emit = defineEmits<{
-  submit: [username: string, password: string];
+  submit: [username: string, password: string, bootstrapToken?: string];
 }>();
 
 const username = ref("");
 const password = ref("");
+const bootstrapToken = ref("");
 
 function submit() {
-  emit("submit", username.value.trim(), password.value);
+  emit(
+    "submit",
+    username.value.trim(),
+    password.value,
+    bootstrapToken.value.trim() || undefined,
+  );
 }
 </script>
 
@@ -27,10 +35,19 @@ function submit() {
         {{ props.mode === "login" ? "登录后可以使用受保护的 PSKit 工具、任务和报告。" : "创建账号后，对话、任务和结果文件会按用户隔离保存。" }}
       </p>
     </div>
-    <form class="auth-form" @submit.prevent="submit">
+    <form
+      class="auth-form"
+      @submit.prevent="submit"
+    >
       <label>
         用户名
-        <input v-model="username" name="username" autocomplete="username" minlength="3" required />
+        <input
+          v-model="username"
+          name="username"
+          autocomplete="username"
+          minlength="3"
+          required
+        >
       </label>
       <label>
         密码
@@ -38,13 +55,33 @@ function submit() {
           v-model="password"
           name="password"
           type="password"
-          autocomplete="current-password"
+          :autocomplete="props.mode === 'register' ? 'new-password' : 'current-password'"
           minlength="8"
           required
-        />
+        >
       </label>
-      <p v-if="props.error" class="error-line">{{ props.error }}</p>
-      <button class="primary-button full" :disabled="props.loading">
+      <label v-if="props.mode === 'register' && props.bootstrapRequired">
+        首位管理员引导令牌
+        <input
+          v-model="bootstrapToken"
+          name="bootstrap-token"
+          type="password"
+          autocomplete="off"
+          minlength="24"
+          required
+        >
+        <small>请输入服务器管理员配置的 INITIAL_ADMIN_BOOTSTRAP_TOKEN。</small>
+      </label>
+      <p
+        v-if="props.error"
+        class="error-line"
+      >
+        {{ props.error }}
+      </p>
+      <button
+        class="primary-button full"
+        :disabled="props.loading || props.submitDisabled"
+      >
         {{ props.loading ? "处理中..." : props.mode === "login" ? "登录" : "注册" }}
       </button>
       <p class="auth-switch">

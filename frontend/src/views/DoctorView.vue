@@ -30,16 +30,33 @@ onMounted(loadDoctor);
         <h2>运行体检</h2>
         <p>管理员可见，用于检查模型权重、API、向量数据库和科学计算二进制工具。</p>
       </div>
-      <button class="ghost-button" @click="loadDoctor">刷新</button>
+      <button
+        class="ghost-button"
+        @click="loadDoctor"
+      >
+        刷新
+      </button>
     </div>
-    <p v-if="error" class="error-line">{{ error }}</p>
-    <div v-else-if="report" class="doctor-layout">
+    <p
+      v-if="error"
+      class="error-line"
+    >
+      {{ error }}
+    </p>
+    <div
+      v-else-if="report"
+      class="doctor-layout"
+    >
       <div class="doctor-summary">
         <StatusPill :status="report.overall" />
         <strong>{{ report.fail_count }} 个失败 · {{ report.warn_count }} 个警告</strong>
       </div>
       <div class="check-list">
-        <article v-for="check in report.checks" :key="check.name" class="check-row">
+        <article
+          v-for="check in report.checks"
+          :key="check.name"
+          class="check-row"
+        >
           <div>
             <strong>{{ check.name }}</strong>
             <small>{{ check.detail }}</small>

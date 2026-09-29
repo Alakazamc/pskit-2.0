@@ -1,19 +1,43 @@
 # Deployment and Runtime / 部署与运行时
 
-## Active A6000 deployment / 当前部署
-The active deployment is native under `/data1/kxchen/pskit`. The webserver commonly runs as `pskit-webserver /data1/kxchen/pskit 127.0.0.1:10706 2` and serves both API routes and `webpage/dist`.
+## Supported stack / 支持的部署栈
 
-## Chroma runtime / Chroma 运行时
-Vector RAG expects a Chroma HTTP server, typically `http://127.0.0.1:8000`, and a persistent data directory such as `tasks/chroma`. Chroma data is generated runtime state and should not be committed.
+The reproducible deployment is Docker Compose. It runs a FastAPI/Vue web
+service, a SQL-polling background worker, a one-shot Alembic migration service,
+and Qdrant. SQLite and artifacts share the `pskit_data` volume; Qdrant uses the
+`qdrant_data` volume.
 
-## Embedding runtime / Embedding 运行时
-Embedding calls use an OpenAI-compatible `/embeddings` endpoint. A6000 should use direct campus-network access to SiliconFlow `/embeddings` for vector RAG instead of local forwarding proxies.
+## Startup / 启动
 
-## Docker image / Docker 镜像
-The Dockerfile builds Rust binaries, WASM package, frontend assets, and Python runtime. Model parameters and Chroma data need external mounts or runtime setup.
+Copy `.env.docker.example` to `.env.docker`, set provider keys only when needed,
+then run `docker compose --env-file .env.docker up -d --wait`. The migration must
+finish and Qdrant must become healthy before the web service starts. The default
+host address is `127.0.0.1:10716`.
 
-## External services / 外部服务
-PSKit can depend on RCSB, UniProt, RNAcentral, OpenAI-compatible chat/embedding endpoint, Chroma server, and remote RNA expert MCP. Restricted networks may require proxies and SSH tunnels.
+## Persistence and upgrades / 持久化与升级
 
-## Important paths / 关键路径
-Source repo: `/data1/kxchen/pskit`. Agent config: `agent_config/`. RAG corpus: `agent_config/knowledge/*.md`. Frontend: `webpage/dist`. Python AI: `pskit/ai/`. Rust webserver: `webserver/`. Toolkit: `pskit/toolkit/`. Task state: `tasks/`.
+Normal `docker compose down` preserves both named volumes. Run
+`scripts/backup_runtime.sh` before an upgrade. Never use `down --volumes` unless
+a permanent reset is intended. Version 0.3.0 migrates the production schema and
+stores verified SQLite, artifact, and Qdrant snapshots outside the root disk.
+
+## External providers / 外部服务
+
+Agent chat needs an OpenAI-compatible chat provider. Vector RAG needs an
+embedding provider and Qdrant; without embeddings it falls back to keyword
+retrieval. RCSB, UniProt, and RNAcentral use public APIs. SerpAPI and the remote
+RNA expert are optional and require explicit configuration.
+
+## Heavy tools / 重型工具
+
+The core image intentionally excludes model weights, licensed AlphaFold 3 data,
+and the legacy PSKit runtime. Install them in a derived image or mount them
+read-only, then configure the `PSKIT_*` paths. GPU is not required for the core
+web, authentication, database, RAG fallback, and lightweight structure tools.
+
+## Network security / 网络安全
+
+Keep the default loopback binding unless remote access is required. For LAN or
+internet access, use a firewall and HTTPS reverse proxy and set
+`COOKIE_SECURE=true`. Do not publish Qdrant or mount the Docker socket into the
+web container.

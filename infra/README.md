@@ -1,18 +1,27 @@
 # Infrastructure
 
-Recommended services:
+The supported onboarding stack is the repository-root `compose.yaml`.
 
-```text
-postgres
-redis
-qdrant
-minio
-fastapi
-celery-worker
-caddy or nginx
+From the repository root:
+
+```bash
+cp .env.docker.example .env.docker
+docker compose --env-file .env.docker up -d --build --wait
 ```
 
-For local development, use Docker Compose.
+`infra/docker-compose.yml` is a compatibility include for older commands that
+referenced this directory. It delegates to the root Compose definition.
 
-For A6000, dependencies can run either through Docker Compose or system services. FastAPI and Celery can run under systemd.
+The default stack intentionally contains only services used by the current
+implementation:
 
+- `web` (FastAPI plus the built Vue SPA);
+- `worker` (the SQL-polling PSKit task worker, not Celery);
+- `qdrant` (internal vector database).
+
+Redis, MinIO, and PostgreSQL are not enabled by default because the current
+worker and artifact code do not use them. Add production overlays only when the
+corresponding application implementation is enabled.
+
+See `DOCKER_QUICKSTART.md` for persistence, offline export, and model/GPU
+boundaries.

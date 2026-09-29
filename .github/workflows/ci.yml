@@ -18,13 +18,21 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install backend dependencies
-        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+        run: python -m pip install uv==0.11.16 && uv sync --frozen --extra dev
       - name: Compile backend
-        run: python -m compileall app tests ../scripts
-      - name: Backend smoke test
-        run: PYTHONPATH=. python ../scripts/smoke_backend.py
-      - name: Live backend smoke test
-        run: ../scripts/smoke_live_backend.sh
+        run: uv run python -m compileall app tests ../scripts
+      - name: Lint and type check
+        run: |
+          uv run ruff check app tests ../scripts/migrate_db.py
+          uv run mypy --follow-imports=skip app/config.py app/network.py app/schemas app/middleware/auth_abuse.py app/tasks/service.py app/tasks/validation.py app/rag/qdrant_store.py app/api/admin.py app/api/health.py
+      - name: Audit locked backend dependencies
+        run: uvx pip-audit -r requirements.lock --disable-pip
+      - name: Backend tests
+        run: uv run pytest -q tests
+      - name: Delivery script regression tests
+        run: uv run python ../scripts/test_delivery.py
+      - name: Fresh database migration
+        run: DATABASE_URL=sqlite:////tmp/pskit-ci.sqlite3 DATA_DIR=/tmp/pskit-ci ARTIFACT_DIR=/tmp/pskit-ci/artifacts uv run python ../scripts/migrate_db.py
 
   frontend:
     runs-on: ubuntu-latest
@@ -42,3 +50,46 @@ jobs:
         run: npm ci
       - name: Build frontend
         run: npm run build
+      - name: Lint frontend
+        run: npm run lint -- --max-warnings 0
+      - name: Test frontend
+        run: npm test -- --run
+      - name: Install browser for UI regression tests
+        run: npx playwright install --with-deps chromium
+      - name: Browser regression tests
+        run: npm run e2e
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  image:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    env:
+      COMPOSE_PROJECT_NAME: pskit-ci
+      PSKIT_IMAGE: pskit2:ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build delivery image
+        run: docker build --tag pskit2:ci .
+      - name: Check runtime imports and non-root user
+        run: >-
+          docker run --rm --entrypoint sh pskit2:ci -c
+          'test "$(id -u)" = 10001 && python -c "import mcp, app.main"'
+      - name: Validate Compose model
+        run: |
+          cp .env.docker.example .env.docker
+          sed -i 's/^INITIAL_ADMIN_BOOTSTRAP_TOKEN=$/INITIAL_ADMIN_BOOTSTRAP_TOKEN=ci-only-token-12345678901234567890/' .env.docker
+          sed -i 's/^COOKIE_SECURE=true$/COOKIE_SECURE=false/' .env.docker
+          docker compose --env-file .env.docker config --quiet
+      - name: Start fresh production stack and verify user login flow
+        env:
+          PSKIT_SMOKE_BOOTSTRAP_TOKEN: ci-only-token-12345678901234567890
+        run: |
+          docker compose --env-file .env.docker up -d --no-build --wait --wait-timeout 120
+          ./scripts/docker_smoke.sh http://127.0.0.1:10716
+      - name: Show container diagnostics on failure
+        if: failure()
+        run: docker compose --env-file .env.docker logs --tail=100
+      - name: Remove temporary CI stack
+        if: always()
+        run: docker compose --env-file .env.docker down --volumes

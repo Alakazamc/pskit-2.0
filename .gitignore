@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.pytest-tmp*/
 .mypy_cache/
 .ruff_cache/
 build/
@@ -13,11 +14,14 @@ venv/
 node_modules/
 dist/
 .vite/
+tmp/
 
 # Environment and secrets
 .env
 .env.*
 !.env.example
+!.env.docker.example
+scripts/ssh_config.windows
 *.pem
 *.key
 secrets/
@@ -33,6 +37,9 @@ secrets/
 /backend/uploads/
 /logs/
 /backend/logs/
+/backups/
+/frontend/test-results/
+/frontend/playwright-report/
 *.sqlite
 *.sqlite3
 *.db

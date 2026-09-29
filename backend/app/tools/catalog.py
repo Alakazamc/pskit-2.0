@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Iterable
 
 
 @dataclass(frozen=True)
@@ -25,14 +26,29 @@ TOOL_CATALOG: tuple[ToolSpec, ...] = (
     ToolSpec("predict_binding_sites", "Predict DNA/RNA binding sites.", long_running=True),
     ToolSpec("extract_empirical_features", "Extract DSSP/Rosetta-like features.", long_running=True),
     ToolSpec("predict_interaction", "Predict sequence-level protein-nucleic interaction.", long_running=True),
+    ToolSpec("search_sequence_homologs", "Search sequence homologs with MMseqs2 or BLASTP.", long_running=True),
+    ToolSpec("search_structure_homologs", "Search structure homologs with Foldseek.", long_running=True),
+    ToolSpec(
+        "generate_coral_candidates",
+        "Generate and persist CORAL RNA aptamer candidates through the remote RNA MCP service.",
+        long_running=True,
+    ),
+    ToolSpec(
+        "generate_pepccd_candidates",
+        "Generate and persist peptide aptamer candidates through the PepCCD MCP service.",
+        long_running=True,
+    ),
+    ToolSpec("score_research_candidates", "Score and rank one candidate track with an explicit configuration."),
+    ToolSpec(
+        "submit_research_top10_af3",
+        "Submit up to ten ranked candidates from one track to AF3.",
+        long_running=True,
+    ),
     ToolSpec("run_alphafold3", "Submit AlphaFold 3 structure prediction.", long_running=True),
     ToolSpec("read_result_file", "Read a registered artifact/result file."),
     ToolSpec("generate_session_report", "Generate a Markdown report for the current agent session."),
-    ToolSpec(
-        "remote_rna_expert__generate_rna_for_protein",
-        "Generate RNA candidates for a protein chain through remote MCP.",
-        long_running=True,
-    ),
+    ToolSpec("generate_harness_report", "生成基于持久化 Harness 证据的只读报告。"),
+    ToolSpec("generate_research_report", "Generate a traceable Markdown report for a research run."),
 )
 
 
@@ -43,7 +59,10 @@ def list_tools() -> list[dict]:
     ]
 
 
-def openai_tool_schemas() -> list[dict]:
+def openai_tool_schemas(
+    allowed_names: set[str] | None = None,
+    preferred_order: Iterable[str] | None = None,
+) -> list[dict]:
     schemas: dict[str, dict] = {
         "search_pdb": {
             "type": "object",
@@ -106,6 +125,18 @@ def openai_tool_schemas() -> list[dict]:
                 "title": {"type": "string"},
             },
         },
+        "generate_harness_report": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+            },
+        },
+        "generate_research_report": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+            },
+        },
         "split_pdb_by_chain": {
             "type": "object",
             "required": ["pdb_path", "format"],
@@ -155,10 +186,26 @@ def openai_tool_schemas() -> list[dict]:
         },
         "predict_binding_sites": {
             "type": "object",
-            "required": ["pdb_path", "ligand_type"],
+            "required": ["artifact_id", "ligand_type"],
+            "properties": {
+                "artifact_id": {
+                    "type": "string",
+                    "description": (
+                        "Preferred registered structure artifact UUID returned by "
+                        "download_pdb_file or another structure tool."
+                    ),
+                },
+                "ligand_type": {"type": "string", "enum": ["DNA", "RNA"]},
+            },
+        },
+        "extract_empirical_features": {
+            "type": "object",
+            "required": ["pdb_path"],
             "properties": {
                 "pdb_path": {"type": "string"},
-                "ligand_type": {"type": "string", "enum": ["DNA", "RNA"]},
+                "artifact_id": {"type": "string"},
+                "emp_feats": {"type": "string"},
+                "rosetta_relax": {"type": "boolean"},
             },
         },
         "predict_interaction": {
@@ -169,6 +216,125 @@ def openai_tool_schemas() -> list[dict]:
                 "nucleic_sequence": {"type": "string"},
             },
         },
+        "search_sequence_homologs": {
+            "type": "object",
+            "required": ["protein_sequence"],
+            "properties": {
+                "protein_sequence": {"type": "string"},
+                "max_hits": {"type": "integer", "minimum": 1, "maximum": 500},
+                "evalue": {"type": "number"},
+                "sensitivity": {"type": "number"},
+            },
+        },
+        "search_structure_homologs": {
+            "type": "object",
+            "required": ["pdb_path"],
+            "properties": {
+                "pdb_path": {"type": "string"},
+                "artifact_id": {"type": "string"},
+                "chain": {"type": "string"},
+                "max_hits": {"type": "integer", "minimum": 1, "maximum": 500},
+                "evalue": {"type": "number"},
+                "sensitivity": {"type": "number"},
+            },
+        },
+        "generate_coral_candidates": {
+            "type": "object",
+            "required": ["pdb_id", "chain"],
+            "properties": {
+                "pdb_id": {"type": "string"},
+                "chain": {"type": "string"},
+                "num_candidates": {"type": "integer", "minimum": 1},
+                "num_samples": {"type": "integer", "minimum": 1},
+                "length": {"type": "integer", "minimum": 1},
+                "iteration": {"type": "integer", "minimum": 0},
+            },
+        },
+        "generate_pepccd_candidates": {
+            "type": "object",
+            "required": ["protein_sequence"],
+            "properties": {
+                "protein_sequence": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                },
+                "num_peptides": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000,
+                    "default": 10,
+                },
+                "peptide_length": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 40,
+                    "default": 15,
+                },
+                "sample_batch_size": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 500,
+                    "default": 100,
+                },
+                "temperature": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 5,
+                    "default": 1.0,
+                },
+                "seed": {
+                    "anyOf": [
+                        {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 4294967295,
+                        },
+                        {"type": "null"},
+                    ],
+                    "default": None,
+                },
+                "device": {
+                    "type": "string",
+                    "enum": ["cuda:0", "cuda:1", "cpu"],
+                    "default": "cuda:0",
+                },
+                "iteration": {"type": "integer", "minimum": 0},
+            },
+        },
+        "score_research_candidates": {
+            "type": "object",
+            "required": ["track", "config_version", "metrics"],
+            "properties": {
+                "track": {"type": "string", "enum": ["rna", "peptide"]},
+                "config_version": {"type": "string"},
+                "iteration": {"type": "integer", "minimum": 0},
+                "minimum_total_score": {"type": "number", "minimum": 0, "maximum": 1},
+                "metrics": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["name", "weight"],
+                        "properties": {
+                            "name": {"type": "string"},
+                            "weight": {"type": "number", "exclusiveMinimum": 0},
+                            "direction": {"type": "string", "enum": ["higher", "lower"]},
+                            "missing_policy": {"type": "string", "enum": ["reject", "zero", "ignore"]}
+                        }
+                    }
+                }
+            }
+        },
+        "submit_research_top10_af3": {
+            "type": "object",
+            "required": ["track"],
+            "properties": {
+                "track": {"type": "string", "enum": ["rna", "peptide"]},
+                "max_candidates": {"type": "integer", "minimum": 1, "maximum": 10},
+                "model_seed": {"type": "integer"},
+                "num_diffusion_samples": {"type": "integer", "minimum": 1}
+            }
+        },
         "run_alphafold3": {
             "type": "object",
             "required": ["entities"],
@@ -178,6 +344,7 @@ def openai_tool_schemas() -> list[dict]:
                     "type": "array",
                     "items": {
                         "type": "object",
+                        "additionalProperties": False,
                         "required": ["type", "sequence"],
                         "properties": {
                             "type": {"type": "string", "enum": ["protein", "rna"]},
@@ -189,18 +356,13 @@ def openai_tool_schemas() -> list[dict]:
                 "num_diffusion_samples": {"type": "integer"},
             },
         },
-        "remote_rna_expert__generate_rna_for_protein": {
-            "type": "object",
-            "required": ["pdb_id", "chain"],
-            "properties": {
-                "pdb_id": {"type": "string"},
-                "chain": {"type": "string"},
-                "num_samples": {"type": "integer"},
-            },
-        },
     }
+    # 工具参数对象统一封闭：模型不能通过未声明字段走到 Worker payload。
+    # 运行时仍由 execute_tool 做同一归属边界的强制校验。
+    for schema in schemas.values():
+        schema["additionalProperties"] = False
     supported = set(schemas)
-    return [
+    result = [
         {
             "type": "function",
             "function": {
@@ -210,5 +372,39 @@ def openai_tool_schemas() -> list[dict]:
             },
         }
         for tool in TOOL_CATALOG
-        if tool.name in supported
+        if tool.name in supported and (allowed_names is None or tool.name in allowed_names)
     ]
+    order = {name: index for index, name in enumerate(preferred_order or [])}
+    if order:
+        result.sort(
+            key=lambda item: (
+                order.get(item["function"]["name"], len(order)),
+                next(
+                    index
+                    for index, tool in enumerate(TOOL_CATALOG)
+                    if tool.name == item["function"]["name"]
+                ),
+            )
+        )
+    return result
+
+
+def list_capability_manifests() -> list[object]:
+    """返回 AI4S Harness 能力清单；旧工具目录行为保持不变。
+
+    采用函数内导入避免 ``capabilities`` 为覆盖 Catalog 而形成循环依赖。该
+    入口只提供新 Manifest 的兼容查询，不改变 ``list_tools`` 或
+    ``openai_tool_schemas`` 的返回值和旧运行时输入契约。
+    """
+
+    from app.harness.capabilities import list_capability_manifests as _list_manifests
+
+    return _list_manifests()
+
+
+def get_capability_manifest(capability_id: str) -> object:
+    """按能力 ID 查询新 Harness Manifest。"""
+
+    from app.harness.capabilities import get_capability_manifest as _get_manifest
+
+    return _get_manifest(capability_id)

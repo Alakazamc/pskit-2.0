@@ -23,5 +23,8 @@ const statusLabels: Record<string, string> = {
 </script>
 
 <template>
-  <span class="status-pill" :class="`status-${status}`">{{ statusLabels[props.status] || props.status }}</span>
+  <span
+    class="status-pill"
+    :class="`status-${status}`"
+  >{{ statusLabels[props.status] || props.status }}</span>
 </template>

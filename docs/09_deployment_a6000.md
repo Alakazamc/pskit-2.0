@@ -2,7 +2,7 @@
 
 This document records the recommended A6000 deployment for PSKit 2.0.
 
-If there are questions or issues, please open a GitHub issue.
+If there are questions or issues, please contact **Alakazamc on WeChat**.
 
 ## Goal
 
@@ -11,7 +11,7 @@ Run PSKit 2.0 directly on A6000 so other computers on the same intranet can acce
 Current demo URL pattern:
 
 ```text
-http://127.0.0.1:10716/agent
+http://172.31.199.38:10716/agent
 ```
 
 ## Runtime Layout
@@ -37,7 +37,7 @@ Important runtime files:
 ## Minimum Environment
 
 ```text
-PSKIT_BIND=127.0.0.1:10716
+PSKIT_BIND=172.31.199.38:10716
 DATABASE_URL=sqlite:///./data/pskit2.sqlite3
 
 LLM_BASE_URL=https://api.deepseek.com/v1
@@ -80,7 +80,7 @@ PSKIT_AF3_MODEL_DIR=/data/hzeng/af3/model-parameters
 PSKIT_AF3_IMAGE=alphafold3:3.0.1
 PSKIT_AF3_GPU_DEVICE=0
 
-REMOTE_RNA_EXPERT_SSE_URL=http://127.0.0.1:8099/sse
+REMOTE_RNA_EXPERT_SSE_URL=http://172.31.226.126:8099/sse
 ```
 
 ## Start and Stop
@@ -89,7 +89,7 @@ Start:
 
 ```bash
 cd /data1/kxchen/pskit-2.0
-PSKIT_BIND=127.0.0.1:10716 scripts/pskit2_ctl.sh start
+PSKIT_BIND=172.31.199.38:10716 scripts/pskit2_ctl.sh start
 ```
 
 Status:
@@ -137,13 +137,13 @@ QDRANT_VECTOR_SIZE=1024
 Health:
 
 ```bash
-curl http://127.0.0.1:10716/api/health
+curl http://172.31.199.38:10716/api/health
 ```
 
 Frontend:
 
 ```bash
-curl http://127.0.0.1:10716/agent
+curl http://172.31.199.38:10716/agent
 ```
 
 Backend compile:
@@ -244,3 +244,32 @@ For a public deployment, add:
 - Redis/Celery.
 - S3/MinIO artifact storage.
 - systemd unit files.
+
+### Persistent scheduling without systemd linger
+
+The A6000 deployment account may not keep a user systemd manager alive after
+SSH logout. In that case, install the repository-managed user cron entries:
+
+```bash
+./scripts/install_user_cron.sh
+./scripts/run_scheduled_job.sh health
+tail -n 20 logs/health.log
+```
+
+This runs health verification every five minutes and a verified backup every
+day at 03:20 Asia/Shanghai. The jobs use per-task locks so a slow run cannot
+overlap its next invocation.
+
+The checked-in defaults target `http://127.0.0.1:10716`, `compose.yaml`, and
+the repository's `backups/` directory. Put persistent server overrides in a
+private `.env.schedule` file before installing cron; the runner loads it on
+every invocation. For example, set `PSKIT_HEALTH_URL`, `PSKIT_BACKUP_ROOT`,
+`PSKIT_COMPOSE_FILES` (colon-separated overlays), and
+`PSKIT_EXTRA_CONFIG_FILES` (optional extra private configuration paths).
+The Compose project name normally comes from `.env.docker`; set
+`COMPOSE_PROJECT_NAME` only if this deployment needs an explicit override.
+
+Run `scripts/run_scheduled_job.sh backup` once before relying on the schedule,
+then run its `health` check. An instance using keyword retrieval may have no
+Qdrant collection yet; that absence is recorded in backup metadata and does
+not prevent backing up its database and artifacts.

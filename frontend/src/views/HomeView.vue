@@ -11,8 +11,18 @@ import { RouterLink } from "vue-router";
         RAG 项目知识库、持久化任务队列和可下载分析结果。
       </p>
       <div class="button-row">
-        <RouterLink to="/agent" class="primary-button">打开智能体</RouterLink>
-        <RouterLink to="/about" class="ghost-button">查看技术设计</RouterLink>
+        <RouterLink
+          to="/agent"
+          class="primary-button"
+        >
+          打开智能体
+        </RouterLink>
+        <RouterLink
+          to="/about"
+          class="ghost-button"
+        >
+          查看技术设计
+        </RouterLink>
       </div>
     </div>
     <div class="hero-console">
@@ -21,10 +31,18 @@ import { RouterLink } from "vue-router";
         <strong>7U5E RNA 结合分析流程</strong>
       </div>
       <div class="timeline">
-        <div class="timeline-row ok">download_pdb_file · 7u5e.cif</div>
-        <div class="timeline-row ok">split_complex · protein/RNA chains</div>
-        <div class="timeline-row running">predict_binding_sites · queued task</div>
-        <div class="timeline-row">read_result_file · CSV report</div>
+        <div class="timeline-row ok">
+          download_pdb_file · 7u5e.cif
+        </div>
+        <div class="timeline-row ok">
+          split_complex · protein/RNA chains
+        </div>
+        <div class="timeline-row running">
+          predict_binding_sites · queued task
+        </div>
+        <div class="timeline-row">
+          read_result_file · CSV report
+        </div>
       </div>
     </div>
   </section>

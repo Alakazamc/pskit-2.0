@@ -12,6 +12,10 @@ export const useAuthStore = defineStore("auth", {
     isAdmin: (state) => state.user?.role === "admin",
   },
   actions: {
+    clearSession() {
+      this.user = null;
+      this.loaded = true;
+    },
     async loadMe() {
       try {
         this.user = await api.me();
@@ -29,16 +33,15 @@ export const useAuthStore = defineStore("auth", {
       this.user = await api.login(username, password);
       this.loaded = true;
     },
-    async register(username: string, password: string) {
-      this.user = await api.register(username, password);
+    async register(username: string, password: string, bootstrapToken?: string) {
+      this.user = await api.register(username, password, bootstrapToken);
       this.loaded = true;
     },
     async logout() {
       try {
         await api.logout();
       } finally {
-        this.user = null;
-        this.loaded = true;
+        this.clearSession();
       }
     },
   },
