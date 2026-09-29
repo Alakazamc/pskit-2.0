@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly PSKit runtime backup
+
+[Timer]
+OnCalendar=*-*-* 03:20:00 Asia/Shanghai
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

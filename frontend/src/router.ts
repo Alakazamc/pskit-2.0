@@ -3,6 +3,7 @@ import { createRouter, createWebHistory, type RouteLocationNormalized } from "vu
 import { useAuthStore } from "./stores/auth";
 import AboutView from "./views/AboutView.vue";
 import AgentView from "./views/AgentView.vue";
+import AdminUsersView from "./views/AdminUsersView.vue";
 import DoctorView from "./views/DoctorView.vue";
 import HomeView from "./views/HomeView.vue";
 import LoginView from "./views/LoginView.vue";
@@ -21,6 +22,7 @@ const router = createRouter({
     { path: "/tasks", name: "tasks", component: TasksView, meta: { requiresAuth: true } },
     { path: "/tools", name: "tools", component: ToolsView, meta: { requiresAuth: true } },
     { path: "/admin/doctor", name: "doctor", component: DoctorView, meta: { requiresAuth: true, admin: true } },
+    { path: "/admin/users", name: "admin-users", component: AdminUsersView, meta: { requiresAuth: true, admin: true } },
   ],
 });
 

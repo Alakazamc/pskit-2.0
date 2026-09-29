@@ -1,0 +1,11 @@
+[Unit]
+Description=Verify PSKit readiness, disk capacity and backup freshness
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/pskit-runtime
+Environment=PSKIT_HEALTH_URL=https://pskit.bioailab.net
+Environment=PSKIT_BACKUP_ROOT=/data1/enine/pskit-backups
+Environment=PSKIT_DISK_PATH=/
+ExecStart=%h/pskit-runtime/scripts/healthcheck_runtime.sh

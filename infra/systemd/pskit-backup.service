@@ -1,0 +1,12 @@
+[Unit]
+Description=Create a verified PSKit runtime backup
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/pskit-runtime
+Environment=COMPOSE_PROJECT_NAME=pskit2-v020-smoke
+Environment=PSKIT_COMPOSE_FILES=compose.yaml:compose.science.server.yaml:compose.gateway.server.yaml:compose.mcp.a6000.yaml
+Environment=PSKIT_EXTRA_CONFIG_FILES=.env.mcp
+Environment=PSKIT_BACKUP_ROOT=/data1/enine/pskit-backups
+ExecStart=%h/pskit-runtime/scripts/backup_runtime.sh %h/pskit-runtime/.env.docker

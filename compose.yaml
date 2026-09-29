@@ -1,0 +1,129 @@
+name: ${COMPOSE_PROJECT_NAME:-pskit2}
+
+x-pskit-common: &pskit-common
+  image: ${PSKIT_IMAGE:-pskit2:0.3.0}
+  build:
+    context: .
+    dockerfile: Dockerfile
+  env_file:
+    - .env.docker
+  environment:
+    PSKIT_ALLOW_LEGACY_PORT_10706: "true"
+    PSKIT_BIND: 0.0.0.0:10706
+    BIND_HOST: 0.0.0.0
+    BIND_PORT: "10706"
+    DATABASE_URL: ${PSKIT_DATABASE_URL:-sqlite:////app/backend/data/pskit2.sqlite3}
+    DATA_DIR: ${PSKIT_DATA_DIR:-/app/backend/data}
+    ARTIFACT_DIR: ${PSKIT_ARTIFACT_DIR:-/app/backend/data/artifacts}
+    KNOWLEDGE_DIR: /app/knowledge
+    FRONTEND_DIST_DIR: /app/frontend/dist
+    QDRANT_URL: http://qdrant:6333
+    READINESS_REQUIRE_QDRANT: ${READINESS_REQUIRE_QDRANT:-false}
+  volumes:
+    - ${PSKIT_DATA_VOLUME:-pskit_data}:${PSKIT_DATA_DIR:-/app/backend/data}
+  networks:
+    - pskit
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  stop_grace_period: 30s
+  pids_limit: 512
+  tmpfs:
+    - /tmp:size=512m,mode=1777
+  logging:
+    driver: json-file
+    options:
+      max-size: ${PSKIT_LOG_MAX_SIZE:-20m}
+      max-file: ${PSKIT_LOG_MAX_FILES:-5}
+
+services:
+  migrate:
+    <<: *pskit-common
+    command: ["python", "/app/scripts/migrate_db.py"]
+    restart: "no"
+    healthcheck:
+      disable: true
+
+  web:
+    <<: *pskit-common
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10706"]
+    ports:
+      - "${PSKIT_LISTEN_ADDRESS:-127.0.0.1}:${PSKIT_PORT:-10716}:10706"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      qdrant:
+        condition: service_healthy
+    cpus: ${PSKIT_WEB_CPUS:-4}
+    mem_limit: ${PSKIT_WEB_MEMORY:-4g}
+    healthcheck:
+      # Container health is a liveness signal. External MCP/model readiness is
+      # reported separately by /api/ready and must not mark the Web process dead.
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:10706/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  worker:
+    <<: *pskit-common
+    command: ["python", "-m", "app.tasks.worker", "forever"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      qdrant:
+        condition: service_healthy
+    cpus: ${PSKIT_WORKER_CPUS:-16}
+    mem_limit: ${PSKIT_WORKER_MEMORY:-32g}
+    pids_limit: 4096
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          from pathlib import Path;
+          pids = Path('/proc/1/task/1/children').read_text().split();
+          assert any(b'app.tasks.worker' in Path(f'/proc/{pid}/cmdline').read_bytes() for pid in pids)
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  qdrant:
+    image: qdrant/qdrant:v1.18.3
+    environment:
+      QDRANT__TELEMETRY_DISABLED: "true"
+    expose:
+      - "6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - pskit
+    restart: unless-stopped
+    cpus: ${PSKIT_QDRANT_CPUS:-4}
+    mem_limit: ${PSKIT_QDRANT_MEMORY:-8g}
+    pids_limit: 1024
+    logging:
+      driver: json-file
+      options:
+        max-size: ${PSKIT_LOG_MAX_SIZE:-20m}
+        max-file: ${PSKIT_LOG_MAX_FILES:-5}
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "bash", "-c", "</dev/tcp/127.0.0.1/6333"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  pskit_data:
+  qdrant_data:
+
+networks:
+  pskit:
+    driver: bridge

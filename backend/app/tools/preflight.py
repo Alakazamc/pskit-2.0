@@ -58,4 +58,3 @@ def preflight_binding_site(ligand_type: str, pdb_path: str) -> list[dict]:
             }
         )
     return errors
-

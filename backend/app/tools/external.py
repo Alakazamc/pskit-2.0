@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from uuid import UUID
 
 import httpx
 from sqlalchemy.orm import Session
 
-from app.artifacts.service import register_local_artifact, resolve_owned_local_artifact, session_artifact_dir
+from app.artifacts.service import (
+    register_local_artifact,
+    resolve_owned_local_artifact_reference,
+    session_artifact_dir,
+)
 from app.config import get_settings
 from app.db.models import User
 
@@ -45,7 +48,13 @@ def search_pdb(query: str) -> dict:
         response = client.post(settings.rcsb_search_url, json=payload)
     if response.status_code >= 400:
         raise ToolExecutionError(f"RCSB search failed: HTTP {response.status_code} {response.text[:300]}")
-    data = response.json()
+    if response.status_code == 204 or not response.content:
+        data = {"result_set": [], "total_count": 0}
+    else:
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise ToolExecutionError("RCSB search returned invalid JSON") from exc
     hits = [
         {"pdb_id": item.get("identifier"), "score": item.get("score")}
         for item in data.get("result_set", [])
@@ -222,23 +231,20 @@ def read_result_file(
     file_path: str | None = None,
     max_chars: int = 8000,
 ) -> dict:
-    if artifact_id:
-        path = resolve_owned_local_artifact(db, user, artifact_id)
-    elif file_path:
-        settings = get_settings()
-        root = settings.artifact_dir.resolve()
-        path = Path(file_path).resolve()
-        if root not in path.parents and path != root:
-            raise ToolExecutionError("file_path must be under artifact root")
-        if not path.exists() or not path.is_file():
-            raise ToolExecutionError("file_path does not exist or is not a file")
-    else:
-        raise ToolExecutionError("artifact_id or file_path is required")
+    try:
+        path = resolve_owned_local_artifact_reference(
+            db,
+            user,
+            artifact_id=artifact_id,
+            file_path=file_path,
+        )
+    except (FileNotFoundError, NotImplementedError, ValueError) as exc:
+        raise ToolExecutionError("Artifact not found or is not readable") from exc
 
     text = path.read_text(encoding="utf-8", errors="replace")
     limit = max(100, min(int(max_chars or 8000), 50000))
     return {
-        "file": str(path),
+        "file": path.name,
         "returned_chars": min(len(text), limit),
         "total_chars": len(text),
         "truncated": len(text) > limit,

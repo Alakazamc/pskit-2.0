@@ -1,0 +1,41 @@
+# A6000 science-worker overlay.
+#
+# This file contains no credentials and does not mount the Docker socket. It
+# enables the legacy INABe/PAIR runtime, local model weights, Foldseek and
+# DSSP. AlphaFold 3 is kept as a separate opt-in overlay because exposing the
+# host Docker socket to a container is a privileged operation.
+
+services:
+  worker:
+    image: ${PSKIT_SCIENCE_IMAGE:-pskit2-science:0.3.0}
+    build:
+      context: .
+      dockerfile: Dockerfile.science
+      args:
+        PSKIT_SCIENCE_BASE_IMAGE: ${PSKIT_SCIENCE_BASE_IMAGE:-pskit2-science-demo:f2e346b005c0-full}
+        PSKIT_VERSION: ${PSKIT_VERSION:-0.3.0}
+    environment:
+      PSKIT_LEGACY_ROOT: /opt/pskit-legacy
+      PSKIT_LEGACY_PYTHON: /opt/pskit-legacy-venv/bin/python
+      PSKIT_MODEL_PARAMETERS: /opt/pskit-models
+      PSKIT_FOLDSEEK: /usr/local/bin/foldseek
+      PSKIT_DSSP: /usr/local/bin/mkdssp
+      PSKIT_AF3_DB_DIR: /opt/alphafold3/db
+      PSKIT_AF3_MODEL_DIR: /opt/alphafold3/models
+      PSKIT_AF3_IMAGE: ${PSKIT_AF3_IMAGE:-alphafold3:3.0.1}
+      PSKIT_AF3_GPU_DEVICE: ${PSKIT_AF3_GPU_DEVICE:-0}
+      PSKIT_AF3_ALLOWED_GPU_DEVICES: ${PSKIT_AF3_ALLOWED_GPU_DEVICES:-0}
+    volumes:
+      - ${PSKIT_LEGACY_ROOT_HOST:-/data1/kxchen/pskit}:/opt/pskit-legacy:ro
+      - ${PSKIT_MODEL_PARAMETERS_HOST:-/data1/kxchen/pskit-data/model_parameters}:/opt/pskit-models:ro
+      - ${PSKIT_FOLDSEEK_HOST:-/data1/kxchen/bin/foldseek}:/usr/local/bin/foldseek:ro
+      - ${PSKIT_DSSP_HOST:-/data1/kxchen/bin/mkdssp}:/usr/local/bin/mkdssp:ro
+      - ${PSKIT_AF3_DB_DIR_HOST:-/home/public/database/alphafold3}:/opt/alphafold3/db:ro
+      - ${PSKIT_AF3_MODEL_DIR_HOST:-/home/public}:/opt/alphafold3/models:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

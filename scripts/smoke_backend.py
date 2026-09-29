@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi.testclient import TestClient
-
 from app.db.session import init_db
 from app.main import app
+from fastapi.testclient import TestClient
 
 
 def main() -> None:
@@ -14,7 +13,9 @@ def main() -> None:
     username = "smoke_" + uuid.uuid4().hex[:10]
     password = "password123"
 
-    register = client.post("/api/auth/register", json={"username": username, "password": password})
+    register = client.post(
+        "/api/auth/register", json={"username": username, "password": password}
+    )
     assert register.status_code == 200, register.text
     assert register.json()["username"] == username
 

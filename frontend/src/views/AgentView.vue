@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 
 import EmptyState from "../components/EmptyState.vue";
 import MarkdownMessage from "../components/MarkdownMessage.vue";
 import StatusPill from "../components/StatusPill.vue";
 import {
   ApiError,
+  activeAgentTurn,
   api,
+  recoverAgentTurn,
   streamAgentMessage,
   type AgentMessage,
   type AgentSession,
@@ -51,6 +53,8 @@ const tasks = ref<Task[]>([]);
 const streamingAnswer = ref("");
 const suggestions = ref<string[]>([]);
 const messageListRef = ref<HTMLElement | null>(null);
+let taskPollTimer: number | undefined;
+let recovering = false;
 
 const activeSession = computed(() => sessions.value.find((item) => item.id === activeSessionId.value));
 
@@ -68,7 +72,46 @@ async function loadHistory() {
 }
 
 async function loadTasks() {
-  tasks.value = await api.tasks();
+  let loadedTasks: Task[];
+  try {
+    loadedTasks = await api.tasks();
+  } catch (err) {
+    error.value = err instanceof ApiError ? err.message : "无法刷新任务状态";
+    return;
+  }
+  tasks.value = loadedTasks;
+  const taskArtifacts = tasks.value
+    .filter((task) => !task.session_id || task.session_id === activeSessionId.value)
+    .flatMap((task) => task.artifacts)
+    .map((artifact) => ({
+      artifact_id: artifact.id,
+      filename: artifact.filename,
+      download_url: artifact.download_url,
+    }));
+  const merged = new Map(
+    [...artifacts.value, ...taskArtifacts].map((artifact) => [artifact.artifact_id, artifact]),
+  );
+  artifacts.value = [...merged.values()];
+}
+
+async function resumeActiveTurn() {
+  if (!activeSessionId.value || recovering || sending.value) return;
+  const active = await activeAgentTurn(activeSessionId.value);
+  if (!active) return;
+  recovering = true;
+  sending.value = true;
+  error.value = "检测到服务器仍在执行上一条消息，正在恢复进度…";
+  try {
+    await recoverAgentTurn(active.turn_id, handleStreamEvent);
+    await Promise.all([loadHistory(), loadSessions(), loadTasks()]);
+    streamingAnswer.value = "";
+    error.value = "";
+  } catch (err) {
+    error.value = err instanceof ApiError ? err.message : "无法恢复服务器任务";
+  } finally {
+    recovering = false;
+    sending.value = false;
+  }
 }
 
 async function scrollToBottom() {
@@ -89,6 +132,7 @@ async function boot() {
       activeSessionId.value = session.id;
     }
     await Promise.all([loadHistory(), loadTasks()]);
+    void resumeActiveTurn();
   } catch (err) {
     error.value = err instanceof ApiError ? err.message : "无法加载智能体";
   } finally {
@@ -116,6 +160,8 @@ async function selectSession(sessionId: string) {
   streamingAnswer.value = "";
   suggestions.value = [];
   await loadHistory();
+  await loadTasks();
+  void resumeActiveTurn();
 }
 
 function handleStreamEvent(event: StreamEvent) {
@@ -156,6 +202,16 @@ function handleStreamEvent(event: StreamEvent) {
     void loadTasks();
     return;
   }
+  if (event.type === "task_update") {
+    events.value.unshift({
+      type: "task_update",
+      task_id: String(event.task_id || ""),
+      task_type: String(event.task_type || ""),
+      status: String(event.status || ""),
+    });
+    void loadTasks();
+    return;
+  }
   if (event.type === "tool_call_started" || event.type === "tool_call_finished") {
     events.value.unshift({
       type: event.type,
@@ -189,18 +245,42 @@ async function sendMessage() {
     metadata: {},
   });
   void scrollToBottom();
+  const turnId = crypto.randomUUID();
   try {
-    await streamAgentMessage(activeSessionId.value, content, handleStreamEvent);
+    await streamAgentMessage(activeSessionId.value, content, handleStreamEvent, turnId);
     await Promise.all([loadHistory(), loadSessions(), loadTasks()]);
     streamingAnswer.value = "";
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : "消息发送失败";
+    if (err instanceof ApiError && ![0, 409].includes(err.status)) {
+      error.value = err.message;
+      sending.value = false;
+      return;
+    }
+    try {
+      const active = await activeAgentTurn(activeSessionId.value);
+      if (active) {
+        await recoverAgentTurn(active.turn_id, handleStreamEvent);
+      }
+      await Promise.all([loadHistory(), loadSessions(), loadTasks()]);
+      streamingAnswer.value = "";
+      error.value = "";
+    } catch (recoveryError) {
+      error.value = recoveryError instanceof ApiError
+        ? recoveryError.message
+        : err instanceof ApiError
+          ? err.message
+          : "消息连接中断；服务器可能仍在运行，请稍后刷新本会话";
+    }
   } finally {
     sending.value = false;
   }
 }
 
-onMounted(boot);
+onMounted(async () => {
+  await boot();
+  taskPollTimer = window.setInterval(() => void loadTasks(), 3000);
+});
+onUnmounted(() => window.clearInterval(taskPollTimer));
 </script>
 
 <template>
@@ -208,7 +288,12 @@ onMounted(boot);
     <aside class="session-pane">
       <div class="pane-header">
         <strong>对话记录</strong>
-        <button class="mini-button" @click="newSession">新建</button>
+        <button
+          class="mini-button"
+          @click="newSession"
+        >
+          新建
+        </button>
       </div>
       <button
         v-for="session in sessions"
@@ -230,19 +315,43 @@ onMounted(boot);
         </div>
         <StatusPill :status="sending ? 'running' : 'ready'" />
       </div>
-      <p v-if="error" class="error-line">{{ error }}</p>
-      <EmptyState v-if="!loading && messages.length === 0" title="开始一次分析" body="示例：下载 7U5E 并预测 RNA 结合位点。" />
-      <div ref="messageListRef" class="message-list">
-        <article v-for="message in messages" :key="message.id" class="message-card" :class="message.role">
+      <p
+        v-if="error"
+        class="error-line"
+      >
+        {{ error }}
+      </p>
+      <EmptyState
+        v-if="!loading && messages.length === 0"
+        title="开始一次分析"
+        body="示例：下载 7U5E 并预测 RNA 结合位点。"
+      />
+      <div
+        ref="messageListRef"
+        class="message-list"
+      >
+        <article
+          v-for="message in messages"
+          :key="message.id"
+          class="message-card"
+          :class="message.role"
+        >
           <span>{{ message.role === "user" ? "用户" : message.role === "assistant" ? "智能体" : message.role }}</span>
           <MarkdownMessage :content="message.content" />
         </article>
-        <article v-if="streamingAnswer" class="message-card assistant streaming">
+        <article
+          v-if="streamingAnswer"
+          class="message-card assistant streaming"
+        >
           <span>智能体生成中</span>
           <MarkdownMessage :content="streamingAnswer" />
         </article>
       </div>
-      <div v-if="suggestions.length > 0" class="suggestion-row" aria-label="后续建议">
+      <div
+        v-if="suggestions.length > 0"
+        class="suggestion-row"
+        aria-label="后续建议"
+      >
         <button
           v-for="suggestion in suggestions"
           :key="suggestion"
@@ -253,7 +362,10 @@ onMounted(boot);
           {{ suggestion }}
         </button>
       </div>
-      <form class="composer" @submit.prevent="sendMessage">
+      <form
+        class="composer"
+        @submit.prevent="sendMessage"
+      >
         <textarea
           v-model="input"
           rows="3"
@@ -261,15 +373,29 @@ onMounted(boot);
           @keydown.meta.enter.prevent="sendMessage"
           @keydown.ctrl.enter.prevent="sendMessage"
         />
-        <button class="primary-button" :disabled="sending || !input.trim()">发送</button>
+        <button
+          class="primary-button"
+          :disabled="sending || !input.trim()"
+        >
+          发送
+        </button>
       </form>
     </div>
 
     <aside class="agent-rail">
       <div class="rail-card dark">
         <span class="card-label">最新工具事件</span>
-        <div v-if="events.length === 0" class="muted">暂无工具事件。</div>
-        <div v-for="event in events.slice(0, 6)" :key="`${event.type}-${event.tool_call_id}-${event.task_id}`" class="rail-row">
+        <div
+          v-if="events.length === 0"
+          class="muted"
+        >
+          暂无工具事件。
+        </div>
+        <div
+          v-for="event in events.slice(0, 6)"
+          :key="`${event.type}-${event.tool_call_id}-${event.task_id}`"
+          class="rail-row"
+        >
           <strong>{{ event.name || event.task_type || event.type }}</strong>
           <small>{{ event.status || event.tool_call_id || event.task_id }}</small>
         </div>
@@ -277,7 +403,12 @@ onMounted(boot);
 
       <div class="rail-card">
         <span class="card-label">结果文件</span>
-        <div v-if="artifacts.length === 0" class="muted">工具生成的结果文件会显示在这里。</div>
+        <div
+          v-if="artifacts.length === 0"
+          class="muted"
+        >
+          工具生成的结果文件会显示在这里。
+        </div>
         <a
           v-for="artifact in artifacts.slice(0, 6)"
           :key="artifact.artifact_id"
@@ -293,8 +424,17 @@ onMounted(boot);
       <div class="rail-card">
         <span class="card-label">RAG 来源</span>
         <StatusPill :status="ragBackend" />
-        <div v-if="sources.length === 0" class="muted">最近一轮暂无检索来源。</div>
-        <article v-for="source in sources.slice(0, 4)" :key="`${source.source}-${source.heading}`" class="source-card">
+        <div
+          v-if="sources.length === 0"
+          class="muted"
+        >
+          最近一轮暂无检索来源。
+        </div>
+        <article
+          v-for="source in sources.slice(0, 4)"
+          :key="`${source.source}-${source.heading}`"
+          class="source-card"
+        >
           <strong>{{ source.heading || source.source }}</strong>
           <small>{{ source.source }} · {{ Number(source.score || 0).toFixed(2) }}</small>
         </article>
@@ -302,8 +442,17 @@ onMounted(boot);
 
       <div class="rail-card">
         <span class="card-label">最近任务</span>
-        <div v-if="tasks.length === 0" class="muted">暂无任务。</div>
-        <article v-for="task in tasks.slice(0, 4)" :key="task.id" class="task-mini">
+        <div
+          v-if="tasks.length === 0"
+          class="muted"
+        >
+          暂无任务。
+        </div>
+        <article
+          v-for="task in tasks.slice(0, 4)"
+          :key="task.id"
+          class="task-mini"
+        >
           <strong>{{ task.task_type }}</strong>
           <StatusPill :status="task.status" />
         </article>

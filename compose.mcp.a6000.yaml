@@ -1,0 +1,74 @@
+services:
+  rag-index:
+    image: ${PSKIT_IMAGE:-pskit2:0.3.0}
+    command: ["python", "/app/scripts/build_rag_index.py"]
+    working_dir: /app/backend
+    env_file:
+      - .env.docker
+    environment:
+      PSKIT_ALLOW_LEGACY_PORT_10706: "true"
+      BIND_PORT: "10706"
+      DATABASE_URL: ${PSKIT_DATABASE_URL:-sqlite:////app/backend/data/pskit2.sqlite3}
+      DATA_DIR: ${PSKIT_DATA_DIR:-/app/backend/data}
+      ARTIFACT_DIR: ${PSKIT_ARTIFACT_DIR:-/app/backend/data/artifacts}
+      KNOWLEDGE_DIR: /app/knowledge
+      QDRANT_URL: http://qdrant:6333
+    volumes:
+      - ${PSKIT_DATA_VOLUME:-pskit_data}:${PSKIT_DATA_DIR:-/app/backend/data}
+    networks:
+      - pskit
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      qdrant:
+        condition: service_healthy
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  web:
+    image: ${PSKIT_IMAGE:-pskit2:0.3.0}
+    depends_on:
+      rag-index:
+        condition: service_completed_successfully
+    environment:
+      PSKIT_ALLOW_LEGACY_PORT_10706: "true"
+      REGISTRATION_MODE: "open"
+      SESSION_TTL_DAYS: "3"
+      COOKIE_SECURE: "true"
+      PSKIT_MAX_ACTIVE_SESSIONS_PER_USER: "5"
+      PSKIT_MAX_ACTIVE_TASKS_PER_USER: "4"
+      PSKIT_MAX_ACTIVE_AF3_PER_USER: "10"
+      PSKIT_MAX_GLOBAL_ACTIVE_TASKS: "100"
+      PSKIT_MAX_GLOBAL_ACTIVE_AF3: "20"
+      SCIENCE_READINESS_REQUIRED: "true"
+    healthcheck:
+      # Keep Docker liveness independent from optional external science services.
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:10706/api/health"]
+  worker:
+    image: ${PSKIT_SCIENCE_IMAGE:-pskit2-science:0.3.0}
+    depends_on:
+      web:
+        condition: service_started
+    environment:
+      ARTIFACT_DIR: ${PSKIT_ARTIFACT_DIR:-/app/backend/data/artifacts}
+      PSKIT_AF3_DB_DIR: "/home/public/database/alphafold3"
+      PSKIT_AF3_MODEL_DIR: "/data/hzeng/af3/model-parameters"
+      PSKIT_AF3_IMAGE: "alphafold3:3.0.1"
+      PSKIT_AF3_GPU_DEVICE: ${PSKIT_AF3_GPU_DEVICE:-0}
+      PSKIT_AF3_ALLOWED_GPU_DEVICES: ${PSKIT_AF3_ALLOWED_GPU_DEVICES:-0}
+      PSKIT_AF3_MIN_FREE_MEMORY_MIB: "40000"
+      PSKIT_FOLDSEEK_DB: "/data1/kxchen/pskit-science-databases/foldseek-af3-pdb/pdb"
+      PSKIT_SEQUENCE_SEARCH_BACKEND: "jackhmmer-docker"
+      PSKIT_SEQUENCE_SEARCH_BINARY: "/usr/bin/docker"
+      PSKIT_SEQUENCE_SEARCH_DB: "/home/public/database/alphafold3/uniref90_2022_05.fa"
+    group_add:
+      - "999"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker:ro
+      - /home/public/database/alphafold3:/home/public/database/alphafold3:ro
+      - /data/hzeng/af3/model-parameters:/data/hzeng/af3/model-parameters:ro
+      - /data1/kxchen/pskit-science-databases/foldseek-af3-pdb:/data1/kxchen/pskit-science-databases/foldseek-af3-pdb:ro

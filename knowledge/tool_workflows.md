@@ -1,28 +1,36 @@
 # PSKit Tool Workflows / 工具工作流
 
 ## Principles / 原则
-Use the smallest workflow that satisfies the user request. Search before download, download before structure analysis, and read only safe text result files. Avoid AF3 and Rosetta relax unless explicitly requested.
 
-## Find and download PDB / 查找并下载 PDB
-Use `search_pdb` for candidates, `fetch_pdb_info` for metadata comparison, and `download_pdb_file` for local analysis. Prefer `cif` unless PDB is required.
+Use the smallest workflow that satisfies the request. Search before download,
+reuse returned artifact IDs, and avoid expensive prediction unless explicitly
+requested. Explain that computational predictions need experimental validation.
 
-## Split and extract / 拆分与提取
-For all chains use `split_pdb_by_chain`. For molecule-type separation use `split_complex`. Use `extract_fragment` when the user specifies chain, start, or end residue.
+## Structure lookup and analysis / 结构检索与分析
 
-## Contact map / 接触图
-Use `calculate_contact_map` with structure path, format, optional chain, and optional mode. Explain that output JSON contains residue axis labels and contact values.
+Use `search_pdb`, optionally `fetch_pdb_info`, then `download_pdb_file`. The
+download returns a registered artifact. Pass its `artifact_id` to
+`split_pdb_by_chain`, `split_complex`, `extract_fragment`,
+`calculate_contact_map`, or `annotate_binding_pairs`.
 
-## Binding workflows / 结合相关工作流
-Use `annotate_binding_pairs` for geometry-based protein-nucleic-acid contacts. Use `predict_binding_sites` with `ligand_type` `DNA` or `RNA` for ML residue prediction. Use `predict_interaction` or task `pred_pni` for sequence-pair interaction prediction.
+## Prediction / 预测
 
-## Feature and embedding workflows / 特征与嵌入
-Use `extract_empirical_features` for DSSP and optional Rosetta. Keep `rosetta_relax=false` unless requested. Use `lm_embed` with `model_type` `esm2`, `saprot`, or `both`; `.npy` outputs are binary arrays.
+Use `predict_binding_sites` with an owned structure artifact and `DNA` or `RNA`.
+Use `predict_interaction` for a protein and nucleic-acid sequence pair. Use
+`extract_empirical_features` for DSSP or optional legacy feature extraction.
+These operations are queued for the background worker.
 
-## AlphaFold 3 / AF3
-Confirm explicit user intent, warn about GPU/Docker cost, run `run_alphafold3`, and inspect `af3_stdout.log`, `af3_stderr.log`, `af3_command.txt`, or `error.json` only when troubleshooting.
+## AlphaFold 3 and remote MCP / AF3 与远程 MCP
 
-## RNA design / RNA 设计
-Identify PDB ID and chain, use metadata if needed, then call `remote_rna_expert__generate_rna_for_protein` if the MCP service is available.
+Run `run_alphafold3` only after explicit confirmation because it can require a
+licensed database, model parameters, Docker, and GPU resources. Use
+`remote_rna_expert__generate_rna_for_protein` only when its MCP service URL is
+configured and reachable. CORAL and PepCCD use `coral_mcp__predict` and
+`pepccd_mcp__generate`; pass the selected server tool's input inside
+`arguments`.
 
-## Result reading / 结果读取
-Use `read_result_file` for known CSV, JSON, log, TXT, or Markdown paths returned by tools. Download binary or large files instead.
+## Reports and results / 报告与结果
+
+Use `read_result_file` only with a known owned `artifact_id`. Use
+`generate_session_report` to create a registered Markdown summary. Download
+binary or large artifacts through the file API.

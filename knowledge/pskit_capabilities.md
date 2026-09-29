@@ -1,30 +1,44 @@
 # PSKit Capabilities / PSKit 功能总览
 
 ## Product scope / 产品定位
-PSKit is a web and agent system for structural bioinformatics and protein-nucleic-acid workflows. It combines a Rust webserver, Vue frontend, browser/WASM structure tools, Python AI tasks, local model parameters, external biological databases, Chroma-based RAG, and an LLM Agent with tool calling.
 
-PSKit is best for exploratory research workflows, task orchestration, model-assisted analysis, output interpretation, and explaining how to use PSKit. It is not a clinical decision system, not a substitute for experimental validation, and not a general-purpose shell for arbitrary server operations.
+PSKit 2.0 is a FastAPI and Vue workbench for structural bioinformatics and
+protein–nucleic-acid workflows. It combines authenticated Agent sessions,
+database-backed background tasks, registered artifacts, Qdrant/keyword RAG,
+public molecular databases, and optional local or remote model tools. It is not
+a clinical system and predictions require experimental validation.
 
-## Execution modes / 执行模式
-PSKit has four execution modes: Web UI pages, Agent chat, backend Python tasks, and browser/WASM tools. Web UI pages are best for explicit form-based tasks. Agent chat is best for natural-language workflows and tool orchestration. Backend Python tasks run AI models and long computations. Browser/WASM tools run local structure manipulation without consuming backend Python workers.
+## User interface / 用户界面
 
-## Supported inputs / 支持输入
-Common inputs include PDB IDs, PDB files, mmCIF files, protein sequences, DNA/RNA sequences, and protein-nucleic-acid complexes. Structure workflows usually need PDB/mmCIF. Sequence workflows need validated protein or nucleic-acid sequences. Database lookup workflows may start from names, accessions, genes, organisms, or free-text descriptions.
+The current pages are Home, Login/Register, Agent, Tasks, Tools, and the
+administrator runtime doctor. Agent sessions and task history are isolated by
+user. The first account is administrator in the default deployment mode.
 
-## Main capabilities / 主要能力
-PSKit supports PDB discovery, RCSB metadata lookup, structure download, UniProt lookup, RNAcentral lookup, SerpAPI public web search, chain splitting, molecule-type splitting, fragment extraction, contact-map generation, protein-nucleic-acid binding-pair annotation, DNA/RNA binding-site prediction, DSSP and optional Rosetta feature extraction, ESM-2/SaProt embeddings, protein-nucleic-acid interaction prediction, AlphaFold 3 task launch, remote RNA design via MCP, Agent session files, result reading, and discussion report generation.
+## Lightweight tools / 轻量工具
 
-## Agent capabilities / Agent 能力
-The Agent selects a skill, retrieves PSKit knowledge, calls only allowed tools, and summarizes outputs. It should use specific skills when possible, avoid unnecessary metadata fetches, avoid re-downloading existing structures, avoid AlphaFold 3 unless explicitly requested, and avoid Rosetta relax unless the user explicitly asks.
+Available synchronous tools include RCSB PDB search/metadata/download, UniProt,
+RNAcentral, optional SerpAPI search, structure splitting, fragment extraction,
+contact maps, binding-pair annotation, registered text-result reading, and
+session report generation.
 
-## Web UI pages / 网页入口
-Important routes are `/`, `/agent`, `/binding/nbsa`, `/binding/nbsp`, `/binding/pnip`, `/features/structural`, `/features/language-model`, `/features/alphafold3`, `/tools/split`, `/tools/extract`, `/contact-map`, `/viewer`, `/about/guide`, and `/about/technical`.
+## Background tasks / 后台任务
 
-## Backend task types / 后端任务类型
-Backend task types are `pred_nbs` for nucleic-acid binding-site prediction, `pred_pni` for protein-nucleic-acid sequence interaction prediction, `emp_feats` for empirical structural features, `lm_embed` for language-model embeddings, and `af3_predict` for AlphaFold 3 prediction.
+Long-running task names are `predict_binding_sites`, `predict_interaction`,
+`extract_empirical_features`, `run_alphafold3`, `coral_mcp__predict`,
+`pepccd_mcp__generate`, and
+`remote_rna_expert__generate_rna_for_protein`. Tasks are persisted in SQL,
+claimed atomically by the worker, and recovered after interrupted executions.
 
-## Browser and CLI tools / 浏览器与 CLI 工具
-Browser/WASM and `pskit-cli` capabilities include split-by-chain, split-complex, extract-fragment, contact-map, and annotate-binding-pairs. Browser execution is interactive and local to the client. Agent/backend execution stores artifacts in server-side task or session directories.
+## Optional runtime / 可选运行时
 
-## Deployment fact / 当前部署事实
-The active deployment is native on the A6000 server at `/data1/kxchen/pskit`. `pskit-webserver` serves the frontend from `webpage/dist` and usually binds to `127.0.0.1:10706`. The Dockerfile exists, but do not claim the live service is a long-running PSKit container unless that has changed.
+Binding prediction, empirical feature extraction, and AlphaFold 3 require
+external runtimes, binaries, model weights, and sometimes a GPU. Those assets
+are not bundled in the core image because of size and licensing. The web app,
+authentication, task history, database lookups, keyword RAG, and lightweight
+structure processing work without them.
+
+## Safety boundaries / 安全边界
+
+The Agent can invoke only catalogued tools. Task inputs are size- and
+type-validated. Structure operations use owned artifact IDs, and file downloads
+enforce ownership. PSKit does not provide arbitrary shell or filesystem access.

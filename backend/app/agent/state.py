@@ -17,4 +17,10 @@ class AgentState(TypedDict, total=False):
     diagnostics: list[dict[str, Any]]
     pending_events: list[dict[str, Any]]
     step_count: int
+    tool_call_count: int
+    executed_tool_call_fingerprints: list[str]
+    waiting_for_tasks: bool
+    max_steps: int
+    max_tool_calls: int
+    max_tool_result_chars: int
     final_answer: str | None

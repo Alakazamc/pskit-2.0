@@ -27,5 +27,10 @@ async function login(username: string, password: string) {
 </script>
 
 <template>
-  <AuthForm mode="login" :error="error" :loading="loading" @submit="login" />
+  <AuthForm
+    mode="login"
+    :error="error"
+    :loading="loading"
+    @submit="login"
+  />
 </template>

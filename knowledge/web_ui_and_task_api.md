@@ -1,22 +1,36 @@
 # Web UI and Task API / 网页与任务 API
 
-## Web UI overview / 网页总览
-The Rust webserver serves the built Vue frontend from `webpage/dist`. Some pages run browser/WASM tools; others submit backend tasks to `/api/tasks`.
+## Routes / 页面路由
 
-## Routes / 路由
-`/` is Home. `/agent` is Agent chat. `/binding/nbsa` annotates binding sites by structure contact. `/binding/nbsp` predicts binding sites with task `pred_nbs`. `/binding/pnip` predicts sequence interaction with task `pred_pni`. `/features/structural` launches `emp_feats`. `/features/language-model` launches `lm_embed`. `/features/alphafold3` launches `af3_predict`. `/tools/split` splits structures. `/tools/extract` extracts fragments. `/contact-map` builds contact maps. `/viewer` visualizes structures. `/about/guide` and `/about/technical` provide docs.
+`/` and `/about` are public. `/login` and `/register` handle authentication.
+Authenticated users can access `/agent`, `/tasks`, and `/tools`.
+`/admin/doctor` requires an administrator.
+
+## Authentication API / 认证 API
+
+Use `GET /api/auth/registration` to discover whether registration is open.
+Register, login, logout, and current-user endpoints are under `/api/auth` and
+use an HTTP-only session cookie. Administrators create additional users with
+`POST /api/auth/users`.
 
 ## Task API / 任务 API
-Important routes are `POST /api/tasks`, `GET /api/tasks/{task_id}`, `GET /api/tasks/{task_id}/results`, and `GET /api/tasks/{task_id}/results/{filename}`.
 
-## Task lifecycle / 任务生命周期
-Task statuses include `Pending`, `Processing`, `Completed`, and `Failed`. Pending responses may include queue position. Results are written under task result directories and exposed through list/download APIs.
+`POST /api/tasks` validates and queues a supported task. `GET /api/tasks`
+returns the current user's paginated history, `GET /api/tasks/{task_id}` returns
+one owned task, and `GET /api/tasks/{task_id}/files` lists registered outputs.
+Statuses are `queued`, `running`, `completed`, and `failed`.
 
-## Task storage / 任务存储
-Typical storage is `tasks/uploads/<task_id>`, `tasks/uploads/<task_id>/form_data.json`, `tasks/results/<task_id>`, and SQLite `tasks/tasks.db`.
+## Supported task types / 支持的任务类型
 
-## Task types / 任务类型
-`pred_nbs` predicts nucleic-acid binding sites. `pred_pni` predicts protein-nucleic-acid interaction. `emp_feats` extracts empirical features. `lm_embed` generates ESM-2/SaProt embeddings. `af3_predict` launches AlphaFold 3.
+The supported names are `predict_binding_sites`, `predict_interaction`,
+`extract_empirical_features`, `run_alphafold3`, `coral_mcp__predict`,
+`pepccd_mcp__generate`, and
+`remote_rna_expert__generate_rna_for_protein`. Sequence input is capped at
+20,000 total characters and serialized task input at 1 MB. Individual tools
+have tighter shape and count validation.
 
-## Limits / 限制
-The upload body limit is 250 MB. Worker concurrency is controlled by `pskit-webserver <work_dir> <address> <max_workers>`. The queue is in-memory, so pending queue state may not survive a server restart.
+## Artifact API / 产物 API
+
+Task and tool outputs are registered as artifacts. Download an owned artifact
+with `GET /api/files/{artifact_id}/download`. IDs belonging to another user are
+reported as not found.

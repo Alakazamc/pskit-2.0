@@ -7,7 +7,7 @@ defineProps<{
 
 <template>
   <div class="empty-state">
-    <div class="empty-orbit"></div>
+    <div class="empty-orbit" />
     <h3>{{ title }}</h3>
     <p>{{ body }}</p>
   </div>

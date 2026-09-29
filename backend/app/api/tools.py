@@ -11,4 +11,3 @@ router = APIRouter(prefix="/api/tools", tags=["tools"])
 @router.get("")
 def tools(_user: User = Depends(get_current_user)):
     return {"tools": list_tools()}
-

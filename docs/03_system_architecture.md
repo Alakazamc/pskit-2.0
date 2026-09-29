@@ -113,7 +113,6 @@ A6000
   Qdrant
   MinIO
   Caddy or Nginx
-  model weights under /data1/kxchen/pskit-data/model_parameters
+  model weights under an operator-managed read-only model directory
   AF3 db under /home/public/database/alphafold3
 ```
-

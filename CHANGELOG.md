@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.0 - Production hardening and unified science runtime
+
+- Unified the complete production Agent, research harness, local-model, MCP,
+  and AlphaFold3 code paths into the canonical repository and images.
+- Added database-backed proxy-aware authentication throttling, bounded sessions,
+  transactional task quotas, GPU allowlists, and administrator audit events.
+- Added resumable Agent turns, task artifact downloads/retries, and an admin
+  user/metrics interface.
+- Made RAG rebuilds atomic through versioned Qdrant collections and alias swaps.
+- Added the production-schema migration, dependency audit, CI quality gates,
+  verified SQLite/artifact/Qdrant backups, health monitoring, log rotation, and
+  container resource limits.
+- Corrected Compose health paths, startup dependencies, persistent host paths,
+  server image overlays, and explicit CORAL/PepCCD configuration.
+
+## 0.2.0 - Delivery hardening
+
+- Closed public registration after first-admin bootstrap by default and added an admin-only user creation endpoint.
+- Added login rate limiting, artifact ownership enforcement, task input limits, security headers, and Markdown sanitization.
+- Made task claiming atomic and added stale-task recovery with bounded attempts.
+- Added database migrations, dependency lock files, real readiness checks, pagination, and finite provider timeouts.
+- Added backend queue/security tests, frontend tests and lint configuration, and stronger CI gates.
+
 ## [2.0.0] - 2026-06-20
 
 ### Added
@@ -19,9 +42,3 @@
 - 修复 DeepSeek API endpoint 配置问题。
 - 修复 Agent 会话文件路径和结果读取问题。
 - 修复右侧状态栏横向溢出问题。
-
-### Deployment
-
-- PSKit 2.0 部署至 A6000。
-- 当前访问地址：`http://127.0.0.1:10716/agent`
-- GitHub：`https://github.com/Alakazamc/pskit-2.0`

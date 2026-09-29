@@ -1,2 +1,1 @@
 """Task queue package."""
-

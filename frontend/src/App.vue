@@ -14,7 +14,12 @@ const navItems = computed(() => [
   { to: "/agent", label: "智能体", public: false },
   { to: "/tasks", label: "任务", public: false },
   { to: "/tools", label: "工具", public: false },
-  ...(auth.isAdmin ? [{ to: "/admin/doctor", label: "运行体检", public: false }] : []),
+  ...(auth.isAdmin
+    ? [
+        { to: "/admin/doctor", label: "运行体检", public: false },
+        { to: "/admin/users", label: "用户管理", public: false },
+      ]
+    : []),
 ]);
 
 const isAuthPage = computed(() => route.name === "login" || route.name === "register");
@@ -31,8 +36,14 @@ async function logout() {
 
 <template>
   <div class="app-root">
-    <aside class="sidebar" :class="{ compact: isAuthPage }">
-      <RouterLink to="/" class="brand">
+    <aside
+      class="sidebar"
+      :class="{ compact: isAuthPage }"
+    >
+      <RouterLink
+        to="/"
+        class="brand"
+      >
         <span class="brand-mark">P2</span>
         <span>
           <strong>PSKit 2.0</strong>
@@ -65,9 +76,24 @@ async function logout() {
           <h1>{{ route.meta.title || "PSKit 2.0" }}</h1>
         </div>
         <div class="topbar-actions">
-          <span v-if="auth.user" class="user-chip">{{ auth.user.username }} · {{ roleLabel }}</span>
-          <button v-if="auth.user" class="ghost-button" @click="logout">退出登录</button>
-          <RouterLink v-else to="/login" class="primary-button">登录</RouterLink>
+          <span
+            v-if="auth.user"
+            class="user-chip"
+          >{{ auth.user.username }} · {{ roleLabel }}</span>
+          <button
+            v-if="auth.user"
+            class="ghost-button"
+            @click="logout"
+          >
+            退出登录
+          </button>
+          <RouterLink
+            v-else
+            to="/login"
+            class="primary-button"
+          >
+            登录
+          </RouterLink>
         </div>
       </header>
 

@@ -29,10 +29,26 @@ onMounted(async () => {
       </div>
       <StatusPill status="protected" />
     </div>
-    <p v-if="error" class="error-line">{{ error }}</p>
-    <EmptyState v-else-if="!loading && tools.length === 0" title="暂无工具" body="后端返回的工具目录为空。" />
-    <div v-else class="tool-grid">
-      <article v-for="tool in tools" :key="tool.name" class="tool-card">
+    <p
+      v-if="error"
+      class="error-line"
+    >
+      {{ error }}
+    </p>
+    <EmptyState
+      v-else-if="!loading && tools.length === 0"
+      title="暂无工具"
+      body="后端返回的工具目录为空。"
+    />
+    <div
+      v-else
+      class="tool-grid"
+    >
+      <article
+        v-for="tool in tools"
+        :key="tool.name"
+        class="tool-card"
+      >
         <div class="tool-card-head">
           <h3>{{ tool.name }}</h3>
           <StatusPill :status="tool.long_running ? 'queued' : 'sync'" />
