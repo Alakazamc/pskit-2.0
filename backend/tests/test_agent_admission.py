@@ -200,4 +200,3 @@ def test_admission_reclaims_orphaned_queued_dispatch_after_restart(monkeypatch):
         assert expired.error_code == "agent_turn_dispatch_stale"
     finally:
         db.close()
-
