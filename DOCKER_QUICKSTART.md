@@ -115,7 +115,9 @@ docker compose --env-file .env.docker up -d --wait
 ```
 
 Before production startup, set a random `INITIAL_ADMIN_BOOTSTRAP_TOKEN` of at
-least 24 characters. Open <http://127.0.0.1:10716/agent>. Public registration
+least 24 characters. For local HTTP testing, set `COOKIE_SECURE=false` in
+`.env.docker` before starting; use `true` behind HTTPS. Open
+<http://127.0.0.1:10716/agent>. Public registration
 is enabled when `REGISTRATION_MODE=open`; the first administrator must submit
 the bootstrap token on the `/register` page. The initial administrator can
 still be bootstrapped when `REGISTRATION_MODE=disabled`; after that, the

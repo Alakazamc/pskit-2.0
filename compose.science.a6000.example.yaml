@@ -7,6 +7,8 @@
 
 services:
   worker:
+    cpus: ${PSKIT_WORKER_CPUS:-16}
+    mem_limit: ${PSKIT_WORKER_MEMORY:-32g}
     image: ${PSKIT_SCIENCE_IMAGE:-pskit2-science:0.3.0}
     build:
       context: .

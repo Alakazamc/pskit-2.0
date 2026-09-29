@@ -56,8 +56,8 @@ services:
         condition: service_completed_successfully
       qdrant:
         condition: service_healthy
-    cpus: ${PSKIT_WEB_CPUS:-4}
-    mem_limit: ${PSKIT_WEB_MEMORY:-4g}
+    cpus: ${PSKIT_WEB_CPUS:-1}
+    mem_limit: ${PSKIT_WEB_MEMORY:-1g}
     healthcheck:
       # Container health is a liveness signal. External MCP/model readiness is
       # reported separately by /api/ready and must not mark the Web process dead.
@@ -75,8 +75,8 @@ services:
         condition: service_completed_successfully
       qdrant:
         condition: service_healthy
-    cpus: ${PSKIT_WORKER_CPUS:-16}
-    mem_limit: ${PSKIT_WORKER_MEMORY:-32g}
+    cpus: ${PSKIT_WORKER_CPUS:-2}
+    mem_limit: ${PSKIT_WORKER_MEMORY:-2g}
     pids_limit: 4096
     healthcheck:
       test:
@@ -103,8 +103,8 @@ services:
     networks:
       - pskit
     restart: unless-stopped
-    cpus: ${PSKIT_QDRANT_CPUS:-4}
-    mem_limit: ${PSKIT_QDRANT_MEMORY:-8g}
+    cpus: ${PSKIT_QDRANT_CPUS:-1}
+    mem_limit: ${PSKIT_QDRANT_MEMORY:-1g}
     pids_limit: 1024
     logging:
       driver: json-file
