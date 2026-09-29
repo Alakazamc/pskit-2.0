@@ -195,6 +195,41 @@ def test_task_list_filters_by_owned_session_before_pagination():
     assert owner.get("/api/tasks", params={"session_id": str(uuid.uuid4())}).status_code == 404
 
 
+def test_task_pages_have_stable_order_when_creation_times_tie():
+    client = TestClient(app)
+    user = client.post(
+        "/api/auth/register",
+        json={"username": "task_tie_" + uuid.uuid4().hex[:10], "password": "password123"},
+    ).json()
+    session_id = client.post("/api/agent/sessions", json={"title": "Tie"}).json()["id"]
+    same_time = now_utc()
+    task_ids = [uuid.uuid4(), uuid.uuid4()]
+    with SessionLocal() as db:
+        db.add_all([
+            Task(
+                id=task_id,
+                user_id=uuid.UUID(user["id"]),
+                session_id=uuid.UUID(session_id),
+                task_type="predict_interaction",
+                status="succeeded",
+                created_at=same_time,
+            )
+            for task_id in task_ids
+        ])
+        db.commit()
+
+    pages = [
+        client.get(
+            "/api/tasks", params={"session_id": session_id, "limit": 1, "offset": offset}
+        )
+        for offset in range(2)
+    ]
+    assert all(response.status_code == 200 for response in pages)
+    assert [response.json()[0]["id"] for response in pages] == sorted(
+        [str(task_id) for task_id in task_ids], reverse=True
+    )
+
+
 def test_invalid_task_type_and_oversized_sequence_are_rejected():
     client = TestClient(app)
     username = "validation_" + uuid.uuid4().hex[:10]

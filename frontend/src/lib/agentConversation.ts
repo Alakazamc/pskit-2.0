@@ -6,7 +6,7 @@ import {
   type ActiveAgentTurn, type AgentMessage, type AgentSession, type AgentStreamResult, type StreamEvent, type Task,
 } from "./api";
 
-type ArtifactEvent = { artifact_id: string; filename?: string; download_url?: string };
+type ArtifactEvent = { artifact_id: string; filename?: string; download_url?: string; recorded_at?: string };
 type SourceEvent = { source?: string; heading?: string; score?: number; content?: string };
 type Approval = { approval_id: string; tool_name: string; message?: string; argument_keys?: string[] };
 type ToolEvent = { type: string; name?: string; tool_call_id?: string; task_id?: string; task_type?: string; status?: string };
@@ -16,6 +16,20 @@ function asApproval(value: unknown): Approval | null {
   const item = value as Partial<Approval>;
   return typeof item.approval_id === "string" && /^[0-9a-f]{64}$/.test(item.approval_id)
     && typeof item.tool_name === "string" ? item as Approval : null;
+}
+
+const taskPageSize = 100;
+
+function mergeTasks(current: Task[], incoming: Task[]): Task[] {
+  const byId = new Map(current.map((task) => [task.id, task]));
+  for (const task of incoming) {
+    const previous = byId.get(task.id);
+    if (!previous || Date.parse(task.updated_at) >= Date.parse(previous.updated_at)) {
+      byId.set(task.id, task);
+    }
+  }
+  return [...byId.values()].sort((left, right) =>
+    Date.parse(right.created_at) - Date.parse(left.created_at) || right.id.localeCompare(left.id));
 }
 
 export function createAgentConversation(onMessagesChanged: () => void = () => undefined) {
@@ -33,6 +47,8 @@ export function createAgentConversation(onMessagesChanged: () => void = () => un
   const messageArtifacts = ref<ArtifactEvent[]>([]);
   const events = ref<ToolEvent[]>([]);
   const allTasks = ref<Task[]>([]);
+  const hasMoreTasks = ref(false);
+  const loadingMoreTasks = ref(false);
   const streamingAnswer = ref("");
   const suggestions = ref<string[]>([]);
   const pendingApproval = ref<Approval | null>(null);
@@ -48,17 +64,29 @@ export function createAgentConversation(onMessagesChanged: () => void = () => un
         && Date.parse(task.finished_at || "") > lastUserAt)
       .sort((left, right) => Date.parse(right.finished_at || "") - Date.parse(left.finished_at || ""))[0] || null;
   });
-  const artifacts = computed(() => [...new Map([
-    ...messageArtifacts.value,
-    ...tasks.value.flatMap((task) => task.artifacts.map((artifact) => ({
-      artifact_id: artifact.id, filename: artifact.filename, download_url: artifact.download_url,
-    }))),
-  ].map((artifact) => [artifact.artifact_id, artifact])).values()]);
+  const artifacts = computed(() => {
+    const sorted = [
+      ...messageArtifacts.value,
+      ...tasks.value.flatMap((task) => task.artifacts.map((artifact) => ({
+        artifact_id: artifact.id, filename: artifact.filename, download_url: artifact.download_url,
+        recorded_at: task.finished_at || task.updated_at,
+      }))),
+    ].sort((left, right) => Date.parse(right.recorded_at || "") - Date.parse(left.recorded_at || ""));
+    const newest = new Map<string, ArtifactEvent>();
+    for (const artifact of sorted) {
+      if (!newest.has(artifact.artifact_id)) newest.set(artifact.artifact_id, artifact);
+    }
+    return [...newest.values()];
+  });
   const drafts = new Map<string, string>();
   let revision = 0;
   let disposed = false;
   let subscription: AbortController | undefined;
-  let tasksRequest: { sessionId: string; promise: Promise<void> } | undefined;
+  let tasksRequest: { sessionId: string; version: number; promise: Promise<void> } | undefined;
+  let moreTasksRequest: { sessionId: string; version: number; promise: Promise<void> } | undefined;
+  let nextTaskOffset = 0;
+  let hasLoadedOlderTasks = false;
+  let firstPageArrivalVersion = 0;
 
   function isCurrent(sessionId: string, version: number) {
     return !disposed && activeSessionId.value === sessionId && revision === version;
@@ -81,18 +109,56 @@ export function createAgentConversation(onMessagesChanged: () => void = () => un
     if (disposed || !sessionId) return Promise.resolve();
     // Polling and stream events share a single request so slow responses cannot
     // overwrite newer task state or accumulate a backlog for one session.
-    if (tasksRequest?.sessionId === sessionId) return tasksRequest.promise;
+    if (tasksRequest?.sessionId === sessionId && tasksRequest.version === revision) return tasksRequest.promise;
     const version = revision;
-    const promise = api.tasks({ sessionId }).then((loaded) => {
+    const promise = api.tasks({ sessionId, limit: taskPageSize + 1, offset: 0 }).then((loaded) => {
       if (!isCurrent(sessionId, version)) return;
-      allTasks.value = loaded;
+      const knownIds = new Set(allTasks.value.map((task) => task.id));
+      const recent = loaded.slice(0, taskPageSize);
+      const hasNewArrival = recent.some((task) => !knownIds.has(task.id));
+      if (hasNewArrival) firstPageArrivalVersion += 1;
+      allTasks.value = mergeTasks(allTasks.value, recent);
+      if (!hasLoadedOlderTasks) {
+        nextTaskOffset = Math.min(loaded.length, taskPageSize);
+        hasMoreTasks.value = loaded.length > taskPageSize;
+      } else if (!hasMoreTasks.value && hasNewArrival) {
+        // New arrivals can shift offset pages; allow one more historical fetch.
+        hasMoreTasks.value = true;
+      }
       taskError.value = "";
     }).catch((err: unknown) => {
       if (isCurrent(sessionId, version)) taskError.value = err instanceof ApiError ? err.message : "无法刷新任务状态";
     }).finally(() => {
       if (tasksRequest?.promise === promise) tasksRequest = undefined;
     });
-    tasksRequest = { sessionId, promise };
+    tasksRequest = { sessionId, version, promise };
+    return promise;
+  }
+
+  function loadMoreTasks(): Promise<void> {
+    const sessionId = activeSessionId.value;
+    if (disposed || !sessionId || !hasMoreTasks.value) return Promise.resolve();
+    if (moreTasksRequest?.sessionId === sessionId && moreTasksRequest.version === revision) {
+      return moreTasksRequest.promise;
+    }
+    const version = revision;
+    const offset = nextTaskOffset;
+    const arrivalVersion = firstPageArrivalVersion;
+    hasLoadedOlderTasks = true;
+    loadingMoreTasks.value = true;
+    const promise = api.tasks({ sessionId, limit: taskPageSize + 1, offset }).then((loaded) => {
+      if (!isCurrent(sessionId, version)) return;
+      allTasks.value = mergeTasks(allTasks.value, loaded.slice(0, taskPageSize));
+      nextTaskOffset = offset + Math.min(loaded.length, taskPageSize);
+      hasMoreTasks.value = loaded.length > taskPageSize || firstPageArrivalVersion > arrivalVersion;
+      taskError.value = "";
+    }).catch((err: unknown) => {
+      if (isCurrent(sessionId, version)) taskError.value = err instanceof ApiError ? err.message : "无法加载更早任务";
+    }).finally(() => {
+      if (isCurrent(sessionId, version)) loadingMoreTasks.value = false;
+      if (moreTasksRequest?.promise === promise) moreTasksRequest = undefined;
+    });
+    moreTasksRequest = { sessionId, version, promise };
     return promise;
   }
 
@@ -106,7 +172,11 @@ export function createAgentConversation(onMessagesChanged: () => void = () => un
         pendingApproval.value = null;
       }
       if (message.role !== "assistant") continue;
-      if (Array.isArray(metadata.artifacts)) messageArtifacts.value.push(...metadata.artifacts as ArtifactEvent[]);
+      if (Array.isArray(metadata.artifacts)) {
+        messageArtifacts.value.push(...(metadata.artifacts as ArtifactEvent[]).map((artifact) => ({
+          ...artifact, recorded_at: message.created_at,
+        })));
+      }
       sources.value = Array.isArray(metadata.sources) ? metadata.sources as SourceEvent[] : [];
       ragBackend.value = String(metadata.rag_backend || "none");
       suggestions.value = Array.isArray(metadata.suggestions) ? metadata.suggestions.map(String) : [];
@@ -132,7 +202,9 @@ export function createAgentConversation(onMessagesChanged: () => void = () => un
       sources.value = (event.sources as SourceEvent[]) || [];
       ragBackend.value = String(event.backend || "none");
     } else if (event.type === "artifact_created") {
-      if (event.artifact) messageArtifacts.value.push(event.artifact as ArtifactEvent);
+      if (event.artifact) messageArtifacts.value.push({
+        ...(event.artifact as ArtifactEvent), recorded_at: new Date().toISOString(),
+      });
     } else if (event.type === "approval_required") {
       pendingApproval.value = asApproval(event);
     } else if (event.type === "approval_consumed") {
@@ -194,6 +266,12 @@ export function createAgentConversation(onMessagesChanged: () => void = () => un
     activeSessionId.value = sessionId;
     input.value = drafts.get(sessionId) || "";
     messages.value = [];
+    allTasks.value = [];
+    hasMoreTasks.value = false;
+    loadingMoreTasks.value = false;
+    nextTaskOffset = 0;
+    hasLoadedOlderTasks = false;
+    firstPageArrivalVersion = 0;
     sources.value = [];
     ragBackend.value = "none";
     messageArtifacts.value = [];
@@ -352,8 +430,8 @@ export function createAgentConversation(onMessagesChanged: () => void = () => un
 
   return {
     sessions, activeSessionId, activeSession, messages, input, loading, sending,
-    error, notice, taskError, sources, ragBackend, artifacts, events, tasks,
+    error, notice, taskError, sources, ragBackend, artifacts, events, tasks, hasMoreTasks, loadingMoreTasks,
     streamingAnswer, suggestions, pendingApproval, followUpTask,
-    boot, selectSession, newSession, loadTasks, sendMessage, approvePending, draftTaskFollowUp, dispose,
+    boot, selectSession, newSession, loadTasks, loadMoreTasks, sendMessage, approvePending, draftTaskFollowUp, dispose,
   };
 }

@@ -654,6 +654,16 @@ textarea:focus {
   overflow-wrap: anywhere;
 }
 
+.rail-more,
+.rail-load-more {
+  margin-top: 12px;
+}
+
+.rail-more summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
 .rail-card.dark {
   color: white;
   background: linear-gradient(180deg, #071525, #111d30);

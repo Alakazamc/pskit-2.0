@@ -7,6 +7,7 @@ type MockState = {
   history: Record<string, Message[]>;
   onMessage?: (route: Route, sessionId: string) => Promise<void>;
   onRecovery?: (route: Route, turnId: string) => Promise<void>;
+  onTasks?: (route: Route) => Promise<void>;
 };
 const timestamp = "2026-01-01T00:00:00Z";
 function message(id: string, role: string, content: string, metadata: Record<string, unknown> = {}): Message {
@@ -20,7 +21,7 @@ async function mockApi(page: Page, state: MockState) {
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/auth/me") return route.fulfill({ json: { id: "user", username: "test-user", role: "user" } });
     if (path === "/api/agent/sessions") return route.fulfill({ json: ["A", "B"].map((id) => ({ id, title: `分析 ${id}`, created_at: timestamp, updated_at: timestamp })) });
-    if (path === "/api/tasks") return route.fulfill({ json: [] });
+    if (path === "/api/tasks") return state.onTasks ? state.onTasks(route) : route.fulfill({ json: [] });
     if (path.endsWith("/turns/active")) return route.fulfill({ status: 204 });
     const post = path.match(/^\/api\/agent\/sessions\/([^/]+)\/message$/);
     if (post && state.onMessage) return state.onMessage(route, post[1]!);
@@ -31,6 +32,50 @@ async function mockApi(page: Page, state: MockState) {
     return route.fulfill({ status: 404, json: { detail: "Not found" } });
   });
 }
+
+test("the seventh and 101st same-session result files remain reachable without polling old pages", async ({ page }) => {
+  await page.clock.install();
+  const offsets: number[] = [];
+  const tasks = Array.from({ length: 101 }, (_, index) => {
+    const number = index + 1;
+    const when = new Date(Date.UTC(2026, 0, 1) + (101 - index) * 1000).toISOString();
+    return {
+      id: `task-${number}`, session_id: "A", tool_call_id: null, task_type: `analysis-${number}`,
+      status: "succeeded", progress: 1, error_type: null, error_message: null,
+      input: null, output: null, retry_of_task_id: null, retry_task_id: null,
+      artifacts: [{ id: `artifact-${number}`, kind: "result", filename: `file-${number}.pdb`, mime_type: null, size_bytes: 1, download_url: `/api/files/artifact-${number}/download` }],
+      created_at: when, updated_at: when, started_at: when, finished_at: when,
+    };
+  });
+  await mockApi(page, {
+    history: {},
+    async onTasks(route) {
+      const url = new URL(route.request().url());
+      expect(url.searchParams.get("session_id")).toBe("A");
+      const offset = Number(url.searchParams.get("offset") || 0);
+      const limit = Number(url.searchParams.get("limit") || 100);
+      offsets.push(offset);
+      await route.fulfill({ json: tasks.slice(offset, offset + limit) });
+    },
+  });
+  await page.goto("/agent");
+  await expect(page.locator(".agent-rail .rail-card").nth(1).locator("a.artifact-link").first()).toContainText("file-1.pdb");
+  await expect(page.getByRole("link", { name: "file-7.pdb" })).toBeHidden();
+  await page.getByText("查看另外 94 个结果文件", { exact: true }).click();
+  await expect(page.getByRole("link", { name: "file-7.pdb" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "file-101.pdb" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "加载更早任务与文件" }).click();
+  await expect(page.getByRole("link", { name: "file-101.pdb" })).toHaveAttribute("href", "/api/files/artifact-101/download");
+  await expect(page.getByRole("link", { name: "file-101.pdb" })).toBeVisible();
+  await page.getByText("查看另外 97 个任务", { exact: true }).click();
+  await expect(page.getByText("analysis-101", { exact: true })).toBeVisible();
+  expect(offsets.filter((offset) => offset === 100)).toHaveLength(1);
+
+  await page.clock.fastForward(3000);
+  await expect.poll(() => offsets.filter((offset) => offset === 0).length).toBeGreaterThan(1);
+  expect(offsets.filter((offset) => offset === 100)).toHaveLength(1);
+});
 
 test("HTTP without randomUUID can send, and execution errors stay visible", async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(window.crypto, "randomUUID", { value: undefined }));
