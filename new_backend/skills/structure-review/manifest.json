@@ -1,0 +1,7 @@
+{
+  "id": "structure-review",
+  "version": 1,
+  "name": "Protein Structure Review",
+  "description": "Find and inspect protein structures using curated PDB and UniProt capabilities.",
+  "tools": ["search_pdb", "fetch_uniprot"]
+}

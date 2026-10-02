@@ -1,0 +1,1 @@
+"""Isolated file processing workers."""

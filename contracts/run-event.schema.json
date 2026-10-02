@@ -1,0 +1,956 @@
+{
+  "$defs": {
+    "ApprovalRequiredData": {
+      "properties": {
+        "approval_id": {
+          "title": "Approval Id",
+          "type": "string"
+        },
+        "capability": {
+          "title": "Capability",
+          "type": "string"
+        },
+        "estimated_gpu_minutes": {
+          "title": "Estimated Gpu Minutes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "approval_id",
+        "capability",
+        "estimated_gpu_minutes"
+      ],
+      "title": "ApprovalRequiredData",
+      "type": "object"
+    },
+    "ApprovalRequiredEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "approval.required",
+          "default": "approval.required",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ApprovalRequiredData"
+        }
+      },
+      "required": [
+        "run_id",
+        "data"
+      ],
+      "title": "ApprovalRequiredEvent",
+      "type": "object"
+    },
+    "ApprovalResolvedData": {
+      "properties": {
+        "approval_id": {
+          "title": "Approval Id",
+          "type": "string"
+        },
+        "decision": {
+          "enum": [
+            "approved",
+            "rejected"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job Id"
+        }
+      },
+      "required": [
+        "approval_id",
+        "decision"
+      ],
+      "title": "ApprovalResolvedData",
+      "type": "object"
+    },
+    "ApprovalResolvedEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "approval.resolved",
+          "default": "approval.resolved",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ApprovalResolvedData"
+        }
+      },
+      "required": [
+        "run_id",
+        "data"
+      ],
+      "title": "ApprovalResolvedEvent",
+      "type": "object"
+    },
+    "ArtifactCreatedData": {
+      "properties": {
+        "artifact_id": {
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact_id",
+        "name",
+        "kind"
+      ],
+      "title": "ArtifactCreatedData",
+      "type": "object"
+    },
+    "ArtifactCreatedEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "artifact.created",
+          "default": "artifact.created",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ArtifactCreatedData"
+        }
+      },
+      "required": [
+        "run_id",
+        "data"
+      ],
+      "title": "ArtifactCreatedEvent",
+      "type": "object"
+    },
+    "MessageBoundaryData": {
+      "properties": {
+        "role": {
+          "const": "assistant",
+          "default": "assistant",
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "title": "MessageBoundaryData",
+      "type": "object"
+    },
+    "MessageDeltaData": {
+      "properties": {
+        "delta": {
+          "title": "Delta",
+          "type": "string"
+        }
+      },
+      "required": [
+        "delta"
+      ],
+      "title": "MessageDeltaData",
+      "type": "object"
+    },
+    "MessageDeltaEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "message.delta",
+          "default": "message.delta",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/MessageDeltaData"
+        }
+      },
+      "required": [
+        "run_id",
+        "data"
+      ],
+      "title": "MessageDeltaEvent",
+      "type": "object"
+    },
+    "MessageEndEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "message.end",
+          "default": "message.end",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/MessageBoundaryData"
+        }
+      },
+      "required": [
+        "run_id"
+      ],
+      "title": "MessageEndEvent",
+      "type": "object"
+    },
+    "MessageStartEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "message.start",
+          "default": "message.start",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/MessageBoundaryData"
+        }
+      },
+      "required": [
+        "run_id"
+      ],
+      "title": "MessageStartEvent",
+      "type": "object"
+    },
+    "PlanCreatedEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "plan.created",
+          "default": "plan.created",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/PlanSnapshot"
+        }
+      },
+      "required": [
+        "run_id",
+        "data"
+      ],
+      "title": "PlanCreatedEvent",
+      "type": "object"
+    },
+    "PlanSnapshot": {
+      "properties": {
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/PlanStep"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "steps"
+      ],
+      "title": "PlanSnapshot",
+      "type": "object"
+    },
+    "PlanStep": {
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "in_progress",
+            "completed",
+            "blocked"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "status"
+      ],
+      "title": "PlanStep",
+      "type": "object"
+    },
+    "PlanUpdatedEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "plan.updated",
+          "default": "plan.updated",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/PlanSnapshot"
+        }
+      },
+      "required": [
+        "run_id",
+        "data"
+      ],
+      "title": "PlanUpdatedEvent",
+      "type": "object"
+    },
+    "RunCancelledData": {
+      "properties": {
+        "status": {
+          "const": "cancelled",
+          "default": "cancelled",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "title": "RunCancelledData",
+      "type": "object"
+    },
+    "RunCancelledEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "run.cancelled",
+          "default": "run.cancelled",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/RunCancelledData"
+        }
+      },
+      "required": [
+        "run_id",
+        "data"
+      ],
+      "title": "RunCancelledEvent",
+      "type": "object"
+    },
+    "RunCompletedData": {
+      "properties": {
+        "status": {
+          "const": "completed",
+          "default": "completed",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "title": "RunCompletedData",
+      "type": "object"
+    },
+    "RunCompletedEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "run.completed",
+          "default": "run.completed",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/RunCompletedData"
+        }
+      },
+      "required": [
+        "run_id",
+        "data"
+      ],
+      "title": "RunCompletedEvent",
+      "type": "object"
+    },
+    "RunFailedData": {
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "RunFailedData",
+      "type": "object"
+    },
+    "RunFailedEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "run.failed",
+          "default": "run.failed",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/RunFailedData"
+        }
+      },
+      "required": [
+        "run_id",
+        "data"
+      ],
+      "title": "RunFailedEvent",
+      "type": "object"
+    },
+    "RunRetryingData": {
+      "properties": {
+        "attempt": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "max_attempts": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "delay_ms": {
+          "maximum": 60000,
+          "minimum": 0,
+          "title": "Delay Ms",
+          "type": "integer"
+        },
+        "reset_message": {
+          "default": false,
+          "title": "Reset Message",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "attempt",
+        "max_attempts",
+        "delay_ms"
+      ],
+      "title": "RunRetryingData",
+      "type": "object"
+    },
+    "RunRetryingEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "run.retrying",
+          "default": "run.retrying",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/RunRetryingData"
+        }
+      },
+      "required": [
+        "run_id",
+        "data"
+      ],
+      "title": "RunRetryingEvent",
+      "type": "object"
+    },
+    "TaskUpdatedData": {
+      "properties": {
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "completed",
+            "failed",
+            "cancelled"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "progress": {
+          "title": "Progress",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "job_id",
+        "status",
+        "progress"
+      ],
+      "title": "TaskUpdatedData",
+      "type": "object"
+    },
+    "TaskUpdatedEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "task.updated",
+          "default": "task.updated",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/TaskUpdatedData"
+        }
+      },
+      "required": [
+        "run_id",
+        "data"
+      ],
+      "title": "TaskUpdatedEvent",
+      "type": "object"
+    },
+    "ToolFinishedData": {
+      "properties": {
+        "tool_call_id": {
+          "title": "Tool Call Id",
+          "type": "string"
+        },
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "failed",
+            "pending",
+            "approval_required"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool_call_id",
+        "tool",
+        "status",
+        "summary"
+      ],
+      "title": "ToolFinishedData",
+      "type": "object"
+    },
+    "ToolFinishedEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "tool.finished",
+          "default": "tool.finished",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ToolFinishedData"
+        }
+      },
+      "required": [
+        "run_id",
+        "data"
+      ],
+      "title": "ToolFinishedEvent",
+      "type": "object"
+    },
+    "ToolStartedData": {
+      "properties": {
+        "tool_call_id": {
+          "title": "Tool Call Id",
+          "type": "string"
+        },
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool_call_id",
+        "tool"
+      ],
+      "title": "ToolStartedData",
+      "type": "object"
+    },
+    "ToolStartedEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "tool.started",
+          "default": "tool.started",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ToolStartedData"
+        }
+      },
+      "required": [
+        "run_id",
+        "data"
+      ],
+      "title": "ToolStartedEvent",
+      "type": "object"
+    },
+    "ToolUpdatedEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "tool.updated",
+          "default": "tool.updated",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ToolStartedData"
+        }
+      },
+      "required": [
+        "run_id",
+        "data"
+      ],
+      "title": "ToolUpdatedEvent",
+      "type": "object"
+    },
+    "UsageUpdatedData": {
+      "properties": {
+        "gpu_remaining": {
+          "title": "Gpu Remaining",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "gpu_remaining"
+      ],
+      "title": "UsageUpdatedData",
+      "type": "object"
+    },
+    "UsageUpdatedEvent": {
+      "properties": {
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "type": {
+          "const": "usage.updated",
+          "default": "usage.updated",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/UsageUpdatedData"
+        }
+      },
+      "required": [
+        "run_id",
+        "data"
+      ],
+      "title": "UsageUpdatedEvent",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/MessageStartEvent"
+    },
+    {
+      "$ref": "#/$defs/MessageDeltaEvent"
+    },
+    {
+      "$ref": "#/$defs/MessageEndEvent"
+    },
+    {
+      "$ref": "#/$defs/ToolStartedEvent"
+    },
+    {
+      "$ref": "#/$defs/ToolUpdatedEvent"
+    },
+    {
+      "$ref": "#/$defs/ToolFinishedEvent"
+    },
+    {
+      "$ref": "#/$defs/PlanCreatedEvent"
+    },
+    {
+      "$ref": "#/$defs/PlanUpdatedEvent"
+    },
+    {
+      "$ref": "#/$defs/RunCompletedEvent"
+    },
+    {
+      "$ref": "#/$defs/RunFailedEvent"
+    },
+    {
+      "$ref": "#/$defs/RunCancelledEvent"
+    },
+    {
+      "$ref": "#/$defs/RunRetryingEvent"
+    },
+    {
+      "$ref": "#/$defs/ApprovalRequiredEvent"
+    },
+    {
+      "$ref": "#/$defs/ApprovalResolvedEvent"
+    },
+    {
+      "$ref": "#/$defs/TaskUpdatedEvent"
+    },
+    {
+      "$ref": "#/$defs/UsageUpdatedEvent"
+    },
+    {
+      "$ref": "#/$defs/ArtifactCreatedEvent"
+    }
+  ]
+}
