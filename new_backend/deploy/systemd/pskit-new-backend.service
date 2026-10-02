@@ -1,0 +1,13 @@
+[Unit]
+Description=PSKit new Python backend
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/jhli/pskit-2.0/new_backend
+ExecStart=/home/jhli/miniconda3/bin/python -m uvicorn app.main:app --env-file .env --host 127.0.0.1 --port 18080 --log-level warning
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

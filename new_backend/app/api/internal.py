@@ -66,6 +66,13 @@ class ComputeHeartbeatRequest(BaseModel):
     lease_token: str = Field(min_length=1)
 
 
+class ComputeProgressRequest(BaseModel):
+    worker_id: str = Field(pattern=r"^[A-Za-z0-9_.-]{1,80}$")
+    lease_token: str = Field(min_length=1)
+    attempt: int = Field(ge=1)
+    progress: int = Field(ge=0, le=99)
+
+
 class ModelCallPreflightRequest(BaseModel):
     run_id: str
     call_id: str = Field(min_length=1, max_length=128)
@@ -255,6 +262,25 @@ async def heartbeat_compute_af3_job(
     return request.app.state.conversations.af3_job_for_compute(job_id)
 
 
+@router.get("/compute/af3/jobs/owned")
+async def owned_compute_af3_jobs(
+    worker_id: str, request: Request,
+    compute_key: Annotated[str | None, Header(alias="X-Compute-Key")] = None,
+) -> list[Af3ComputeClaim]:
+    """Recover this worker's active claims after a disconnected claim response."""
+    settings = request.app.state.settings
+    if request.app.state.af3_executor != "callback" or not settings.compute_callback_key:
+        raise HTTPException(status_code=404, detail="Not found")
+    if not compute_key or not secrets.compare_digest(compute_key, settings.compute_callback_key):
+        raise HTTPException(status_code=404, detail="Not found")
+    if not worker_id or len(worker_id) > 80 or any(
+        char not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-"
+        for char in worker_id
+    ):
+        raise HTTPException(status_code=422, detail="Invalid worker ID")
+    return request.app.state.conversations.owned_compute_jobs(worker_id)
+
+
 @router.get("/compute/af3/jobs/{job_id}")
 async def get_compute_af3_job(
     job_id: str, request: Request,
@@ -267,6 +293,29 @@ async def get_compute_af3_job(
     if not compute_key or not secrets.compare_digest(compute_key, settings.compute_callback_key):
         raise HTTPException(status_code=404, detail="Not found")
     job = request.app.state.conversations.af3_job_for_compute(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@router.post("/compute/af3/jobs/{job_id}/progress")
+async def progress_compute_af3_job(
+    job_id: str, payload: ComputeProgressRequest, request: Request,
+    compute_key: Annotated[str | None, Header(alias="X-Compute-Key")] = None,
+) -> Af3Job:
+    """Persist a compute worker's monotonic progress before acknowledging it."""
+    settings = request.app.state.settings
+    if request.app.state.af3_executor != "callback" or not settings.compute_callback_key:
+        raise HTTPException(status_code=404, detail="Not found")
+    if not compute_key or not secrets.compare_digest(compute_key, settings.compute_callback_key):
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        job = request.app.state.conversations.update_compute_progress(
+            job_id, payload.worker_id, payload.lease_token, payload.attempt,
+            payload.progress, max_execution_seconds=settings.af3_execution_timeout_seconds,
+        )
+    except ComputeLeaseConflict as exc:
+        raise HTTPException(status_code=409, detail={"code": "COMPUTE_LEASE_NOT_OWNED"}) from exc
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     return job

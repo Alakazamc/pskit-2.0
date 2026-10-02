@@ -1,0 +1,13 @@
+[Unit]
+Description=Loopback SSH tunnel for PSKit AF3 callbacks
+Requires=pskit-af3-callback-proxy.service
+After=network-online.target pskit-af3-callback-proxy.service
+
+[Service]
+Type=simple
+ExecStart=/mnt/c/Windows/System32/OpenSSH/ssh.exe -o BatchMode=yes -o ConnectTimeout=20 -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -R 127.0.0.1:18084:127.0.0.1:18084 jhli-a6000-wg
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

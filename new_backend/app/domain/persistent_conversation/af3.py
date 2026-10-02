@@ -314,10 +314,11 @@ class Af3Mixin:
         max_execution_seconds: int = 21600,
         require_explicit_memory: bool = False,
     ) -> list[Af3ComputeClaim]:
-        """Atomically lease compatible queued or expired AF3 compute jobs.
+        """Atomically lease compatible queued AF3 compute jobs.
 
-        A claim carries a new fencing token and attempt number. Reclaimed
-        attempts discard old uploaded blobs before the worker starts.
+        A missing heartbeat is not proof that the GPU process stopped. A
+        running job remains owned by its original worker until settlement or
+        the absolute execution deadline, preventing duplicate GPU runs.
 
         Args:
             worker_id: Compute worker identity.
@@ -335,8 +336,8 @@ class Af3Mixin:
         with self._immediate_transaction():
             active_requirements = self.db.execute(
                 "SELECT resource_requirements_json FROM agent_jobs "
-                "WHERE worker_id=? AND status='running' AND lease_expires_at>?",
-                (worker_id, now.isoformat()),
+                "WHERE worker_id=? AND status='running'",
+                (worker_id,),
             ).fetchall()
             available_gpus = resources.gpu_count - sum(
                 ComputeResourceRequirements.model_validate_json(row[0]).gpu_count
@@ -344,11 +345,8 @@ class Af3Mixin:
             )
             rows = self.db.execute(
                 "SELECT id,user_id,run_id,attempts,resource_requirements_json FROM agent_jobs "
-                "WHERE input_json IS NOT NULL AND "
-                "(status='queued' OR (status='running' AND lease_expires_at<=? "
-                "AND first_claimed_at>?)) "
+                "WHERE input_json IS NOT NULL AND status='queued' "
                 "ORDER BY created_at,rowid",
-                (now.isoformat(), (now - timedelta(seconds=max_execution_seconds)).isoformat()),
             ).fetchall()
             for job_id, user_id, run_id, attempts, requirements_json in rows:
                 required = ComputeResourceRequirements.model_validate_json(requirements_json)
@@ -364,10 +362,6 @@ class Af3Mixin:
                     (worker_id, (now + timedelta(seconds=lease_seconds)).isoformat(),
                      lease_token, now.isoformat(), job_id),
                 )
-                if attempts:
-                    self.db.execute(
-                        "DELETE FROM agent_artifact_blobs WHERE job_id=?", (job_id,),
-                    )
                 if run_id:
                     self._append_event_in_transaction(run_id, TaskUpdatedEvent(
                         run_id=run_id,
@@ -382,6 +376,21 @@ class Af3Mixin:
                 if len(claimed) >= limit or available_gpus < 1:
                     break
         return claimed
+
+    def owned_compute_jobs(self, worker_id: str) -> list[Af3ComputeClaim]:
+        """Recover active claims after a worker lost its HTTP response or journal write."""
+        rows = self.db.execute(
+            "SELECT id,user_id,attempts,lease_token FROM agent_jobs "
+            "WHERE worker_id=? AND status='running' ORDER BY created_at,rowid",
+            (worker_id,),
+        ).fetchall()
+        claims = []
+        for job_id, user_id, attempt, token in rows:
+            job = self.get_af3_job(user_id, job_id)
+            if job is not None and token:
+                claims.append(Af3ComputeClaim(**job.model_dump(), attempt=attempt,
+                                               lease_token=token))
+        return claims
 
     def expire_queued_compute_jobs(self, max_age_seconds: int) -> int:
         """Fail unclaimed jobs past their queue deadline and release GPU holds.
@@ -498,7 +507,7 @@ class Af3Mixin:
         self, job_id: str, worker_id: str, lease_token: str, *, lease_seconds: int = 60,
         max_execution_seconds: int = 21600,
     ) -> bool:
-        """Extend a live compute lease when worker, token, and deadline match.
+        """Extend a compute lease for its original worker, including after an outage.
 
         Args:
             job_id: Running AF3 job.
@@ -515,12 +524,43 @@ class Af3Mixin:
             changed = self.db.execute(
                 "UPDATE agent_jobs SET lease_expires_at=? "
                 "WHERE id=? AND worker_id=? AND lease_token=? "
-                "AND status='running' AND lease_expires_at>? AND first_claimed_at>?",
+                "AND status='running' AND first_claimed_at>?",
                 ((now + timedelta(seconds=lease_seconds)).isoformat(),
-                 job_id, worker_id, lease_token, now.isoformat(),
+                 job_id, worker_id, lease_token,
                  (now - timedelta(seconds=max_execution_seconds)).isoformat()),
             ).rowcount
         return changed == 1
+
+    def update_compute_progress(
+        self, job_id: str, worker_id: str, lease_token: str, attempt: int,
+        progress: int, *, max_execution_seconds: int = 21600,
+    ) -> Af3Job | None:
+        """Durably record monotonic progress from the owning compute attempt."""
+        now = _now()
+        with self._immediate_transaction():
+            row = self.db.execute(
+                "SELECT user_id,run_id,status,worker_id,lease_token,attempts,"
+                "first_claimed_at,progress FROM agent_jobs WHERE id=?", (job_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            (user_id, run_id, status, owner, token, current_attempt,
+             first_claimed_at, previous_progress) = row
+            if (status != "running" or owner != worker_id or token != lease_token
+                    or current_attempt != attempt or not first_claimed_at
+                    or first_claimed_at <= (
+                        now - timedelta(seconds=max_execution_seconds)
+                    ).isoformat()):
+                raise ComputeLeaseConflict
+            if progress > previous_progress:
+                self.db.execute("UPDATE agent_jobs SET progress=? WHERE id=?", (progress, job_id))
+                if run_id:
+                    self._append_event_in_transaction(run_id, TaskUpdatedEvent(
+                        run_id=run_id,
+                        data=TaskUpdatedData(job_id=job_id, label="AlphaFold 3",
+                                             status="running", progress=progress),
+                    ))
+            return self.get_af3_job(user_id, job_id)
 
     def cancel_af3_job(self, user_id: str, job_id: str) -> Af3Job | None:
         """Cancel an owned active AF3 job and update GPU accounting.
@@ -640,8 +680,6 @@ class Af3Mixin:
                 return self.get_af3_job(user_id, job_id)
             if worker_id is not None and (
                 attempt != current_attempt or lease_token != current_token
-                or not lease_expires_at
-                or lease_expires_at <= _now().isoformat()
                 or not first_claimed_at
                 or first_claimed_at <= (
                     _now() - timedelta(seconds=max_execution_seconds)
@@ -858,8 +896,6 @@ class Af3Mixin:
              current_token, first_claimed_at) = job
             if status in {"queued", "running"} and worker_id is not None and (
                 attempt != current_attempt or lease_token != current_token
-                or not lease_expires_at
-                or lease_expires_at <= _now().isoformat()
                 or not first_claimed_at
                 or first_claimed_at <= (
                     _now() - timedelta(seconds=max_execution_seconds)

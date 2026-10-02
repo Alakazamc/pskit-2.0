@@ -154,7 +154,7 @@ async def test_live_worker_skips_legacy_job_with_unknown_gpu_memory_requirement(
 
 
 @pytest.mark.asyncio
-async def test_compute_worker_claims_only_one_real_input_and_reclaims_expired_lease(
+async def test_compute_worker_claims_only_one_real_input_and_preserves_expired_lease(
     tmp_path, monkeypatch,
 ):
     import app.domain.persistent_conversation as persistence
@@ -184,22 +184,20 @@ async def test_compute_worker_claims_only_one_real_input_and_reclaims_expired_le
                                    json={"worker_id": "h100", "lease_seconds": 60,
                                          **WORKER_RESOURCES})
         monkeypatch.setattr(persistence, "_now", lambda: now + timedelta(seconds=61))
-        reclaimed = await client.post(claim_url, headers={"X-Compute-Key": "compute-key"},
+        unclaimed = await client.post(claim_url, headers={"X-Compute-Key": "compute-key"},
                                       json={"worker_id": "h100", "lease_seconds": 60,
                                             **WORKER_RESOURCES})
         public_job = await client.get(f"/api/v1/af3/jobs/{created.json()['id']}", headers=user)
 
     assert legacy.status_code == created.status_code == 200
     assert anonymous.status_code == 404
-    assert first.status_code == second.status_code == reclaimed.status_code == 200
+    assert first.status_code == second.status_code == unclaimed.status_code == 200
     assert [job["id"] for job in first.json()] == [created.json()["id"]]
     assert first.json()[0]["fold_input"] == FOLD_INPUT
     assert first.json()[0]["attempt"] == 1
     assert len(first.json()[0]["lease_token"]) >= 32
     assert second.json() == []
-    assert [job["id"] for job in reclaimed.json()] == [created.json()["id"]]
-    assert reclaimed.json()[0]["attempt"] == 2
-    assert reclaimed.json()[0]["lease_token"] != first.json()[0]["lease_token"]
+    assert unclaimed.json() == []
     assert "lease_token" not in created.json()
     assert "lease_token" not in public_job.json()
 
@@ -270,18 +268,18 @@ async def test_compute_heartbeat_extends_only_the_claiming_workers_lease(tmp_pat
                                           json={"worker_id": "h100", "lease_seconds": 60,
                                                 **WORKER_RESOURCES})
         monkeypatch.setattr(persistence, "_now", lambda: now + timedelta(seconds=91))
-        reclaimed = await client.post("/internal/compute/af3/jobs/claim", headers=key,
+        unclaimed = await client.post("/internal/compute/af3/jobs/claim", headers=key,
                                       json={"worker_id": "h100", "lease_seconds": 60,
                                             **WORKER_RESOURCES})
     assert wrong.status_code == 409
     assert wrong_token.status_code == 409
     assert renewed.status_code == 200
     assert not_reclaimed.json() == []
-    assert [job["id"] for job in reclaimed.json()] == [job_id]
+    assert unclaimed.json() == []
 
 
 @pytest.mark.asyncio
-async def test_reclaimed_job_rejects_stale_results_and_artifacts(tmp_path, monkeypatch):
+async def test_running_job_rejects_wrong_token_results_and_artifacts(tmp_path, monkeypatch):
     import app.domain.persistent_conversation as persistence
 
     now = datetime(2026, 10, 1, 8, tzinfo=UTC)
@@ -307,17 +305,17 @@ async def test_reclaimed_job_rejects_stale_results_and_artifacts(tmp_path, monke
         monkeypatch.setattr(persistence, "_now", lambda: now + timedelta(seconds=61))
         second = (await client.post(claim_url, headers=key,
                                     json={"worker_id": "h100", "lease_seconds": 60,
-                                          **WORKER_RESOURCES})).json()[0]
+                                          **WORKER_RESOURCES})).json()
         stale_upload = await client.put(
             f"/internal/af3/jobs/{job_id}/artifacts/structure-1",
-            headers={**key, "X-Compute-Lease": first["lease_token"]},
-            params={"name": "prediction.cif", "kind": "structure", "attempt": second["attempt"]},
+            headers={**key, "X-Compute-Lease": "wrong"},
+            params={"name": "prediction.cif", "kind": "structure", "attempt": first["attempt"]},
             content=b"old-worker",
         )
         stale_result = await client.post(
             f"/internal/af3/jobs/{job_id}/result", headers=key,
             json={"status": "completed", "actual_gpu_minutes": 12,
-                  "attempt": second["attempt"], "lease_token": first["lease_token"]},
+                  "attempt": first["attempt"], "lease_token": "wrong"},
         )
         missing_attempt = await client.post(
             f"/internal/af3/jobs/{job_id}/result", headers=key,
@@ -326,15 +324,15 @@ async def test_reclaimed_job_rejects_stale_results_and_artifacts(tmp_path, monke
         current_result = await client.post(
             f"/internal/af3/jobs/{job_id}/result", headers=key,
             json={"status": "completed", "actual_gpu_minutes": 12,
-                  "attempt": second["attempt"], "lease_token": second["lease_token"]},
+                  "attempt": first["attempt"], "lease_token": first["lease_token"]},
         )
         duplicate = await client.post(
             f"/internal/af3/jobs/{job_id}/result", headers=key,
             json={"status": "completed", "actual_gpu_minutes": 12,
-                  "attempt": second["attempt"], "lease_token": second["lease_token"]},
+                  "attempt": first["attempt"], "lease_token": first["lease_token"]},
         )
         usage = (await client.get("/api/v1/usage", headers=user)).json()["gpu"]
-    assert first["attempt"] == 1 and second["attempt"] == 2
+    assert first["attempt"] == 1 and second == []
     assert stale_upload.status_code == stale_result.status_code == missing_attempt.status_code == 409
     assert current_result.status_code == duplicate.status_code == 200
     assert usage["used"] == 12 and usage["reserved"] == 0

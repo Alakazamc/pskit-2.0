@@ -1,0 +1,14 @@
+[Unit]
+Description=PSKit AF3-only callback proxy
+Requires=pskit-new-backend.service
+After=pskit-new-backend.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/jhli/pskit-2.0/new_backend
+ExecStart=/home/jhli/miniconda3/bin/python scripts/af3_callback_proxy.py --env-file .env --worker-id a6000-receiver-test-20261002 --listen-port 18084 --upstream-port 18080
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
