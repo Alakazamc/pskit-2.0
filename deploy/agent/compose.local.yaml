@@ -1,0 +1,35 @@
+services:
+  backend:
+    environment:
+      RESEARCH_AGENT_MODE: live
+      RESEARCH_AGENT_RUNTIME: pi
+      RESEARCH_AGENT_AF3_EXECUTOR: callback
+      RESEARCH_AGENT_MCP_EXECUTOR: disabled
+      RESEARCH_AGENT_AF3_MIN_GPU_MEMORY_MB: "40000"
+      MODEL_GATEWAY_BASE_URL: http://model-gateway-mock:8000/v1
+      MODEL_GATEWAY_MODEL: local-stub
+      MODEL_GATEWAY_API_KEY: local-test-only
+    ports:
+      - "127.0.0.1:18088:8000"
+    depends_on:
+      model-gateway-mock:
+        condition: service_started
+
+  web:
+    ports:
+      - "127.0.0.1:18085:80"
+
+  af3-callback-proxy:
+    ports:
+      - "127.0.0.1:18185:8080"
+
+  model-gateway-mock:
+    image: python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
+    command: ["python", "-u", "/mock/mock_model_gateway.py", "--host", "0.0.0.0", "--port", "8000"]
+    volumes:
+      - ./tests/mock_model_gateway.py:/mock/mock_model_gateway.py:ro
+    networks:
+      - app
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]

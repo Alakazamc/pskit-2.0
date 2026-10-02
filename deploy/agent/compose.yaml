@@ -1,0 +1,86 @@
+name: ${AGENT_COMPOSE_PROJECT:-pskit-agent-local}
+
+services:
+  backend:
+    image: pskit-agent-backend:local
+    build:
+      context: ../../new_backend
+      dockerfile: ../deploy/agent/backend.Dockerfile
+    env_file:
+      - ${AGENT_BACKEND_ENV_FILE:-./local.backend.env}
+    environment:
+      RESEARCH_AGENT_DB_PATH: /data/agent.sqlite3
+      RESEARCH_AGENT_PI_SESSION_DIR: /data/pi-sessions
+      RESEARCH_AGENT_INTERNAL_API_URL: http://127.0.0.1:8000
+      RESEARCH_AGENT_FRONTEND_URL: ${AGENT_PUBLIC_URL:-http://127.0.0.1:18085}
+      RESEARCH_AGENT_PUBLIC_API_URL: ${AGENT_PUBLIC_URL:-http://127.0.0.1:18085}
+      SUPABASE_URL: http://api-gw:8000
+      SUPABASE_PUBLIC_URL: ${AGENT_PUBLIC_URL:-http://127.0.0.1:18085}
+    volumes:
+      - agent_data:/data
+    networks:
+      - app
+      - supabase
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  web:
+    image: pskit-agent-web:local
+    build:
+      context: ../..
+      dockerfile: deploy/agent/web.Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app
+      - supabase
+    restart: unless-stopped
+
+  af3-callback-proxy:
+    image: pskit-agent-backend:local
+    user: ${AGENT_PROXY_UID:-1000}:${AGENT_PROXY_GID:-1000}
+    command:
+      - python
+      - /app/scripts/af3_callback_proxy.py
+      - --env-file
+      - /run/af3/callback.env
+      - --worker-id
+      - ${AGENT_AF3_WORKER_ID:-af3-local-test}
+      - --listen-host
+      - 0.0.0.0
+      - --listen-port
+      - "8080"
+      - --upstream-host
+      - backend
+      - --upstream-port
+      - "8000"
+    volumes:
+      - type: bind
+        source: ${AGENT_AF3_PROXY_KEY_FILE:-./local.proxy.env}
+        target: /run/af3/callback.env
+        read_only: true
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+networks:
+  app:
+    internal: true
+  supabase:
+    external: true
+    name: ${SUPABASE_DOCKER_NETWORK:-pskit-supabase_default}
+
+volumes:
+  agent_data:
