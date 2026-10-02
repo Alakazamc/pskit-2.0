@@ -1,0 +1,342 @@
+.project-sidebar {
+  height:100%;
+  background:#fbfdfc;
+  border-right:1px solid var(--border);
+  display:flex;
+  flex-direction:column
+}
+.sidebar-header {
+  height:76px;
+  padding:0 19px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border-bottom:1px solid var(--border)
+}
+.sidebar-title {
+  display:flex;
+  align-items:center;
+  gap:10px
+}
+.workspace-logo {
+  width:32px;
+  height:32px;
+  border-radius:9px;
+  display:grid;
+  place-items:center;
+  background:var(--primary);
+  color:#fff;
+  font-weight:800
+}
+.sidebar-title div {
+  display:flex;
+  flex-direction:column;
+  gap:2px
+}
+.sidebar-title b {
+  font-size:13px;
+  letter-spacing:-.03em
+}
+.sidebar-title span:not(.workspace-logo) {
+  font-size:11px;
+  color:var(--muted)
+}
+.sidebar-header>svg {
+  color:var(--muted)
+}
+.sidebar-scroll {
+  padding:19px 14px;
+  overflow:auto;
+  flex:1
+}
+.sidebar-section-heading {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin:3px 5px 12px;
+  color:#859a8f;
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.07em
+}
+.sidebar-section-heading button {
+  border:0;
+  background:none;
+  color:#94a79c;
+  padding:2px;
+  display:grid;
+  place-items:center
+}
+.sidebar-section-heading button:hover {
+  color:var(--primary)
+}
+.sidebar-create-form {
+  display:grid;
+  gap:7px;
+  padding:10px;
+  margin:4px 0 10px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:var(--surface)
+}
+.sidebar-create-form label {
+  color:var(--secondary);
+  font-size:11px
+}
+.sidebar-create-form input {
+  width:100%;
+  min-width:0;
+  padding:8px;
+  border:1px solid var(--border);
+  border-radius:7px;
+  background:var(--background);
+  color:var(--text)
+}
+.sidebar-create-form button {
+  border:0;
+  border-radius:7px;
+  padding:8px;
+  background:var(--primary);
+  color:#fff;
+  font-size:11px
+}
+.sidebar-create-error {
+  padding:6px 10px;
+  color:var(--danger);
+  font-size:11px
+}
+.project-card {
+  width:100%;
+  text-align:left;
+  background:#eaf5ef;
+  border:1px solid #d8eee2;
+  border-radius:11px;
+  padding:13px 10px;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  color:#2f6f58
+}
+.project-card:not(.active) {
+  background:transparent;
+  border-color:transparent
+}
+.project-card:not(.active):hover {
+  background:#f1f7f4
+}
+.project-card .project-icon {
+  width:30px;
+  height:30px;
+  border-radius:8px;
+  display:grid;
+  place-items:center;
+  background:#d4eadc
+}
+.project-card>div:nth-child(2) {
+  min-width:0;
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  gap:3px
+}
+.project-card b {
+  font-size:12px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis
+}
+.project-card small {
+  font-size:10px;
+  color:#719484
+}
+.session-heading {
+  margin-top:30px
+}
+.session-list {
+  display:flex;
+  flex-direction:column;
+  gap:4px
+}
+.sidebar-empty {
+  padding:8px 12px;
+  color:var(--secondary);
+  font-size:12px
+}
+.session-item {
+  width:100%;
+  display:flex;
+  align-items:center;
+  text-align:left;
+  gap:10px;
+  border:0;
+  background:transparent;
+  padding:10px 13px;
+  color:var(--secondary);
+  font-size:12px;
+  border-radius:8px
+}
+.session-item:hover,.session-item.active {
+  background:#e9f3ed;
+  color:#26775d;
+  font-weight:700
+}
+.session-dot {
+  width:7px;
+  height:7px;
+  border:1.5px solid #a9bdb2;
+  border-radius:50%
+}
+.session-item.active .session-dot {
+  background:var(--primary);
+  border-color:var(--primary)
+}
+.files-heading {
+  margin-top:32px
+}
+.file-item {
+  display:flex;
+  align-items:center;
+  gap:9px;
+  color:#5f766b;
+  font-size:11px;
+  padding:9px 10px
+}
+.file-item svg {
+  color:#8baa9a
+}
+.file-item small {
+  margin-left:auto;
+  color:#a1b2a8;
+  font-size:10px
+}
+.file-name {
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+.file-action {
+  display:grid;
+  place-items:center;
+  flex:none;
+  width:24px;
+  height:24px;
+  border:0;
+  border-radius:6px;
+  background:transparent;
+  color:var(--text-secondary);
+  cursor:pointer
+}
+.file-action:hover,.file-action:focus-visible {
+  background:var(--surface-hover);
+  color:var(--primary)
+}
+.file-action:disabled { opacity:.45; cursor:wait }
+.sidebar-bottom {
+  padding:12px;
+  border-top:1px solid var(--border)
+}
+.usage-card {
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:11px;
+  padding:14px;
+  margin-bottom:12px
+}
+.usage-card.skeleton {
+  font-size:12px;
+  color:var(--muted)
+}
+.usage-heading {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  font-size:12px;
+  font-weight:750;
+  margin-bottom:13px
+}
+.usage-heading svg {
+  color:#a3b5ab
+}
+.usage-row {
+  display:flex;
+  gap:8px;
+  align-items:flex-start;
+  margin:9px 0;
+  color:#77a28e
+}
+.usage-row>div {
+  display:flex;
+  justify-content:space-between;
+  gap:5px;
+  align-items:baseline;
+  flex:1;
+  min-width:0;
+  color:var(--secondary);
+  font-size:10px
+}
+.usage-row b {
+  font-size:11px;
+  color:var(--text);
+  white-space:nowrap
+}
+.usage-row small {
+  font-size:10px;
+  color:#9baea3;
+  font-weight:500
+}
+.usage-row.gpu {
+  color:#69a2cf
+}
+.usage-track {
+  height:4px;
+  border-radius:4px;
+  background:#eaf0eb;
+  margin:2px 0 14px 24px
+}
+.usage-track span {
+  display:block;
+  height:100%;
+  border-radius:4px;
+  background:var(--primary)
+}
+.usage-subline {
+  font-size:10px;
+  color:#91a498;
+  padding-left:24px
+}
+.profile-row {
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:7px 5px
+}
+.profile-avatar {
+  width:30px;
+  height:30px;
+  border-radius:9px;
+  background:#dcece2;
+  color:#3b876c;
+  display:grid;
+  place-items:center;
+  font-weight:800
+}
+.profile-row>div:nth-child(2) {
+  flex:1;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:2px
+}
+.profile-row b {
+  font-size:12px
+}
+.profile-row small {
+  font-size:10px;
+  color:var(--muted);
+  overflow:hidden;
+  text-overflow:ellipsis
+}
+.profile-row svg {
+  color:#a3b3aa
+}

@@ -1,0 +1,75 @@
+.app-shell {
+  height:100vh;
+  min-height:550px;
+  display:flex;
+  overflow:hidden;
+  background:var(--bg)
+}
+.navigation-rail {
+  width:67px;
+  flex:none;
+  background:#fff;
+  border-right:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding:20px 8px 15px;
+  gap:36px
+}
+.rail-logo {
+  height:36px;
+  width:36px
+}
+.rail-group {
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  width:100%;
+  align-items:center
+}
+.rail-link {
+  border:0;
+  text-decoration:none;
+  width:52px;
+  height:50px;
+  border-radius:11px;
+  background:transparent;
+  color:#82938d;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:2px;
+  font-size:10px
+}
+.rail-link.active,.rail-link:hover {
+  background:#e5f5ee;
+  color:#258b70
+}
+.rail-spacer {
+  flex:1
+}
+.rail-group.bottom {
+  gap:5px
+}
+.desktop-panels {
+  flex:1;
+  min-width:0
+}
+.workspace-panels {
+  height:100%;
+  width:100%
+}
+.resize-handle {
+  width:3px;
+  background:#e3ede7;
+  position:relative;
+  transition:background .2s
+}
+.resize-handle:hover,.resize-handle[data-resize-handle-active] {
+  background:#a4cfbd
+}
+.sidebar-panel,.main-panel,.agent-panel-wrapper {
+  min-width:0;
+  min-height:0
+}

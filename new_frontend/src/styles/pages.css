@@ -1,0 +1,117 @@
+.project-overview,.catalog-page {
+  padding:50px max(24px,8%);
+  overflow:auto;
+  flex:1
+}
+.project-overview {
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  justify-content:center;
+  max-width:600px;
+  margin:auto
+}
+.overview-icon {
+  width:66px;
+  height:66px;
+  border-radius:18px;
+  background:#e1f3e8;
+  color:var(--primary);
+  display:grid;
+  place-items:center;
+  margin-bottom:25px
+}
+.project-overview h1,.catalog-page h1 {
+  font-size:34px;
+  letter-spacing:-.06em;
+  margin:12px 0 8px
+}
+.project-overview p,.catalog-page p {
+  color:var(--secondary);
+  font-size:13px;
+  line-height:1.8;
+  margin-bottom:25px
+}
+.back-link {
+  display:flex;
+  gap:7px;
+  align-items:center;
+  border:0;
+  background:none;
+  color:var(--primary);
+  font-size:12px;
+  margin-bottom:50px;
+  padding:0
+}
+.catalog-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:13px;
+  margin-top:35px
+}
+.catalog-card {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:11px;
+  padding:17px;
+  min-height:135px
+}
+.catalog-icon {
+  color:var(--primary)
+}
+.catalog-card b {
+  font-size:12px
+}
+.catalog-card span {
+  font-size:10px;
+  color:var(--muted)
+}
+.settings-card {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+  max-width:680px;
+  padding:20px 22px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--surface)
+}
+.settings-card h2 {
+  margin:0 0 5px;
+  font-size:16px
+}
+.settings-card p {
+  margin:0;
+  font-size:12px
+}
+.language-switch {
+  display:inline-flex;
+  flex:none;
+  gap:3px;
+  padding:3px;
+  border:1px solid var(--border);
+  border-radius:9px;
+  background:var(--soft)
+}
+.language-switch button {
+  padding:7px 10px;
+  border:0;
+  border-radius:6px;
+  background:transparent;
+  color:var(--secondary);
+  font-size:12px;
+  font-weight:600;
+  white-space:nowrap
+}
+.language-switch button[aria-pressed="true"] {
+  background:var(--surface);
+  color:var(--primary-dark);
+  box-shadow:0 1px 3px rgb(32 48 43 / 10%)
+}
+@media(max-width:700px) {
+  .settings-card { align-items:flex-start; flex-direction:column }
+}

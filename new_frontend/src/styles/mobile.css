@@ -1,0 +1,50 @@
+@media(max-width:700px) {
+  .app-shell {
+    min-height:100dvh;
+    height:100dvh
+  }
+  .navigation-rail {
+    width:52px;
+    padding:14px 4px
+  }
+  .rail-link {
+    width:43px
+  }
+  .rail-link span {
+    display:none
+  }
+  .sidebar-panel {
+    display:none
+  }
+  .main-header {
+    height:59px;
+    padding:0 15px
+  }
+  .conversation-scroll {
+    padding:20px 16px
+  }
+  .composer-wrap {
+    padding:4px 12px 10px
+  }
+}
+.mobile-menu-button {
+  border:0;
+  background:transparent;
+  display:grid;
+  place-items:center;
+  padding:4px;
+  margin-right:4px;
+  color:var(--primary)
+}
+.mobile-sidebar-backdrop {
+  position:fixed;
+  inset:0;
+  z-index:40;
+  background:#18342750
+}
+.mobile-sidebar-content {
+  width:min(320px,calc(100vw - 52px));
+  height:100%;
+  margin-left:52px;
+  box-shadow:12px 0 30px #172d231c
+}

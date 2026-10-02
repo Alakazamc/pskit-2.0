@@ -1,0 +1,19 @@
+import React from "react";
+import { createRoot } from "react-dom/client";
+import { App } from "./app/App";
+import "./styles/base.css";
+import "./styles/login.css";
+import "./styles/layout.css";
+import "./styles/sidebar.css";
+import "./styles/main.css";
+import "./styles/chat.css";
+import "./styles/composer.css";
+import "./styles/agent.css";
+import "./styles/pages.css";
+import "./styles/responsive.css";
+import "./styles/mobile.css";
+import "./styles/monochrome.css";
+import "./styles/mono-pages.css";
+import "./styles/scrollbars.css";
+
+createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);
