@@ -35,7 +35,7 @@ A6000 compute ─本地持久 spool─> receiver
 
 `deploy/agent/compose.yaml` 管理新版 `web`、`backend` 和 `af3-callback-proxy`。后端镜像包含 Python 3.12、固定版本 Node、`pi/package-lock.json` 中锁定的 Pi CLI；前端使用构建产物和固定版本的静态 Web 镜像。基础镜像固定到明确版本或 digest，不用 `latest`。后端 SQLite 与 Pi 会话目录挂到持久卷，容器重建后保留。应用代码、构建产物和密钥分开交付，密钥不写进镜像、Git 或前端 `VITE_*` 变量。
 
-固定版本 Supabase 快照仍位于 `infra/supabase/`，云端用独立 Compose 项目、新数据库卷和新密钥。它的网关及管理端口只绑定云端回环地址，Python 后端经 Docker 内网访问 `api-gw:8000`；浏览器的邮箱认证请求只调用 Python。当前代码把同一个 `SUPABASE_URL` 同时用于 Python 内部请求与 Google OAuth 的浏览器跳转，因此部署前要拆成内部 URL 和公开 OAuth URL。Google 登录需要的 Supabase 授权及回调路径由 Web 代理按路径单独暴露，其他 Supabase 管理/REST/Studio 路径保持关闭；没有 Google 提供者凭据时不宣称 Google 登录已联通。云端邮箱验证码使用真实 SMTP，Mailpit 仅用于本地验证。云端应用的公开 API URL、前端 URL 均设置为 `https://agent.bioailab.net`，Refresh Cookie 设置 `Secure`。
+固定版本 Supabase 快照仍位于 `infra/supabase/`，云端用独立 Compose 项目、新数据库卷和新密钥。它的网关及管理端口只绑定云端回环地址，Python 后端与 Web 代理经 Docker 内网访问 `api-gw:8000`；浏览器的邮箱认证请求只调用 Python。当前代码把同一个 `SUPABASE_URL` 同时用于 Python 内部请求与 Google OAuth 的浏览器跳转，因此部署前要拆成内部 URL 和公开 OAuth URL。Google 登录需要的 Supabase 授权及回调路径由 Web 代理按路径单独暴露，其他 Supabase 管理/REST/Studio 路径保持关闭；没有 Google 提供者凭据时不宣称 Google 登录已联通。云端邮箱验证码使用真实 SMTP，Mailpit 仅用于本地验证。云端应用的公开 API URL、前端 URL 均设置为 `https://agent.bioailab.net`，Refresh Cookie 设置 `Secure`。
 
 公网 Nginx 只转发 `agent.bioailab.net` 到云端回环地址 `127.0.0.1:18085`。`web` 容器为 SPA 路由返回 `index.html`，把 `/api/v1/` 转给 `backend`，按需把 Google OAuth 的 `/auth/v1/authorize` 与 `/auth/v1/callback` 转给 Supabase，支持 SSE 长连接与现有文件上传上限，并拒绝 `/internal/` 及其他 Supabase 路径。后端本身仅通过 Docker 内网及诊断用的回环端口 `127.0.0.1:18088` 可达。旧域名和旧 Nginx 配置不修改。
 
@@ -45,7 +45,7 @@ AF3 代理容器只发布到云端回环地址 `127.0.0.1:18185`，校验回调�
 
 1. 在仓库新增 Docker 构建和 Compose 文件；本地使用 `127.0.0.1:18085`（网页）、`127.0.0.1:18088`（后端诊断）和 `127.0.0.1:18185`（AF3 代理测试），避免与现有 18080/18084 服务冲突。
 2. 本地 Compose 后端加入现有 Supabase 的 `pskit-supabase_default` 网络，使用其 `api-gw:8000`；继续使用现有本地身份服务，但给 Docker 后端使用独立的 SQLite/Pi 测试卷。云端则连接自己的新 Supabase 网络和全新数据卷。
-3. 先验证登录、项目与聊天、SSE、文件上传、Token/GPU 额度及本地 mock AF3 回调；再验证代理拒绝无密钥、错误 worker、非 AF3 路径和超大请求。测试先于相应实现，保持现有 Python 与前端契约。
+3. 本地 Docker 后端使用真实 Pi CLI 和隔离的 OpenAI 兼容模型替身，不消耗真实模型额度。先验证登录、项目与聊天、SSE、文件上传、Token/GPU 额度，以及由替身触发的 AF3 提交、暂停、mock worker 回调和自动唤醒；再验证代理拒绝无密钥、错误 worker、非 AF3 路径和超大请求。测试先于相应实现，保持现有 Python 与前端契约。
 4. 本地验证结果和镜像版本记录到部署说明。用户确认继续上云前，只在本地运行这些容器，不改动云端 Nginx、DNS 或运行中的旧容器。
 
 ## 云端上线与人工操作
