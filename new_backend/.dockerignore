@@ -1,0 +1,16 @@
+.env*
+**/.env*
+data/
+**/data/
+**/node_modules/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/*.pyc
+**/*.sqlite3
+**/*.db
+tests/
+docs/
+deploy/
+.venv/
+.git/
