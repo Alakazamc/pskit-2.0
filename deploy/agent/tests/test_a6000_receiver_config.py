@@ -37,6 +37,7 @@ def test_receiver_preserves_spool_and_is_not_started_by_default(tmp_path: Path):
     assert receiver["profiles"] == ["cutover"]
     assert receiver["network_mode"] == "host"
     assert receiver["user"] == "1006:1006"
+    assert receiver["entrypoint"] == ["python3"]
     assert receiver["command"][:4] == [
         "/opt/af3_receiver.py", "receive", "--api-url", "http://127.0.0.1:18185",
     ]

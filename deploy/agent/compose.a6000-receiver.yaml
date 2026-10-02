@@ -9,6 +9,7 @@ services:
     profiles: [cutover]
     user: "1006:1006"
     network_mode: host
+    entrypoint: ["python3"]
     env_file:
       - ${AGENT_AF3_RECEIVER_ENV_FILE:-/data/jhli/pskit-af3-receiver-test-20261002/receiver.cloud.env}
     command:

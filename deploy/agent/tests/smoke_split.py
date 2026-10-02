@@ -78,12 +78,15 @@ def run_smoke(
     password: str,
     expected_project_id: str | None = None,
     expected_session_id: str | None = None,
+    *,
+    verify_public: bool = True,
 ) -> dict:
     """Check migrated identity/data and a fresh Pi run through the public route."""
-    if app.get("/login").status_code != 200:
-        raise SmokeFailure("React login page is unavailable")
-    if legacy.get("/").status_code != 200:
-        raise SmokeFailure("Legacy PSKit site is unavailable")
+    if verify_public:
+        if app.get("/login").status_code != 200:
+            raise SmokeFailure("React login page is unavailable")
+        if legacy.get("/").status_code != 200:
+            raise SmokeFailure("Legacy PSKit site is unavailable")
     for path in ("/internal/compute/af3/jobs/claim", "/auth/v1/admin/users"):
         if app.get(path).status_code != 404:
             raise SmokeFailure("Private API path is public")
@@ -164,6 +167,8 @@ def main() -> None:
     parser.add_argument("--credentials-file", type=Path, required=True)
     parser.add_argument("--expected-project-id")
     parser.add_argument("--expected-session-id")
+    parser.add_argument("--private", action="store_true",
+                        help="Check private A6000 API before host Nginx cutover")
     args = parser.parse_args()
     try:
         email, password = load_credentials(args.credentials_file)
@@ -173,13 +178,16 @@ def main() -> None:
                 httpx.Client(base_url=args.legacy_url, timeout=30,
                              follow_redirects=True, trust_env=False) as old:
             result = run_smoke(app, old, email, password,
-                               args.expected_project_id, args.expected_session_id)
+                               args.expected_project_id, args.expected_session_id,
+                               verify_public=not args.private)
     except SmokeFailure as exc:
         raise SystemExit(f"Split smoke failed: {exc}") from None
     except (httpx.HTTPError, OSError, ValueError):
         raise SystemExit("Split smoke failed: network, file, or response error") from None
-    print(f"Split smoke passed: login, history, quota, upload, Pi/SSE, private paths, "
-          f"legacy site; events={result['events']}")
+    label = "Private" if args.private else "Split"
+    public_checks = ", React page, legacy site" if not args.private else ""
+    print(f"{label} smoke passed: login, history, quota, upload, Pi/SSE, private paths"
+          f"{public_checks}; events={result['events']}")
 
 
 if __name__ == "__main__":

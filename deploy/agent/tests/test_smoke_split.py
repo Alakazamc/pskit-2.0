@@ -25,7 +25,8 @@ class DelayedEvents(httpx.SyncByteStream):
         yield b'id: 2\nevent: run.completed\ndata: {"type":"run.completed"}\n\n'
 
 
-def test_smoke_checks_migrated_data_upload_quota_and_stream(tmp_path, capsys):
+@pytest.mark.parametrize("verify_public", [True, False])
+def test_smoke_checks_migrated_data_upload_quota_and_stream(tmp_path, capsys, verify_public):
     credentials = tmp_path / "test-account.json"
     credentials.write_text(json.dumps({"email": "test@example.test", "password": "secret-password"}))
     credentials.chmod(0o600)
@@ -76,12 +77,14 @@ def test_smoke_checks_migrated_data_upload_quota_and_stream(tmp_path, capsys):
     transport = httpx.MockTransport(respond)
     with httpx.Client(base_url="https://agent.example.test", transport=transport) as app, \
             httpx.Client(base_url="https://old.example.test", transport=transport) as old:
-        result = run_smoke(app, old, email, password, "project-abc", "session-old")
+        result = run_smoke(app, old, email, password, "project-abc", "session-old",
+                           verify_public=verify_public)
 
     assert result["events"] == 2
     assert result["stream_seconds"] - result["first_event_seconds"] >= 0.15
     assert ("PUT", "/api/v1/files/content") in seen
     assert ("GET", "/api/v1/g/g-p-abc/c/session-old/messages") in seen
+    assert (("GET", "/login") in seen) is verify_public
     assert "secret-password" not in capsys.readouterr().out
 
 
