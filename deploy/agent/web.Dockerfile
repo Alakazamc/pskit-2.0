@@ -6,6 +6,7 @@ COPY new_frontend/ ./
 RUN VITE_AUTH_MODE=supabase VITE_API_BASE_URL=/api/v1 npm run build
 
 FROM nginx:1.28.0-alpine@sha256:30f1c0d78e0ad60901648be663a710bdadf19e4c10ac6782c235200619158284
-COPY deploy/agent/web.conf /etc/nginx/conf.d/default.conf
+ARG WEB_NGINX_CONFIG=deploy/agent/web.conf
+COPY ${WEB_NGINX_CONFIG} /etc/nginx/conf.d/default.conf
 COPY --from=web-build /app/dist/ /usr/share/nginx/html/
 EXPOSE 80

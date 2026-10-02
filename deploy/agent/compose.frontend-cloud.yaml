@@ -1,0 +1,15 @@
+name: pskit-agent-cloud
+
+services:
+  web:
+    image: ${AGENT_WEB_IMAGE:?set AGENT_WEB_IMAGE}
+    ports:
+      - "127.0.0.1:18085:80"
+    networks:
+      - supabase
+    restart: unless-stopped
+
+networks:
+  supabase:
+    external: true
+    name: pskit-agent-supabase_default
