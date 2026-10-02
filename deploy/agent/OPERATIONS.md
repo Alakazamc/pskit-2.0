@@ -41,6 +41,47 @@ sudo ufw allow in on wg0 from 10.9.8.2 to 10.9.8.1 port 18184 proto tcp
 
 公开 AF3 前仍须处理运行中任务取消不能立即停 GPU、单件产物 20 MiB 上限。替换镜像或迁移前备份 Supabase DB 卷与 Agent 数据卷；若新 Nginx 配置出错，只删除新的两个配置文件并 `nginx -t`、reload，不动旧站。
 
+## 新版后端迁到 A6000：Agent 数据快照
+
+本节只迁移 `pskit-agent-cloud_agent_data` 中的 `agent.sqlite3`（包括已提交 WAL）和 `pi-sessions/`。Supabase 账号、Postgres、Storage 留在阿里云。以下操作只在确认没有运行中的 Agent Run、AF3 claim，且 A6000 接收器已暂停领任务后执行；先停止阿里云新版后端和回调代理，不能在写入仍进行时复制 Pi 文件。保留源卷与原始归档，禁止 `docker compose down -v`。
+
+阿里云部署目录中执行；这里的 Compose 项目名仍是 `pskit-agent-cloud`，不要停止旧 `pskit` 项目：
+
+```bash
+cd /home/ecs-user/pskit-agent-cloud-20261002/deploy/agent
+docker compose --env-file .env -f compose.yaml -f compose.cloud.yaml stop af3-callback-proxy backend
+umask 077
+mkdir -p backups
+docker run --rm --network none \
+  -v pskit-agent-cloud_agent_data:/source:ro \
+  -v "$PWD/backups":/backup \
+  -v "$PWD/scripts/agent_data_snapshot.py":/script.py:ro \
+  python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c \
+  sh -c 'python /script.py snapshot /source /backup/agent-snapshot --source-stopped && chown -R 1000:1000 /backup/agent-snapshot'
+tar -C backups -czf backups/agent-snapshot.tar.gz agent-snapshot
+(cd backups && sha256sum agent-snapshot.tar.gz > agent-snapshot.tar.gz.sha256)
+```
+
+通过已配置的 SSH 通道将归档和 `.sha256` 从阿里云复制到 A6000 的权限 `0700` 目录。传输过程中不解压到共享目录，也不打印会话内容。在 A6000 部署目录执行；**此时不要启动 A6000 后端**：
+
+```bash
+cd /data/jhli/pskit-agent-a6000-20261002/deploy/agent
+umask 077
+mkdir -p transfer
+# 将 agent-snapshot.tar.gz 与 agent-snapshot.tar.gz.sha256 放在 transfer/。
+(cd transfer && sha256sum -c agent-snapshot.tar.gz.sha256)
+tar -C transfer -xzf transfer/agent-snapshot.tar.gz
+docker volume create pskit-agent-a6000_agent_data
+docker run --rm --network none \
+  -v pskit-agent-a6000_agent_data:/target \
+  -v "$PWD/transfer/agent-snapshot":/snapshot:ro \
+  -v "$PWD/scripts/agent_data_snapshot.py":/script.py:ro \
+  python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c \
+  sh -c 'python /script.py restore /snapshot /target && chown -R 10001:10001 /target'
+```
+
+`restore` 会在写入目标卷前验证清单、所有文件 SHA-256 和 SQLite 完整性，并拒绝覆盖非空卷；后端容器使用 UID/GID `10001:10001`。保留云端源卷和归档，直到公网、历史会话及 AF3 回调验收完成。切流量后回退时必须冻结 A6000 写入并迁回**最新** Agent 数据，不能直接重启云端旧后端。
+
 ## 2026-10-02 私网部署记录
 
 - 阿里云目录：`/home/ecs-user/pskit-agent-cloud-20261002`。旧 `pskit` 容器与 `pskit.bioailab.net` 未修改；部署后旧站 HTTPS 返回 200。
