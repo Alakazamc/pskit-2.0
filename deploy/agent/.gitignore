@@ -1,4 +1,5 @@
 local.backend.env
 local.proxy.env
 local.env
+local.smoke.credentials
 *.local.env

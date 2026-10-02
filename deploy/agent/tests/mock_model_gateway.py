@@ -6,9 +6,19 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
+FOLD_INPUT = {
+    "name": "Local mock structure", "modelSeeds": [1],
+    "sequences": [{"protein": {"id": "A", "sequence": "PVLSCGEWQL"}}],
+    "dialect": "alphafold3", "version": 4,
+}
+
+
 def response_kind(payload: dict) -> str:
     """Choose a response from the conversation's observable text."""
-    conversation = json.dumps(payload.get("messages", []), ensure_ascii=False).lower()
+    conversation = json.dumps([
+        message for message in payload.get("messages", [])
+        if isinstance(message, dict) and message.get("role") != "system"
+    ], ensure_ascii=False).lower()
     if "background task result" in conversation or "pskit.task_completed" in conversation:
         return "resumed"
     if "af3" in conversation or "alphafold" in conversation:
@@ -50,7 +60,10 @@ class Handler(BaseHTTPRequestHandler):
         if kind == "af3":
             event({"tool_calls": [{"index": 0, "id": "call_local_af3", "type": "function",
                                    "function": {"name": "submit_af3",
-                                                "arguments": '{"estimated_gpu_minutes":1}'}}]})
+                                                "arguments": json.dumps({
+                                                    "estimated_gpu_minutes": 1,
+                                                    "fold_input": FOLD_INPUT,
+                                                })}}]})
             event({}, "tool_calls")
         else:
             answer = ("AF3 mock result reviewed and ready." if kind == "resumed"

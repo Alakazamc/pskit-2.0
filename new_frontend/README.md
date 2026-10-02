@@ -2,6 +2,8 @@
 
 独立的 React + Vite + TypeScript SPA。前端始终通过 `/api/v1` 调用 HTTP 接口；开发时由 `new_backend/` 的 mock 模式提供同一份 API 契约，不在浏览器里复制任务和配额逻辑。
 
+新版前后端的独立 Docker 联调启动与验证命令见 [`../deploy/agent/README.md`](../deploy/agent/README.md)。该入口运行 Python/Pi 与模型替身，网页地址为 <http://127.0.0.1:18085>。
+
 ## 启动
 
 先启动 mock API：

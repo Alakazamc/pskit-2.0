@@ -70,6 +70,7 @@ services:
         condition: service_healthy
     networks:
       - app
+      - callback_ingress
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -78,6 +79,8 @@ services:
 networks:
   app:
     internal: true
+  callback_ingress:
+    internal: false
   supabase:
     external: true
     name: ${SUPABASE_DOCKER_NETWORK:-pskit-supabase_default}

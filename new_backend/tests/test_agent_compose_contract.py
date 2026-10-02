@@ -35,7 +35,8 @@ def test_local_compose_is_private_and_persistent(tmp_path):
     assert config["networks"]["app"]["internal"] is True
     assert config["networks"]["supabase"]["external"] is True
     assert config["networks"]["supabase"]["name"] == "pskit-supabase_default"
-    assert set(services["af3-callback-proxy"]["networks"]) == {"app"}
+    assert set(services["af3-callback-proxy"]["networks"]) == {"app", "callback_ingress"}
+    assert config["networks"]["callback_ingress"].get("internal", False) is False
     assert set(services["backend"]["networks"]) == {"app", "supabase"}
     assert set(services["web"]["networks"]) == {"app", "supabase"}
     assert services["backend"]["environment"]["LOCAL_BACKEND_SECRET_TEST"] == "backend-only"
@@ -87,14 +88,33 @@ def test_model_stub_supports_suspend_and_resume(tmp_path):
             connection = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
             connection.request("POST", "/v1/chat/completions", body=json.dumps({
                 "model": "local-stub", "stream": True,
-                "messages": [{"role": "user", "content": message}],
+                "messages": [
+                    {"role": "system", "content": "AF3 is available when requested."},
+                    {"role": "user", "content": message},
+                ],
             }), headers={"Content-Type": "application/json"})
             response = connection.getresponse()
             assert response.status == 200
             events = response.read().decode()
             assert '"' + expected + '"' in events
             assert "data: [DONE]" in events
+            if expected == "tool_calls":
+                chunks = [json.loads(line[6:]) for line in events.splitlines()
+                          if line.startswith("data: {")]
+                calls = [call for chunk in chunks for choice in chunk["choices"]
+                         for call in choice["delta"].get("tool_calls", [])]
+                arguments = json.loads(calls[0]["function"]["arguments"])
+                assert arguments["fold_input"]["dialect"] == "alphafold3"
             connection.close()
     finally:
         process.terminate()
         process.wait(timeout=5)
+
+
+def test_local_smoke_artifact_ids_are_unique_per_job():
+    import runpy
+
+    script = runpy.run_path(str(ROOT / "deploy/agent/tests/smoke_local.py"))
+    artifact_id_for_job = script["artifact_id_for_job"]
+    assert artifact_id_for_job("job-a") == artifact_id_for_job("job-a")
+    assert artifact_id_for_job("job-a") != artifact_id_for_job("job-b")
