@@ -1,5 +1,7 @@
 # 阿里云独立部署
 
+**当前 A6000 迁移目标修订：** 前端改由阿里云宿主机 Nginx 直接服务固定版镜像中提取的 `dist`，新版后端和计算在 A6000，Supabase 仍在阿里云。本文件下面的云端 Web Compose 操作属于原先私网阶段；最终切换及验收以 [A6000_MIGRATION.md](A6000_MIGRATION.md) 为准。
+
 新版使用 `pskit-agent-supabase` 和 `pskit-agent-cloud` 两个 Compose 项目，配置与数据不能复用旧 PSKit 或 WSL 测试环境。云端 Docker 数据目录是 `/data/docker`；数据库、Storage 和 Agent 数据使用独立 Docker 命名卷。不要执行 `docker compose down -v`。
 
 ## 私网阶段
@@ -52,11 +54,11 @@ cd /home/ecs-user/pskit-agent-cloud-20261002/deploy/agent
 docker compose --env-file .env -f compose.yaml -f compose.cloud.yaml stop af3-callback-proxy backend
 umask 077
 mkdir -p backups
-docker run --rm --network none \
+docker run --rm --network none --user 0:0 \
   -v pskit-agent-cloud_agent_data:/source:ro \
   -v "$PWD/backups":/backup \
   -v "$PWD/scripts/agent_data_snapshot.py":/script.py:ro \
-  python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c \
+  pskit-agent-backend:cloud-20261002-0ac7743c \
   sh -c 'python /script.py snapshot /source /backup/agent-snapshot --source-stopped && chown -R 1000:1000 /backup/agent-snapshot'
 tar -C backups -czf backups/agent-snapshot.tar.gz agent-snapshot
 (cd backups && sha256sum agent-snapshot.tar.gz > agent-snapshot.tar.gz.sha256)
@@ -72,11 +74,11 @@ mkdir -p transfer
 (cd transfer && sha256sum -c agent-snapshot.tar.gz.sha256)
 tar -C transfer -xzf transfer/agent-snapshot.tar.gz
 docker volume create pskit-agent-a6000_agent_data
-docker run --rm --network none \
+docker run --rm --network none --user 0:0 \
   -v pskit-agent-a6000_agent_data:/target \
   -v "$PWD/transfer/agent-snapshot":/snapshot:ro \
   -v "$PWD/scripts/agent_data_snapshot.py":/script.py:ro \
-  python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c \
+  pskit-agent-backend:cloud-20261002-0ac7743c \
   sh -c 'python /script.py restore /snapshot /target && chown -R 10001:10001 /target'
 ```
 

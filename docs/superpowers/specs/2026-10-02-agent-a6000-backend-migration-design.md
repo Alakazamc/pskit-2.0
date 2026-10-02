@@ -1,5 +1,9 @@
 # 新版 PSKit 后端迁至 A6000 的部署设计
 
+## 2026-10-02 前端部署修订
+
+用户随后明确选择阿里云宿主机 Nginx 直接服务 Vite `dist`，不再保留常驻 Web 容器。以下原设计中“阿里云 Web 容器”“`127.0.0.1:18085`”是修订前拓扑；最终公网 Nginx 的 `root` 为 `/var/www/agent.bioailab.net`，`location /` 用 SPA `try_files`，`/api/v1/` 仍经 WireGuard 到 A6000，两个 OAuth 授权/回调精确路径直接代理本机 Supabase Envoy `127.0.0.1:18130`。已有固定版前端容器只作为提取其已构建 `dist` 的来源，验收后停止。独立静态 Web 配置保留作备用验证，不是最终运行服务。
+
 ## 目标与已确认的边界
 
 用户希望在 A6000 上看到并运行**新版** PSKit 的 Python 后端、Pi Agent 和 AF3 计算，而不是仅有 AF3 接收器。`new_frontend`、Supabase、`agent.bioailab.net` 的 DNS、证书及公网 HTTPS 入口留在阿里云。旧 `pskit.bioailab.net` 与 A6000 上的旧 PSKit 容器继续运行。新版已创建的 Supabase 账号、Storage 数据、Agent 会话和 Pi 会话需要保留；切换后只能有一个新版后端处理请求和后台任务。

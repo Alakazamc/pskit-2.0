@@ -1,6 +1,8 @@
 """Contract checks for the two Aliyun host Nginx entrances."""
 
 from pathlib import Path
+import json
+import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -21,7 +23,11 @@ def test_split_public_routes_and_private_denials():
     assert "proxy_read_timeout 3600s;" in config
     assert "client_max_body_size 25m;" in config
     assert "location ^~ /internal/ { return 404; }" in config
-    assert "proxy_pass http://127.0.0.1:18085;" in config
+    assert "root /var/www/agent.bioailab.net;" in config
+    assert "try_files $uri $uri/ /index.html;" in config
+    assert "proxy_pass http://127.0.0.1:18130;" in config
+    assert "location ^~ /auth/v1/ { return 404; }" in config
+    assert "18085" not in config
     assert "pskit.bioailab.net" not in config
     assert "18185" not in config
 
@@ -36,3 +42,37 @@ def test_supabase_relay_is_wireguard_only():
     assert "proxy_pass http://127.0.0.1:18130;" in config
     assert "listen 0.0.0.0" not in config
     assert "pskit.bioailab.net" not in config
+
+
+def test_supabase_relay_can_run_in_isolated_docker_project():
+    deploy = ROOT / "deploy/agent"
+    compose = deploy / "compose.supabase-relay.yaml"
+    assert compose.exists()
+    rendered = subprocess.run(
+        ["docker", "compose", "--env-file", str(deploy / "cloud.env.example"),
+         "-f", str(compose), "config", "--format", "json"],
+        cwd=ROOT, text=True, capture_output=True, check=True,
+    )
+    stack = json.loads(rendered.stdout)
+    assert stack["name"] == "pskit-agent-supabase-relay"
+    assert set(stack["services"]) == {"relay"}
+    relay = stack["services"]["relay"]
+    assert relay["network_mode"] == "host"
+    assert relay["user"] == "101:101"
+    assert relay["read_only"] is True
+    assert relay["cap_drop"] == ["ALL"]
+    assert not relay.get("ports")
+    assert relay["volumes"][0]["source"].endswith("host-nginx-supabase-private.conf")
+
+
+def test_host_nginx_install_requires_root_and_keeps_rollback_copy():
+    script = ROOT / "deploy/agent/scripts/install_host_nginx_agent.sh"
+    assert script.exists()
+    content = script.read_text()
+    assert "$(id -u)" in content
+    assert "nginx -t" in content
+    assert "systemctl reload nginx" in content
+    assert "agent.bioailab.net.conf.pre-a6000" in content
+    assert "frontend-dist" in content
+    assert "10.9.8.2:18088" in content
+    subprocess.run(["bash", "-n", str(script)], check=True)

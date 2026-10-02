@@ -23,6 +23,9 @@ def rendered_stack() -> dict:
 
 def test_a6000_stack_has_one_loopback_backend_and_no_web():
     assert (DEPLOY / "compose.a6000.yaml").exists()
+    assert "${AGENT_API_PROXY_IMAGE:-nginx:1.28.0-alpine@sha256:" in (
+        DEPLOY / "compose.a6000.yaml"
+    ).read_text()
     stack = rendered_stack()
     assert stack["name"] == "pskit-agent-a6000"
     services = stack["services"]
@@ -33,6 +36,7 @@ def test_a6000_stack_has_one_loopback_backend_and_no_web():
     assert services["backend"]["ports"][0]["published"] == "18089"
     assert services["af3-callback-proxy"]["ports"][0]["host_ip"] == "127.0.0.1"
     assert services["af3-callback-proxy"]["ports"][0]["published"] == "18185"
+    assert services["af3-callback-proxy"]["user"] == "1006:1006"
     assert services["backend"]["environment"]["SUPABASE_URL"] == "http://10.9.8.1:18130"
     assert services["backend"]["environment"]["SUPABASE_PUBLIC_URL"] == (
         "https://agent.bioailab.net"

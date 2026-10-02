@@ -1,0 +1,18 @@
+# Run on Aliyun when ecs-user cannot modify host Nginx. The same restricted
+# server config is mounted into a host-network Nginx container instead.
+name: pskit-agent-supabase-relay
+
+services:
+  relay:
+    image: ${AGENT_WEB_IMAGE:?set AGENT_WEB_IMAGE to the deployed fixed tag}
+    user: "101:101"
+    network_mode: host
+    volumes:
+      - ./host-nginx-supabase-private.conf:/etc/nginx/conf.d/default.conf:ro
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:uid=101,gid=101
+      - /var/run:uid=101,gid=101
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped

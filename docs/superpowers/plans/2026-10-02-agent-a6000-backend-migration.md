@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-02-agent-a6000-backend-migration-design.md`
 
+**后续修订：** 用户决定前端由阿里云宿主机 Nginx 直接服务 `dist`，不保留常驻 Web 容器。Task 1 的独立静态 Web 成果只作为备用配置；Task 2 的公网配置改为静态 `root`、SPA `try_files` 和 OAuth 到本机 Envoy；Task 6 从当前固定版前端镜像提取 `dist`，root 安装到 `/var/www/agent.bioailab.net`，公网验收通过后停云端 Web 容器。具体命令和证据记录在 `deploy/agent/A6000_MIGRATION.md`。
+
 ## Global Constraints
 
 - 阿里云 WireGuard `10.9.8.1`，A6000 `10.9.8.2`；`agent.bioailab.net` 的 TLS 与 Supabase 留阿里云；旧 `pskit.bioailab.net` 及 `10.9.8.2:10716` 不修改。
