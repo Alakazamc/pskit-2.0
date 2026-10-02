@@ -60,6 +60,7 @@ def test_cloud_app_has_only_loopback_published_ports():
     assert config["name"] == "pskit-agent-cloud"
     assert all(ip == "127.0.0.1" for ip in published_host_ips(config))
     assert config["services"]["backend"]["environment"]["RESEARCH_AGENT_MEMBER_DAILY_GPU_MINUTES"] == "0"
+    assert config["services"]["backend"]["environment"]["RESEARCH_AGENT_AUTH_COOKIE_SECURE"] == "true"
     assert config["networks"]["supabase"]["name"] == "pskit-agent-supabase_default"
 
 
