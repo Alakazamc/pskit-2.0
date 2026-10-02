@@ -75,4 +75,6 @@ def test_host_nginx_install_requires_root_and_keeps_rollback_copy():
     assert "agent.bioailab.net.conf.pre-a6000" in content
     assert "frontend-dist" in content
     assert "10.9.8.2:18088" in content
+    assert "if ! curl --noproxy '*' --resolve agent.bioailab.net:443:127.0.0.1" in content
+    assert "HTTPS probe failed; original virtual host restored" in content
     subprocess.run(["bash", "-n", str(script)], check=True)

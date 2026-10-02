@@ -37,20 +37,27 @@ chmod -R a+rX "$web_root"
 cp -a "$target_conf" "$backup_conf"
 install -m 0644 "$source_conf" "$target_conf"
 
-if ! nginx -t; then
+restore_previous() {
     cp -a "$backup_conf" "$target_conf"
-    nginx -t
+    nginx -t && systemctl reload nginx
+}
+
+if ! nginx -t; then
+    restore_previous
     echo "Nginx syntax failed; original virtual host restored" >&2
     exit 1
 fi
 if ! systemctl reload nginx; then
-    cp -a "$backup_conf" "$target_conf"
-    nginx -t && systemctl reload nginx
+    restore_previous
     echo "Nginx reload failed; original virtual host restored" >&2
     exit 1
 fi
 
-curl --noproxy '*' --resolve agent.bioailab.net:443:127.0.0.1 \
+if ! curl --noproxy '*' --resolve agent.bioailab.net:443:127.0.0.1 \
     --connect-timeout 5 --max-time 10 -fsS -o /dev/null \
-    https://agent.bioailab.net/login
+    https://agent.bioailab.net/login; then
+    restore_previous
+    echo "HTTPS probe failed; original virtual host restored" >&2
+    exit 1
+fi
 echo "Host Nginx now serves React dist and routes /api/v1/ to A6000"
