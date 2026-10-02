@@ -55,3 +55,27 @@ def test_receiver_preserves_spool_and_is_not_started_by_default(tmp_path: Path):
         "/data/jhli/pskit-af3-receiver-test-20261002/af3_receiver.py"
     )
     assert "env_file:" in COMPOSE.read_text()
+
+
+def test_receiver_cloud_url_override_preserves_identity_and_spool(
+    tmp_path: Path, monkeypatch,
+):
+    receiver_env = tmp_path / "receiver.env"
+    receiver_env.write_text("RESEARCH_AGENT_COMPUTE_CALLBACK_KEY=test-only\n")
+    monkeypatch.setenv("AGENT_AF3_API_URL", "http://10.9.8.1:18184")
+    stack = json.loads(compose("--profile", "cutover", "config",
+                               "--no-env-resolution", "--format", "json",
+                               receiver_env=receiver_env))
+    receiver = stack["services"]["af3-receiver"]
+    assert receiver["command"][receiver["command"].index("--api-url") + 1] == (
+        "http://10.9.8.1:18184"
+    )
+    assert receiver["command"][receiver["command"].index("--worker-id") + 1] == (
+        "a6000-af3-cloud-1"
+    )
+    assert receiver["network_mode"] == "host"
+    assert receiver["image"] == "af3_mar5_jhli_2026_0923:v1"
+    mounts = {mount["target"]: mount["source"] for mount in receiver["volumes"]}
+    assert mounts["/var/lib/af3-receiver"] == (
+        "/data/jhli/pskit-af3-receiver-test-20261002/spool"
+    )
