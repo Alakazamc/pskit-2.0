@@ -48,5 +48,7 @@ sudo ufw allow in on wg0 from 10.9.8.2 to 10.9.8.1 port 18184 proto tcp
 - Agent 镜像传输包 SHA-256：`ed1a00a99f163f52305c62f74fce21e1308c696f6e5b36e83b9ff9d706c0d424`；12 个固定版 Supabase 镜像包 SHA-256：`6eee3f2eebf8ce8f4c1865a29536dd22541060a88261013de0231c2a97deeef2`。阿里云连接 Docker Hub 超时，所以镜像从本机离线传入；压缩包暂存云端部署目录，保留作同版本恢复材料。
 - Docker 数据卷：`pskit-agent-db-data`、`pskit-agent-storage`、`pskit-agent-supabase_db-config`、`pskit-agent-cloud_agent_data`。它们位于阿里云 Docker 数据根目录 `/data/docker`，不在旧 PSKit 数据路径下。
 - 私网检查已通过：全套容器健康；仅 `127.0.0.1:18130/18085/18088/18185` 发布；Python 登录、Secure/HttpOnly Cookie、GPU 默认额度 0、项目、Pi 回复、SSE、上传均通过。后端与代理重启后，账号、项目和上传文件仍在。AF3 代理无密钥返回 404，带新密钥的只读 owned-jobs 返回空列表。
-- 私网测试账号保存在云端权限 `0600` 的 `private-test-account.json`，聊天和仓库均没有保存密码。A6000 receiver journal 为 0；两个已生成 `outcome.json` 的旧 spool 目录保持原样。DNS 已指向阿里云，私网 AF3 Nginx 监听、公开 TLS 和真实 SMTP 尚待完成。
+- 私网测试账号保存在云端权限 `0600` 的 `private-test-account.json`，聊天和仓库均没有保存密码。DNS 已指向阿里云；公开 TLS 和真实 SMTP 尚待完成。
+- 阿里云私网 Nginx 已监听 `10.9.8.1:18184`，配置仅允许 `10.9.8.2`。阿里云本机访问返回 403；A6000 无密钥访问返回 404，带新密钥读取 `a6000-af3-cloud-1` 的 owned-jobs 返回空列表，证明 WireGuard、Nginx、回调代理与鉴权链路可达。
+- A6000 已停止旧 `pskit-af3-receiver-real-test-20261002`，启动 `pskit-af3-receiver-cloud-20261002` 连接 `http://10.9.8.1:18184`；`pskit-af3-compute-real-test-20261002` 持续运行，原 spool 未改动。旧配置和 journal 已分别备份为 `receiver.env.pre-cloud-20261002`、`spool/journal.pre-cloud-20261002.sqlite3`（均为 `0600`）；新密钥在 `receiver.cloud.env`（`0600`）。切换时旧 journal 与旧后端 owned-jobs 均为 0，新接收器运行后 journal 仍为 0；两个已有 outcome 的旧 spool 目录未删。云端测试账号的 GPU 每日额度仍为 0，真实 AF3 提交和 Pi 自动唤醒尚待验证。
 - 初始备份位于云端 `backups/private-20261002/`（目录 `0700`、文件 `0600`），包括 Postgres SQL、Agent SQLite、Pi 会话、Storage 卷和数据库加密配置卷；五份备份已通过读取、压缩格式及 SQLite 完整性检查。这是同机备份，正式开放前仍需异地备份策略。
