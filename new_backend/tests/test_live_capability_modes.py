@@ -24,6 +24,24 @@ def test_live_mode_rejects_invalid_supabase_base_url(url, tmp_path):
 
 
 @pytest.mark.parametrize("url", [
+    "not-a-url", "ftp://identity.example", "https://user:secret@identity.example",
+    "https://identity.example/auth?token=secret",
+])
+def test_invalid_supabase_public_url_rejected(url, tmp_path):
+    with pytest.raises(ValueError, match="SUPABASE_PUBLIC_URL"):
+        create_app(Settings(
+            mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
+            supabase_url="http://api-gw:8000", supabase_public_url=url,
+            supabase_publishable_key="publishable-test",
+        ))
+
+
+def test_supabase_public_url_reads_environment(monkeypatch):
+    monkeypatch.setenv("SUPABASE_PUBLIC_URL", "https://agent.bioailab.net")
+    assert Settings.from_env().supabase_public_url == "https://agent.bioailab.net"
+
+
+@pytest.mark.parametrize("url", [
     "not-a-url", "ftp://gateway.example/v1", "https://user:secret@gateway.example/v1",
     "https://gateway.example/v1?token=secret",
 ])

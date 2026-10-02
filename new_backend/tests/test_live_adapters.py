@@ -13,6 +13,42 @@ from app.main import create_app
 
 
 @pytest.mark.asyncio
+async def test_google_start_uses_public_supabase_url():
+    settings = Settings(
+        mode="live", supabase_url="http://api-gw:8000",
+        supabase_public_url="https://agent.bioailab.net",
+        supabase_publishable_key="publishable-test",
+        public_api_url="https://agent.bioailab.net",
+    )
+    app = create_app(settings)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                 base_url="http://test", follow_redirects=False) as client:
+        response = await client.get("/api/v1/auth/google/start")
+
+    redirect = urlparse(response.headers["location"])
+    assert redirect.scheme == "https"
+    assert redirect.netloc == "agent.bioailab.net"
+    assert redirect.path == "/auth/v1/authorize"
+    assert parse_qs(redirect.query)["redirect_to"][0].startswith(
+        "https://agent.bioailab.net/api/v1/auth/google/callback?"
+    )
+    assert app.state.settings.supabase_url == "http://api-gw:8000"
+
+
+@pytest.mark.asyncio
+async def test_google_start_falls_back_to_internal_url():
+    app = create_app(Settings(
+        mode="live", supabase_url="http://api-gw:8000",
+        supabase_publishable_key="publishable-test",
+    ))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                 base_url="http://test", follow_redirects=False) as client:
+        response = await client.get("/api/v1/auth/google/start")
+
+    assert urlparse(response.headers["location"]).netloc == "api-gw:8000"
+
+
+@pytest.mark.asyncio
 async def test_anonymous_signup_sends_supabase_captcha_without_email_or_password():
     def respond(request: httpx.Request) -> httpx.Response:
         assert request.method == "POST"

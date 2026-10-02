@@ -49,6 +49,7 @@ class Settings:
     pi_max_active_runs: int = 4
     pi_max_active_runs_per_user: int = 2
     supabase_url: str = ""
+    supabase_public_url: str = ""
     supabase_publishable_key: str = ""
     auth_cookie_secure: bool = False
     frontend_url: str = "http://localhost:5174"
@@ -120,6 +121,7 @@ class Settings:
                 os.getenv("RESEARCH_AGENT_PI_MAX_ACTIVE_RUNS_PER_USER", "2")
             ),
             supabase_url=os.getenv("SUPABASE_URL", ""),
+            supabase_public_url=os.getenv("SUPABASE_PUBLIC_URL", ""),
             supabase_publishable_key=os.getenv("SUPABASE_PUBLISHABLE_KEY", ""),
             auth_cookie_secure=os.getenv("RESEARCH_AGENT_AUTH_COOKIE_SECURE", "false").lower() == "true",
             frontend_url=os.getenv("RESEARCH_AGENT_FRONTEND_URL", "http://localhost:5174"),
@@ -172,6 +174,8 @@ class Settings:
             if not value:
                 raise ValueError(f"{name} is required in live mode")
         self._validate_http_base_url(self.supabase_url, "SUPABASE_URL")
+        if self.supabase_public_url:
+            self._validate_http_base_url(self.supabase_public_url, "SUPABASE_PUBLIC_URL")
         if self.agent_runtime == "pi":
             gateway_name = "MODEL_GATEWAY_BASE_URL" if self.model_gateway_base_url else "NEW_API_BASE_URL"
             self._validate_http_base_url(

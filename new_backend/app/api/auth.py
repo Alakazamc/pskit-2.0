@@ -307,7 +307,8 @@ async def google_start(request: Request) -> RedirectResponse:
     state, verifier = request.app.state.oauth_flows.create()
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
     callback = f"{settings.public_api_url.rstrip('/')}/api/v1/auth/google/callback?{urlencode({'state': state})}"
-    authorize = f"{settings.supabase_url.rstrip('/')}/auth/v1/authorize?{urlencode({'provider': 'google', 'redirect_to': callback, 'code_challenge': challenge, 'code_challenge_method': 's256'})}"
+    supabase_browser_url = settings.supabase_public_url or settings.supabase_url
+    authorize = f"{supabase_browser_url.rstrip('/')}/auth/v1/authorize?{urlencode({'provider': 'google', 'redirect_to': callback, 'code_challenge': challenge, 'code_challenge_method': 's256'})}"
     response = RedirectResponse(authorize, status_code=302, headers={"Referrer-Policy": "no-referrer"})
     response.set_cookie(
         "research_oauth_state", state, httponly=True, max_age=300,
