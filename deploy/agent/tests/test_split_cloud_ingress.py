@@ -78,3 +78,17 @@ def test_host_nginx_install_requires_root_and_keeps_rollback_copy():
     assert "if ! curl --noproxy '*' --resolve agent.bioailab.net:443:127.0.0.1" in content
     assert "HTTPS probe failed; original virtual host restored" in content
     subprocess.run(["bash", "-n", str(script)], check=True)
+
+
+def test_old_af3_ingress_disable_is_exact_and_reversible():
+    script = ROOT / "deploy/agent/scripts/disable_old_af3_ingress.sh"
+    assert script.exists()
+    content = script.read_text()
+    assert "$(id -u)" in content
+    assert "agent-af3-private.conf.disabled-20261002" in content
+    assert "mv -- \"$source_conf\" \"$disabled_conf\"" in content
+    assert "restore_previous" in content
+    assert "nginx -t" in content
+    assert "systemctl reload nginx" in content
+    assert "https://agent.bioailab.net/login" in content
+    subprocess.run(["bash", "-n", str(script)], check=True)

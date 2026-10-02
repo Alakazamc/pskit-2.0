@@ -56,4 +56,9 @@ python3 deploy/agent/tests/smoke_split.py \
 
 ## 实际切换结果
 
-待执行后填写：数据快照 SHA-256、镜像 ID、部署时间、数据库/会话计数、私网和公网探针结果、旧站状态、真 AF3 结果及任何回退动作。
+- 2026-10-02 约 22:30（阿里云时间）完成切换。旧云端新版后端、Web、AF3 回调代理与模型替身均已停止；Supabase、私网 Supabase relay 和旧 `pskit.bioailab.net` 保持运行。阿里云宿主机 Nginx 直接读取 `/var/www/agent.bioailab.net`，不再运行新版前端容器。
+- 切换前云端 Agent 数据库有 1 个 `completed` Run、0 个 job、2 条消息、1 个 Pi 会话。停止旧后端后制作的归档 `agent-snapshot.tar.gz` SHA-256 为 `55da1379f6c49ef0eccdedc9503fbefabacf914516b600eb2a252e09b122f124`，含 6 个受 manifest 校验的文件；A6000 校验 SHA-256 与 manifest 后恢复到空卷，旧云端数据卷和归档仍保留。A6000 后端镜像 ID 与云端原镜像同为 `sha256:0ac7743c3c36277ea8e6dd944bd637c4e7612d66d3d08f2a6db088bb595000a6`。
+- 阿里云经 WireGuard 的私网 smoke 通过：测试账号登录、迁移项目和会话、Token/GPU 额度、文件上传、Pi 回复和 SSE 完成事件均正常。公网切换并停掉云端 Web 后，完整公网 smoke 又通过两次；最后一次含 4 个 SSE 事件，`/internal/` 与 Supabase admin 路径均为 404，旧站返回 200。从独立客户端访问 `https://agent.bioailab.net/login` 为 200、TLS 验证结果为 0；未登录 `/api/v1/usage` 为 401。最后核对 A6000 数据库为 4 个 `completed` Run、0 个 job、8 条消息、4 个 Pi 会话。
+- 旧 A6000 AF3 接收器已停止，本机接收器 `pskit-af3-receiver-local-20261002` 是唯一运行中的接收器，`RestartCount=0`；原计算容器持续运行，journal 与后端 owned-jobs 均为空。接收器首次启动时发现旧容器使用 `python3` entrypoint，而新 Compose 直接执行无可执行位的脚本；补齐同样的 entrypoint 并通过回归测试后启动。A6000 本机回调无密钥返回 404。阿里云旧回调 Nginx 配置备份为 `.disabled-20261002`，`10.9.8.1:18184` 已停止监听；公网网站和 API 在停用后再次通过 smoke。未执行数据回退。
+- A6000 上 `timedatectl status` 报告时钟未同步；两机读取 UTC 时间相差约 47 秒。当前登录与 Pi smoke 通过，但应单独处理 NTP 后再依赖跨主机时间进行租约或审计。
+- 仍使用模型网关替身；SMTP 未配置、自助邮箱注册关闭，Google OAuth 未验收；GPU 默认每日 0 分钟，未提交真实 AF3 任务，故不能声称真实 AF3 计算、GPU 结算或 Pi 自动唤醒已验收。

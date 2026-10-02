@@ -4,9 +4,9 @@
 
 **Goal:** 保留阿里云前端、Supabase 与 HTTPS，让新版 Python/Pi 后端和 AF3 在 A6000 运行，并保留现有账号与 Agent 会话。
 
-**Architecture:** 阿里云 Nginx 将 `/api/v1/` 经 WireGuard 转给 A6000 的私网 API 代理，静态页面及限定的 OAuth 路径仍由阿里云 Web 提供。A6000 后端经阿里云私网代理访问原 Supabase，现有 host 网络 AF3 接收器改用本机回环回调代理；停止云端后端并迁移其 SQLite/Pi 数据后才切流量。
+**Architecture:** 阿里云宿主机 Nginx 直接提供 React `dist`，将 `/api/v1/` 经 WireGuard 转给 A6000 私网 API 代理，并将限定的 OAuth 路径交给本机 Supabase。A6000 后端经阿里云私网代理访问原 Supabase，现有 host 网络 AF3 接收器改用本机回环回调代理；停止云端后端并迁移其 SQLite/Pi 数据后才切流量。
 
-**Tech Stack:** React 静态镜像、FastAPI/Pi、Docker Compose、Nginx、WireGuard、Supabase、SQLite、Python pytest。
+**Tech Stack:** React `dist`、FastAPI/Pi、Docker Compose、Nginx、WireGuard、Supabase、SQLite、Python pytest。
 
 **Spec:** `docs/superpowers/specs/2026-10-02-agent-a6000-backend-migration-design.md`
 
@@ -15,7 +15,7 @@
 ## Global Constraints
 
 - 阿里云 WireGuard `10.9.8.1`，A6000 `10.9.8.2`；`agent.bioailab.net` 的 TLS 与 Supabase 留阿里云；旧 `pskit.bioailab.net` 及 `10.9.8.2:10716` 不修改。
-- 云端 Web 只绑定 `127.0.0.1:18085`；Supabase 仍绑定 `127.0.0.1:18130`，由源地址仅允许 `10.9.8.2` 的 Nginx 代理另听 `10.9.8.1:18130`。
+- 阿里云宿主机 Nginx 从 `/var/www/agent.bioailab.net` 提供静态前端；旧 Web 容器切换验收后停止。Supabase 仍绑定 `127.0.0.1:18130`，由源地址仅允许 `10.9.8.2` 的私网代理另听 `10.9.8.1:18130`。
 - A6000 后端只发布 `127.0.0.1:18089`；host 网络 API 代理只听 `10.9.8.2:18088` 且只允许 `10.9.8.1`；AF3 回调代理只发布 `127.0.0.1:18185`。
 - 仅一个新版生产后端/AF3 接收器可处理真实数据。先冻结写入、确认无未完成 AF3 claim、备份并迁移 SQLite/WAL/Pi 会话，再接管；不使用 `docker compose down -v`。
 - 所有凭据只存权限 `0600` 的部署文件，不写入镜像、仓库、前端或日志。保留现有 GPU 默认每日 0 分钟；真实 AF3 验证只能给指定测试账号授予临时额度，未经授权不得改为全员额度。
@@ -88,10 +88,10 @@
 
 **Interfaces:** `smoke_split.py --base-url https://agent.bioailab.net` 从受限凭据文件读取测试账号，不打印凭据；检查登录、原项目/会话、`/api/v1/` 流式事件、上传、额度、`/internal/` 404，另用只读请求检查旧站 200。真实 AF3 单任务单独验证 claim、进度、`simulation=false`、产物、GPU 结算、ACK、spool/journal 清理和 Pi 自动唤醒。
 
-- [ ] **Red/Green:** 用 HTTP 替身给 `smoke_split.py` 写测试，断言上述请求路径、SSE 逐段到达、任何日志无密码/令牌；先确认缺脚本失败，再实现并运行对应测试通过。
-- [ ] **预检:** 在两机核对旧站健康、镜像 digest、私网 ACL 与宿主机防火墙、Supabase 连通性、Agent 卷备份、无运行中 Agent/AF3 claim、接收器 journal 空闲；未授权测试账号 GPU 额度时，记录真实 AF3 未验证，不改全员额度。
-- [ ] **切换:** 停阿里云新版后端及回调代理，做 Task 4 一致性迁移，在 A6000 启动唯一生产后端；确认私网登录、历史会话、Pi 与 AF3 回调后，通过阿里云云助手 root 执行 `nginx -t`、安装并 reload 公网 `/api/v1/` 路由，再换独立静态 Web 镜像；成功后停用阿里云旧 `10.9.8.1:18184` 回调入口。不停止旧 `pskit`。
-- [ ] **验收/回退:** 运行公网 smoke、拒绝路径、非许可源地址和旧站检查；仅有授权的指定测试账号才运行真实 AF3。失败时冻结 A6000 写入、保留 journal/卷，按迁移后的最新数据反向恢复后才重启云端后端；记录实际结果与未验证项到 `A6000_MIGRATION.md`，只提交文档及本任务脚本。
+- [x] **Red/Green:** 用 HTTP 替身给 `smoke_split.py` 写测试，断言上述请求路径、SSE 逐段到达、任何日志无密码/令牌；先确认缺脚本失败，再实现并运行对应测试通过。
+- [x] **预检:** 在两机核对旧站健康、镜像 digest、私网 ACL 与宿主机防火墙、Supabase 连通性、Agent 卷备份、无运行中 Agent/AF3 claim、接收器 journal 空闲；未授权测试账号 GPU 额度时，记录真实 AF3 未验证，不改全员额度。
+- [x] **切换:** 停阿里云新版后端及回调代理，做 Task 4 一致性迁移，在 A6000 启动唯一新版后端；确认私网登录、历史会话、Pi 与 AF3 回调后，由阿里云云助手 root 安装并 reload 公网 Nginx 配置，直接服务 `dist`，验收后停原 Web 容器与云端旧 `10.9.8.1:18184` 回调入口。旧 `pskit` 保持运行。
+- [x] **验收/回退:** 运行公网 smoke、拒绝路径、非许可源地址和旧站检查；仅有授权的指定测试账号才运行真实 AF3。失败时冻结 A6000 写入、保留 journal/卷，按迁移后的最新数据反向恢复后才重启云端后端；记录实际结果与未验证项到 `A6000_MIGRATION.md`，只提交文档及本任务脚本。测试账号 GPU 额度为 0，真实 AF3 未验证。
 
 ## Execution Handoff
 
