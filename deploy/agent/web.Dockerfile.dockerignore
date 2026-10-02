@@ -1,0 +1,12 @@
+**
+!new_frontend/
+!new_frontend/**
+!deploy/
+!deploy/agent/
+!deploy/agent/web.conf
+new_frontend/.env*
+new_frontend/**/.env*
+new_frontend/node_modules/
+new_frontend/dist/
+new_frontend/coverage/
+new_frontend/**/.vite/
