@@ -59,7 +59,7 @@
 **Interfaces:** 独立项目 `pskit-agent-a6000` 提供 `backend`、`api-proxy`、`af3-callback-proxy` 和只在 `private-test` profile 启用的模型替身。`a6000.env.example` 定义固定镜像标签、worker ID 与受限环境文件路径；`a6000.backend.env.example` 定义服务端变量。后端环境 `SUPABASE_URL=http://10.9.8.1:18130`、`SUPABASE_PUBLIC_URL=https://agent.bioailab.net`、公开前端/API URL 均为同一 HTTPS 域名；`api-proxy` 使用 host 网络和 `nginx:1.28.0-alpine@sha256:30f1c0d78e0ad60901648be663a710bdadf19e4c10ac6782c235200619158284`，只听 `10.9.8.2:18088`，代理到 `127.0.0.1:18089`，拒绝 `/internal/`。现有 `new_backend/scripts/af3_callback_proxy.py` 继续校验回调密钥和 worker ID；A6000 后端使用与现有 `receiver.cloud.env` 一致的回调密钥，不在日志中输出。
 
 - [ ] **Red:** 加 `test_a6000_stack_has_one_loopback_backend_and_no_web` 和 `test_api_proxy_allows_only_cloud_and_public_api`：渲染 Compose 断言无 Supabase 本地容器、无公网 Docker 端口，配置断言 `.1` allow/其他 deny、`/internal/` 404。运行 `pytest deploy/agent/tests/test_a6000_compose.py -q`，确认失败。
-- [ ] **Green:** 写 Compose、环境示例和代理配置；运行同一测试与 `docker compose --env-file deploy/agent/a6000.env.example -f deploy/agent/compose.a6000.yaml --profile private-test config --quiet`，预期通过。此任务只准备文件，不在 A6000 启动第二个生产后端。
+- [ ] **Green:** 写 Compose、环境示例和代理配置；测试渲染时显式将 `AGENT_BACKEND_ENV_FILE` 与 `AGENT_AF3_PROXY_KEY_FILE` 指向 `a6000.backend.env.example`，实际部署的 `.env` 必须指向单独的权限 `0600` 私密文件 `a6000.backend.env`。运行同一测试与 Compose config，预期通过。此任务只准备文件，不在 A6000 启动第二个生产后端。
 - [ ] **Review/commit:** 核对 `backend` 有可出站访问云端 Supabase 的网络且镜像标签不为 `latest`；只提交本任务文件，提交信息 `feat(deploy): define A6000 backend stack`。
 
 ### Task 4: Agent SQLite 与 Pi 会话的一致性迁移

@@ -19,6 +19,8 @@ def response_kind(payload: dict) -> str:
         message for message in payload.get("messages", [])
         if isinstance(message, dict) and message.get("role") != "system"
     ], ensure_ascii=False).lower()
+    if "sse_delay_probe" in conversation:
+        return "delayed"
     if "background task result" in conversation or "pskit.task_completed" in conversation:
         return "resumed"
     if "af3" in conversation or "alphafold" in conversation:
@@ -57,6 +59,9 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.flush()
 
         event({"role": "assistant"})
+        if kind == "delayed":
+            # A known delay lets the end-to-end smoke detect proxy buffering.
+            time.sleep(0.8)
         if kind == "af3":
             event({"tool_calls": [{"index": 0, "id": "call_local_af3", "type": "function",
                                    "function": {"name": "submit_af3",

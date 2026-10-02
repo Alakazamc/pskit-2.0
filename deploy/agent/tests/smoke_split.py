@@ -41,10 +41,12 @@ def project_key(project_id: str) -> str:
     return "g-p-" + project_id.removeprefix("project-")
 
 
-def stream_run(app: httpx.Client, run_id: str, headers: dict[str, str]) -> dict:
+def stream_run(app: httpx.Client, run_id: str, headers: dict[str, str],
+               *, min_delivery_gap_seconds: float = 0) -> dict:
     """Read actual SSE chunks until the run finishes; keep no event content."""
     started = time.monotonic()
     first: float | None = None
+    finished: float | None = None
     count = 0
     completed = False
     with app.stream("GET", f"/api/v1/runs/{run_id}/events",
@@ -64,11 +66,16 @@ def stream_run(app: httpx.Client, run_id: str, headers: dict[str, str]) -> dict:
                 raise SmokeFailure("Agent run failed")
             if event.get("type") == "run.completed":
                 completed = True
+                finished = time.monotonic() - started
                 break
-    if not completed or first is None:
+    if not completed or first is None or finished is None:
         raise SmokeFailure("Agent run did not complete in SSE stream")
+    gap = finished - first
+    if gap < min_delivery_gap_seconds:
+        raise SmokeFailure("SSE events were not delivered incrementally")
     return {"events": count, "first_event_seconds": first,
-            "stream_seconds": time.monotonic() - started}
+            "stream_seconds": time.monotonic() - started,
+            "delivery_gap_seconds": gap}
 
 
 def run_smoke(
@@ -80,6 +87,7 @@ def run_smoke(
     expected_session_id: str | None = None,
     *,
     verify_public: bool = True,
+    require_incremental_sse: bool = False,
 ) -> dict:
     """Check migrated identity/data and a fresh Pi run through the public route."""
     if verify_public:
@@ -143,12 +151,15 @@ def run_smoke(
     session = checked(app.post(f"/api/v1/g/{key}/c", headers=headers,
                                json={"title": "A6000 migration smoke"}),
                       "Create smoke session", status=201)
+    prompt = ("SSE_DELAY_PROBE: Say hello briefly." if require_incremental_sse
+              else "Say hello briefly.")
     run = checked(app.post(f"/api/v1/g/{key}/c/{session['id']}/messages",
-                           headers=headers, json={"content": "Say hello briefly."}),
+                           headers=headers, json={"content": prompt}),
                   "Start Pi run")
     if not run.get("run_id"):
         raise SmokeFailure("Message returned no run ID")
-    result = stream_run(app, run["run_id"], headers)
+    result = stream_run(app, run["run_id"], headers,
+                        min_delivery_gap_seconds=0.4 if require_incremental_sse else 0)
     state = checked(app.get(f"/api/v1/runs/{run['run_id']}", headers=headers),
                     "Completed Pi run")
     if state.get("status") != "completed":
@@ -169,6 +180,8 @@ def main() -> None:
     parser.add_argument("--expected-session-id")
     parser.add_argument("--private", action="store_true",
                         help="Check private A6000 API before host Nginx cutover")
+    parser.add_argument("--require-incremental-sse", action="store_true",
+                        help="Use the delayed model stub to detect buffered Agent SSE")
     args = parser.parse_args()
     try:
         email, password = load_credentials(args.credentials_file)
@@ -179,7 +192,8 @@ def main() -> None:
                              follow_redirects=True, trust_env=False) as old:
             result = run_smoke(app, old, email, password,
                                args.expected_project_id, args.expected_session_id,
-                               verify_public=not args.private)
+                               verify_public=not args.private,
+                               require_incremental_sse=args.require_incremental_sse)
     except SmokeFailure as exc:
         raise SystemExit(f"Split smoke failed: {exc}") from None
     except (httpx.HTTPError, OSError, ValueError):
@@ -187,7 +201,8 @@ def main() -> None:
     label = "Private" if args.private else "Split"
     public_checks = ", React page, legacy site" if not args.private else ""
     print(f"{label} smoke passed: login, history, quota, upload, Pi/SSE, private paths"
-          f"{public_checks}; events={result['events']}")
+          f"{public_checks}; events={result['events']}, "
+          f"delivery_gap_seconds={result['delivery_gap_seconds']:.3f}")
 
 
 if __name__ == "__main__":

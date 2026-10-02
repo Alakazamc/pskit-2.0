@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import json
+import os
 import subprocess
 
 
@@ -10,19 +11,26 @@ DEPLOY = ROOT / "deploy/agent"
 
 
 def rendered_stack() -> dict:
+    environment = os.environ.copy()
+    example_backend = str(DEPLOY / "a6000.backend.env.example")
+    environment["AGENT_BACKEND_ENV_FILE"] = example_backend
+    environment["AGENT_AF3_PROXY_KEY_FILE"] = example_backend
     result = subprocess.run(
         [
             "docker", "compose", "--env-file", str(DEPLOY / "a6000.env.example"),
             "-f", str(DEPLOY / "compose.a6000.yaml"), "--profile", "private-test",
             "config", "--format", "json",
         ],
-        cwd=ROOT, text=True, capture_output=True, check=True,
+        cwd=ROOT, env=environment, text=True, capture_output=True, check=True,
     )
     return json.loads(result.stdout)
 
 
 def test_a6000_stack_has_one_loopback_backend_and_no_web():
     assert (DEPLOY / "compose.a6000.yaml").exists()
+    env_example = (DEPLOY / "a6000.env.example").read_text()
+    assert "AGENT_BACKEND_ENV_FILE=./a6000.backend.env\n" in env_example
+    assert "AGENT_AF3_PROXY_KEY_FILE=./a6000.backend.env\n" in env_example
     assert "${AGENT_API_PROXY_IMAGE:-nginx:1.28.0-alpine@sha256:" in (
         DEPLOY / "compose.a6000.yaml"
     ).read_text()

@@ -92,3 +92,12 @@ def test_old_af3_ingress_disable_is_exact_and_reversible():
     assert "systemctl reload nginx" in content
     assert "https://agent.bioailab.net/login" in content
     subprocess.run(["bash", "-n", str(script)], check=True)
+
+
+def test_migration_rollback_uses_data_writer_as_boundary():
+    guide = (ROOT / "deploy/agent/A6000_MIGRATION.md").read_text()
+    rollback = guide.split("## 回退与未完成项", 1)[1].split("## 实际切换结果", 1)[0]
+    assert "A6000 尚未写入" in rollback
+    assert "A6000 已开始写入" in rollback
+    assert "先停止 A6000 接收器和后端" in rollback
+    assert "最新" in rollback

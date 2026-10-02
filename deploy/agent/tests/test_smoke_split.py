@@ -16,17 +16,27 @@ spec.loader.exec_module(module)
 SmokeFailure = module.SmokeFailure
 load_credentials = module.load_credentials
 run_smoke = module.run_smoke
+stream_run = module.stream_run
 
 
 class DelayedEvents(httpx.SyncByteStream):
     def __iter__(self):
         yield b'id: 1\nevent: run.started\ndata: {"type":"run.started"}\n\n'
-        time.sleep(0.2)
+        time.sleep(0.5)
         yield b'id: 2\nevent: run.completed\ndata: {"type":"run.completed"}\n\n'
 
 
-@pytest.mark.parametrize("verify_public", [True, False])
-def test_smoke_checks_migrated_data_upload_quota_and_stream(tmp_path, capsys, verify_public):
+class BufferedEvents(httpx.SyncByteStream):
+    def __iter__(self):
+        time.sleep(0.5)
+        yield (b'data: {"type":"run.started"}\n\n'
+               b'data: {"type":"run.completed"}\n\n')
+
+
+@pytest.mark.parametrize("verify_public, require_incremental_sse", [(True, False), (False, True)])
+def test_smoke_checks_migrated_data_upload_quota_and_stream(
+    tmp_path, capsys, verify_public, require_incremental_sse,
+):
     credentials = tmp_path / "test-account.json"
     credentials.write_text(json.dumps({"email": "test@example.test", "password": "secret-password"}))
     credentials.chmod(0o600)
@@ -64,6 +74,8 @@ def test_smoke_checks_migrated_data_upload_quota_and_stream(tmp_path, capsys, ve
         if path == "/api/v1/g/g-p-abc/c" and request.method == "POST":
             return httpx.Response(201, json={"id": "session-smoke"})
         if path == "/api/v1/g/g-p-abc/c/session-smoke/messages" and request.method == "POST":
+            if require_incremental_sse:
+                assert b"SSE_DELAY_PROBE" in request.content
             return httpx.Response(200, json={"run_id": "run-smoke"})
         if path == "/api/v1/runs/run-smoke/events":
             return httpx.Response(200, stream=DelayedEvents(),
@@ -78,14 +90,28 @@ def test_smoke_checks_migrated_data_upload_quota_and_stream(tmp_path, capsys, ve
     with httpx.Client(base_url="https://agent.example.test", transport=transport) as app, \
             httpx.Client(base_url="https://old.example.test", transport=transport) as old:
         result = run_smoke(app, old, email, password, "project-abc", "session-old",
-                           verify_public=verify_public)
+                           verify_public=verify_public,
+                           require_incremental_sse=require_incremental_sse)
 
     assert result["events"] == 2
     assert result["stream_seconds"] - result["first_event_seconds"] >= 0.15
+    if require_incremental_sse:
+        assert result["delivery_gap_seconds"] >= 0.4
     assert ("PUT", "/api/v1/files/content") in seen
     assert ("GET", "/api/v1/g/g-p-abc/c/session-old/messages") in seen
     assert (("GET", "/login") in seen) is verify_public
     assert "secret-password" not in capsys.readouterr().out
+
+
+def test_delayed_sse_probe_rejects_proxy_buffering():
+    def respond(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=BufferedEvents(),
+                              headers={"content-type": "text/event-stream"})
+
+    with httpx.Client(base_url="https://agent.example.test",
+                      transport=httpx.MockTransport(respond)) as app:
+        with pytest.raises(SmokeFailure, match="incrementally"):
+            stream_run(app, "run-smoke", {}, min_delivery_gap_seconds=0.4)
 
 
 def test_smoke_refuses_world_readable_credentials(tmp_path):
