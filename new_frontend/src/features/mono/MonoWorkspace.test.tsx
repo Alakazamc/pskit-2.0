@@ -205,6 +205,8 @@ it("shows server Token and daily GPU limits with pending GPU reconciliation in s
   render(<App />);
 
   const usage = await screen.findByRole("region", { name: "用量与配额" });
+  expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("设置");
+  expect(within(screen.getByRole("main")).getAllByRole("heading", { level: 1 })).toHaveLength(1);
   expect(await within(usage).findByText("Token 月额度")).toBeInTheDocument();
   expect(within(usage).getByText("875")).toBeInTheDocument();
   expect(within(usage).getAllByText("GPU 每日额度").length).toBeGreaterThan(0);
@@ -225,8 +227,10 @@ it("localizes the active Skill navigation and page title", async () => {
     return json({ detail: "Not found" }, 404);
   }));
   render(<App />);
-  expect(await screen.findByRole("heading", { name: "智能体技能", level: 1 })).toBeInTheDocument();
-  expect(within(screen.getByRole("navigation", { name: "主导航" })).getByRole("link", { name: "智能体技能" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "技能", level: 1 })).toBeInTheDocument();
+  expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("技能");
+  expect(within(screen.getByRole("main")).getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  expect(within(screen.getByRole("navigation", { name: "主导航" })).getByRole("link", { name: "技能" })).toBeInTheDocument();
 });
 
 it("labels the same quota and pending usage in English", async () => {
@@ -380,6 +384,23 @@ it("creates a project directly from the sidebar in mock mode", async () => {
   expect(window.location.pathname).toBe("/p/project-new");
   await waitFor(() => expect(screen.getByRole("link", { name: "蛋白设计" })).toHaveAttribute("aria-current", "page"));
   expect(screen.getByRole("link", { name: "蛋白设计" }).querySelector('[data-project-icon="dna"]')).toBeInTheDocument();
+});
+
+it("uses the project header as the only page title and opens creation there", async () => {
+  loggedIn("/g");
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
+    if (path.endsWith("/g")) return json([{ id: "project-alice", name: "个人", description: "" }]);
+    if (path.endsWith("/c") || path.endsWith("/skills") || path.endsWith("/resources")) return json([]);
+    return json({ detail: "Not found" }, 404);
+  }));
+  render(<App />);
+  const title = await screen.findByRole("heading", { name: "项目", level: 1 });
+  expect(title.closest(".mono-topbar-left")).not.toBeNull();
+  expect(within(screen.getByRole("main")).getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  await userEvent.setup().click(screen.getByRole("button", { name: "新建项目" }));
+  expect(screen.getByRole("dialog", { name: "新建项目" })).toBeInTheDocument();
 });
 
 it("changes a project icon from its detail page and updates the sidebar", async () => {
@@ -577,6 +598,8 @@ it("shows the artifacts route in English when that language is selected", async 
   }));
   render(<App />);
   expect(await screen.findByRole("heading", { name: "Artifacts", level: 1 })).toBeInTheDocument();
+  expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("Artifacts");
+  expect(within(screen.getByRole("main")).getAllByRole("heading", { level: 1 })).toHaveLength(1);
   expect(await screen.findByRole("button", { name: "Download demo.cif" })).toBeDisabled();
 }, 10_000);
 
@@ -640,10 +663,14 @@ it("translates the PDB search workspace and tool run history", async () => {
   }));
   render(<App />);
   expect(await screen.findByRole("heading", { name: "PDB structure search", level: 1 })).toBeInTheDocument();
+  expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("PDB structure search");
+  expect(within(screen.getByRole("main")).getAllByRole("heading", { level: 1 })).toHaveLength(1);
   expect(screen.getByRole("textbox", { name: "Protein name, UniProt or PDB ID" })).toBeInTheDocument();
   await actor.click(within(screen.getByRole("navigation", { name: "Main navigation" })).getByRole("link", { name: "Tools" }));
   await actor.click(await screen.findByRole("link", { name: "My runs" }));
   expect(await screen.findByRole("heading", { name: "My runs", level: 1 })).toBeInTheDocument();
+  expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("My runs");
+  expect(within(screen.getByRole("main")).getAllByRole("heading", { level: 1 })).toHaveLength(1);
 }, 10_000);
 
 it("builds the tool directory from the MCP catalog instead of fixed prediction cards", async () => {
@@ -664,6 +691,8 @@ it("builds the tool directory from the MCP catalog instead of fixed prediction c
   expect(await screen.findByRole("link", { name: /fetch_uniprot/ })).toHaveAttribute(
     "href", "/tools/run/fetch_uniprot",
   );
+  expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("工具集");
+  expect(within(screen.getByRole("main")).getAllByRole("heading", { level: 1 })).toHaveLength(1);
   expect(screen.queryByRole("link", { name: /INABe/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: /AlphaFold 3/ })).not.toBeInTheDocument();
 }, 10_000);
@@ -690,6 +719,8 @@ it("uses a published MCP tool schema to invoke a newly listed tool", async () =>
   }));
   render(<App />);
   await actor.type(await screen.findByRole("textbox", { name: "accession" }), "P12345");
+  expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("fetch_uniprot");
+  expect(within(screen.getByRole("main")).getAllByRole("heading", { level: 1 })).toHaveLength(1);
   await actor.click(screen.getByRole("button", { name: "运行工具" }));
   expect(await screen.findByText(/"accession": "P12345"/)).toBeInTheDocument();
   expect(invoked).toEqual([{ accession: "P12345" }]);

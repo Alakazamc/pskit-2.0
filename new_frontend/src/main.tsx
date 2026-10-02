@@ -1,6 +1,8 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
+import "streamdown/styles.css";
+import "katex/dist/katex.min.css";
 import "./styles/base.css";
 import "./styles/login.css";
 import "./styles/layout.css";
@@ -13,6 +15,7 @@ import "./styles/pages.css";
 import "./styles/responsive.css";
 import "./styles/mobile.css";
 import "./styles/monochrome.css";
+import "./styles/markdown.css";
 import "./styles/mono-pages.css";
 import "./styles/scrollbars.css";
 

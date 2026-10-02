@@ -45,7 +45,6 @@ export function ArtifactsPage({ api, userId }: { api: ResearchApi; userId: strin
   };
 
   return <div className="mono-page-scroll"><div className="mono-page-content">
-    <div className="mono-page-heading"><h1>{t("artifact.title")}</h1></div>
     {artifacts.isError && <p className="mono-form-error" role="alert">{t("artifact.loadFailed")}</p>}
     {error && <p className="mono-form-error" role="alert">{error}</p>}
     <div className="mono-card-grid">{(artifacts.data ?? []).map((artifact) => <div className="mono-card" key={artifact.id}>

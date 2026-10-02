@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { emptyRun, projectEvents } from "./events";
 import { Conversation } from "./Conversation";
@@ -92,4 +92,68 @@ it("shows a specific quota failure instead of a generic Pi error", () => {
   }]);
   render(<LanguageProvider><Conversation messages={[]} run={run} /></LanguageProvider>);
   expect(screen.getByText("模型网关额度已耗尽。")).toBeInTheDocument();
+});
+
+it("renders saved assistant Markdown as headings, tables, code, and math", async () => {
+  const message: Message = {
+    id: "assistant-1", session_id: "session-1", role: "assistant", created_at: "2026-10-01T00:00:00Z",
+    parts: [{ type: "text", text: "## 结果\n\n**蛋白质**\n\n| 位点 | 分数 |\n| --- | --- |\n| A1 | 0.9 |\n\n```python\nprint('ok')\n```\n\n$$E=mc^2$$" }],
+  };
+  render(<LanguageProvider><Conversation messages={[message]} run={emptyRun} /></LanguageProvider>);
+  expect(await screen.findByRole("heading", { name: "结果" })).toBeInTheDocument();
+  expect(screen.getByText("蛋白质").closest("strong")).toBeInTheDocument();
+  expect(screen.getByRole("table")).toHaveTextContent("A1");
+  expect(screen.getByText("print('ok')")).toBeInTheDocument();
+  await waitFor(() => expect(document.querySelector(".katex")).toBeInTheDocument());
+});
+
+it("copies a Markdown table and opens its focused preview", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  const message: Message = {
+    id: "assistant-table", session_id: "session-1", role: "assistant", created_at: "2026-10-01T00:00:00Z",
+    parts: [{ type: "text", text: "| 位点 | 分数 |\n| --- | --- |\n| A1 | 0.9 |" }],
+  };
+  render(<LanguageProvider><Conversation messages={[message]} run={emptyRun} /></LanguageProvider>);
+  expect(await screen.findByRole("table")).toHaveTextContent("A1");
+  expect(screen.queryByRole("button", { name: "下载表格" })).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "复制表格" }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining("| A1 | 0.9 |")));
+
+  fireEvent.click(screen.getByRole("button", { name: "展开表格" }));
+  const dialog = await screen.findByRole("dialog", { name: "表格预览" });
+  expect(within(dialog).getByRole("table")).toHaveTextContent("A1");
+  fireEvent.click(within(dialog).getByRole("button", { name: "关闭表格" }));
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "表格预览" })).not.toBeInTheDocument());
+});
+
+it("renders incomplete streamed Markdown and shows a spinner without a progress bar", async () => {
+  const first = projectEvents(emptyRun, [
+    { id: "delta-1", run_id: "run-stream", type: "message.delta", data: { delta: "**部分" } },
+  ]);
+  const { rerender } = render(<LanguageProvider><Conversation messages={[]} run={first} /></LanguageProvider>);
+  expect((await screen.findByText("部分")).closest("strong")).toBeInTheDocument();
+  expect(screen.getByRole("status", { name: "正在生成回复" })).toBeInTheDocument();
+  expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+
+  const second = projectEvents(first, [
+    { id: "delta-2", run_id: "run-stream", type: "message.delta", data: { delta: "内容**" } },
+  ]);
+  rerender(<LanguageProvider><Conversation messages={[]} run={second} /></LanguageProvider>);
+  expect((await screen.findByText("部分内容")).closest("strong")).toBeInTheDocument();
+});
+
+it("copies the raw text of each assistant reply from its lower-left action", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  const message: Message = {
+    id: "assistant-copy", session_id: "session-1", role: "assistant", created_at: "2026-10-01T00:00:00Z",
+    parts: [{ type: "text", text: "**复制这段**" }],
+  };
+  render(<LanguageProvider><Conversation messages={[message]} run={emptyRun} /></LanguageProvider>);
+  fireEvent.click(screen.getByRole("button", { name: "复制回复" }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith("**复制这段**"));
+  expect(screen.getByRole("button", { name: "已复制" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "已复制" }).closest(".message-actions")).toBeInTheDocument();
 });

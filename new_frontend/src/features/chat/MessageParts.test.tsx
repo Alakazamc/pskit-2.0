@@ -14,3 +14,9 @@ it("renders persisted file, citation, tool result, and error parts", () => {
   expect(screen.getByText(/search_pdb/)).toBeInTheDocument();
   expect(screen.getByText("Search failed")).toBeInTheDocument();
 });
+
+it("shows progress parts as a spinning status instead of a bar", () => {
+  render(<MessageParts parts={[{ type: "progress", label: "正在计算", value: 42 }]} />);
+  expect(screen.getByRole("status", { name: "正在计算" })).toBeInTheDocument();
+  expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+});

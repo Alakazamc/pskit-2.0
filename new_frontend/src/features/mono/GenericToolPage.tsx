@@ -63,7 +63,7 @@ export function GenericToolPage({ api, userId, name }: { api: ResearchApi; userI
     }
   };
   return <div className="mono-page-scroll"><div className="mono-page-content">
-    <div className="mono-tool-heading"><h1>{name}</h1><p>{tool?.description ?? t("tools.loading")}</p></div>
+    {tool?.description && <p className="mono-tool-description">{tool.description}</p>}
     {catalog.isError && <p className="mono-form-error" role="alert">{t("tools.loadFailed")}</p>}
     {!catalog.isLoading && !catalog.isError && !tool && <p className="mono-form-error" role="alert">{t("tools.notFound")}</p>}
     {tool && <div className="mono-tool-layout"><section className="mono-panel"><div className="mono-panel-heading"><div><Database size={18} /><h2>{t("tools.arguments")}</h2></div></div>

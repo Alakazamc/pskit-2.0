@@ -9,14 +9,11 @@ import { useWorkspacePortalContainer } from "../../hooks/useWorkspacePortalConta
 import { ProjectIconGlyph, ProjectIconPicker, ProjectIconPopover, suggestedProjectIcon } from "./ProjectIcon";
 import { projectPath, projectSessionPath } from "./sessionPaths";
 
-export function ProjectIndex({ api, projects, userId }: { api: ResearchApi; projects: Project[]; userId: string }) {
+export function ProjectIndex({ projects }: { projects: Project[] }) {
   const { t } = useLanguage();
-  const [open, setOpen] = useState(false);
   return <div className="mono-page-scroll"><div className="mono-page-content">
-    <div className="mono-page-heading"><h1>{t("project.title")}</h1><button className="mono-button primary" onClick={() => setOpen(true)}><Plus size={17} />{t("project.new")}</button></div>
     <div className="mono-card-grid">{projects.map((project) => <Link className="mono-card project-card" key={project.id} to={projectPath(project.id)}><ProjectIconGlyph icon={project.icon} size={21} /><h2>{project.name}</h2>{project.description && <p>{project.description}</p>}<span>{t("project.open")} <ArrowRight size={15} /></span></Link>)}</div>
     {projects.length === 0 && <div className="mono-empty-panel"><Folder size={24} /><h2>{t("project.empty")}</h2><p>{t("project.emptyDescription")}</p></div>}
-    <CreateProjectDialog api={api} userId={userId} open={open} onOpenChange={setOpen} />
   </div></div>;
 }
 
@@ -77,7 +74,7 @@ export function ProjectDetail({ api, project, sessions, skills, userId }: { api:
   const toolRuns = useQuery({ queryKey: ["tool-runs", userId], queryFn: api.getToolRuns });
   const defaults = settings.data?.default_skill_ids ?? [];
   return <div className="mono-page-scroll"><div className="mono-page-content">
-    <div className="mono-page-heading"><div className="mono-project-identity"><button type="button" className="mono-project-icon-edit" aria-label={t("project.changeIcon")} title={t("project.changeIcon")} onClick={() => setIconOpen(true)}><ProjectIconGlyph icon={project.icon} size={24} /></button><div><h1>{project.name}</h1>{project.description && <p>{project.description}</p>}</div></div><Link className="mono-button primary" to={`${projectPath(project.id)}/new`}><Plus size={17} />{t("project.newChat")}</Link></div>
+    <div className="mono-project-toolbar"><div className="mono-project-identity"><button type="button" className="mono-project-icon-edit" aria-label={t("project.changeIcon")} title={t("project.changeIcon")} onClick={() => setIconOpen(true)}><ProjectIconGlyph icon={project.icon} size={24} /></button>{project.description && <p>{project.description}</p>}</div><Link className="mono-button primary" to={`${projectPath(project.id)}/new`}><Plus size={17} />{t("project.newChat")}</Link></div>
     <section className="mono-panel"><div className="mono-panel-heading"><div><Sparkles size={18} /><h2>{t("project.defaultSkills")}</h2></div><button className="mono-text-button" disabled={!settings.data} onClick={() => setSettingsOpen(true)}><Settings2 size={16} />{t("project.manage")}</button></div><p>{t("project.defaultSkillsDescription")}</p>{settings.isError && <p role="alert" className="mono-form-error">{t("project.skillsLoadFailed")}</p>}<div className="mono-chip-row">{defaults.length ? defaults.map((id) => <span className="mono-chip" key={id}>✦ {skills.find((item) => item.id === id)?.name ?? id}</span>) : <span className="mono-muted">{t("project.noDefaultSkills")}</span>}</div></section>
     <section className="mono-panel"><div className="mono-panel-heading"><div><Folder size={18} /><h2>{t("project.chats")}</h2></div><span className="mono-muted">{t("project.count", { count: sessions.length })}</span></div>{sessions.length ? <div className="mono-list">{sessions.map((session) => <Link key={session.id} to={projectSessionPath(project.id, session.id)}><span>{session.title}</span><small>{t(session.status === "running" ? "project.running" : "project.openChat")}</small><ArrowRight size={16} /></Link>)}</div> : <p>{t("project.noChats")}</p>}</section>
     <section className="mono-panel"><div className="mono-panel-heading"><div><Database size={18} /><h2>{t("project.toolResults")}</h2></div><Link className="mono-text-button" to="/tools/runs">{t("project.myRuns")} <ArrowRight size={15} /></Link></div>{toolRuns.isError && <p role="alert" className="mono-form-error">{t("project.resultsLoadFailed")}</p>}{toolRuns.data?.some((run) => run.project_id === project.id) ? <div className="mono-list">{toolRuns.data.filter((run) => run.project_id === project.id).map((run) => <div className="mono-project-result" key={run.id}><strong>{run.title}</strong><small>{new Date(run.created_at).toLocaleString()}</small><details><summary>{t("project.viewResult")}</summary><pre>{JSON.stringify(run.result, null, 2)}</pre></details></div>)}</div> : !toolRuns.isError && <p>{t("project.noResults")}</p>}</section>

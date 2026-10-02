@@ -3,6 +3,8 @@ import { Bot, Check, ChevronDown, ChevronUp, Circle, FlaskConical, LoaderCircle 
 import type { Message } from "../../api/types";
 import type { RunView } from "./events";
 import { MessageParts } from "./MessageParts";
+import { LazyMarkdownContent } from "./LazyMarkdownContent";
+import { ReplyCopyButton } from "./ReplyCopyButton";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { localizedRunError } from "./runErrors";
 
@@ -60,6 +62,7 @@ function UserMessage({ message }: { message: Message }) {
 export function Conversation({ messages, run }: { messages: Message[]; run: RunView }) {
   const { t } = useLanguage();
   const runError = localizedRunError(run, t);
+  const runActive = (run.status === "running" || run.status === "waiting") && !run.approval;
   return <div className="conversation-scroll">
     {messages.length === 0 && run.status === "idle" ? <div className="empty-chat">
       <div className="empty-icon"><FlaskConical size={28} /></div>
@@ -78,9 +81,9 @@ export function Conversation({ messages, run }: { messages: Message[]; run: RunV
       </section>}
       {messages.map((message) => message.role === "user" ? <UserMessage message={message} key={message.id} /> : <article className={`message-row ${message.role}`} key={message.id}>
         {message.role === "assistant" && <div className="assistant-avatar"><Bot size={17} /></div>}
-        <div className="message-body">{message.role === "assistant" && <span className="message-author">Research Agent</span>}<MessageParts parts={message.parts} /></div>
+        <div className="message-body">{message.role === "assistant" && <span className="message-author">Research Agent</span>}<MessageParts parts={message.parts} markdown={message.role === "assistant"} />{message.role === "assistant" && <div className="message-actions"><ReplyCopyButton text={message.parts.filter((part) => part.type === "text").map((part) => part.text).join("\n\n")} /></div>}</div>
       </article>)}
-      {run.status !== "idle" && run.status !== "completed" && <article className="message-row assistant"><div className="assistant-avatar"><Bot size={17} /></div><div className="message-body"><span className="message-author">Research Agent</span>{(runError || run.text) && <p className="message-text">{runError ?? run.text}</p>}{run.tools.filter((tool) => tool.status === "running").map((tool) => <div className="task-pill" key={tool.id}><LoaderCircle size={15} /> {tool.name}</div>)}{run.jobId && !["failed", "cancelled"].includes(run.status) && <div className="task-pill"><LoaderCircle size={15} /> {run.jobLabel || t("conversation.backgroundTask")} · {run.progress}%</div>}</div></article>}
+      {run.status !== "idle" && run.status !== "completed" && <article className="message-row assistant"><div className="assistant-avatar"><Bot size={17} /></div><div className="message-body"><span className="message-author">Research Agent</span>{runError ? <p className="message-text">{runError}</p> : run.text && <LazyMarkdownContent text={run.text} streaming={runActive} />}{run.tools.filter((tool) => tool.status === "running").map((tool) => <div className="task-pill" key={tool.id}><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {tool.name}</div>)}{run.jobId && !["failed", "cancelled"].includes(run.status) && <div className="task-pill"><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {run.jobLabel || t("conversation.backgroundTask")}{Number.isFinite(run.progress) && ` · ${Math.round(run.progress)}%`}</div>}<div className="message-actions"><ReplyCopyButton text={runError ?? run.text} />{runActive && <span className="message-generating" role="status" aria-label={t("conversation.generating")}><LoaderCircle className="message-spinner" size={16} aria-hidden="true" /></span>}</div></div></article>}
     </div>}
   </div>;
 }
