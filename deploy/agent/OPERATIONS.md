@@ -40,3 +40,13 @@ sudo ufw allow in on wg0 from 10.9.8.2 to 10.9.8.1 port 18184 proto tcp
 切换前确认旧 WSL 队列和 A6000 receiver journal 无未完成任务，备份原 receiver 配置，只重建 receiver，保留 compute 容器和 spool。新 receiver 使用云端 URL、新回调密钥和 `a6000-af3-cloud-1`。先做带密钥只读 owned-jobs 请求，再用云端测试账号运行一个低成本真 AF3，核对租约、进度、`simulation=false`、产物、GPU 扣费、ACK、spool 清理及 Pi 自动唤醒。失败时保留云端 claim 与 A6000 spool 以便对账，勿把任务重放到旧 WSL 后端。
 
 公开 AF3 前仍须处理运行中任务取消不能立即停 GPU、单件产物 20 MiB 上限。替换镜像或迁移前备份 Supabase DB 卷与 Agent 数据卷；若新 Nginx 配置出错，只删除新的两个配置文件并 `nginx -t`、reload，不动旧站。
+
+## 2026-10-02 私网部署记录
+
+- 阿里云目录：`/home/ecs-user/pskit-agent-cloud-20261002`。旧 `pskit` 容器与 `pskit.bioailab.net` 未修改；部署后旧站 HTTPS 返回 200。
+- 后端镜像 ID：`sha256:0ac7743c3c36277ea8e6dd944bd637c4e7612d66d3d08f2a6db088bb595000a6`；前端镜像 ID：`sha256:44879324a06d6ac90560dca3663f394fb0390612cf458400c22f839159e70f89`。
+- Agent 镜像传输包 SHA-256：`ed1a00a99f163f52305c62f74fce21e1308c696f6e5b36e83b9ff9d706c0d424`；12 个固定版 Supabase 镜像包 SHA-256：`6eee3f2eebf8ce8f4c1865a29536dd22541060a88261013de0231c2a97deeef2`。阿里云连接 Docker Hub 超时，所以镜像从本机离线传入；压缩包暂存云端部署目录，保留作同版本恢复材料。
+- Docker 数据卷：`pskit-agent-db-data`、`pskit-agent-storage`、`pskit-agent-supabase_db-config`、`pskit-agent-cloud_agent_data`。它们位于阿里云 Docker 数据根目录 `/data/docker`，不在旧 PSKit 数据路径下。
+- 私网检查已通过：全套容器健康；仅 `127.0.0.1:18130/18085/18088/18185` 发布；Python 登录、Secure/HttpOnly Cookie、GPU 默认额度 0、项目、Pi 回复、SSE、上传均通过。后端与代理重启后，账号、项目和上传文件仍在。AF3 代理无密钥返回 404，带新密钥的只读 owned-jobs 返回空列表。
+- 私网测试账号保存在云端权限 `0600` 的 `private-test-account.json`，聊天和仓库均没有保存密码。A6000 receiver journal 为 0；两个已生成 `outcome.json` 的旧 spool 目录保持原样。DNS 已指向阿里云，私网 AF3 Nginx 监听、公开 TLS 和真实 SMTP 尚待完成。
+- 初始备份位于云端 `backups/private-20261002/`（目录 `0700`、文件 `0600`），包括 Postgres SQL、Agent SQLite、Pi 会话、Storage 卷和数据库加密配置卷；五份备份已通过读取、压缩格式及 SQLite 完整性检查。这是同机备份，正式开放前仍需异地备份策略。
