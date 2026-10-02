@@ -82,6 +82,25 @@ docker run --rm --network none \
 
 `restore` 会在写入目标卷前验证清单、所有文件 SHA-256 和 SQLite 完整性，并拒绝覆盖非空卷；后端容器使用 UID/GID `10001:10001`。保留云端源卷和归档，直到公网、历史会话及 AF3 回调验收完成。切流量后回退时必须冻结 A6000 写入并迁回**最新** Agent 数据，不能直接重启云端旧后端。
 
+## A6000 AF3 接收器本机回调切换
+
+新接收器定义在 [`compose.a6000-receiver.yaml`](compose.a6000-receiver.yaml)，有显式 `cutover` profile，默认不会启动。它复用当前镜像 `af3_mar5_jhli_2026_0923:v1`、UID/GID `1006:1006`、原 `receiver.cloud.env`、挂载脚本和持久 spool，只把 API 地址改成 `http://127.0.0.1:18185`。现有 `pskit-af3-compute-real-test-20261002` 不归 Compose 管理，也不重建。
+
+先在旧接收器仍运行时检查其 `journal.sqlite3` 的 `jobs` 行数、后端 owned-jobs、spool 中未 ACK 的任务以及计算容器是否仍处理任务。只要任一处有未确认任务，就推迟切换并对账，不能清空 journal 或删除 spool。确认空闲后，在 A6000 执行：
+
+```bash
+cd /data/jhli/pskit-agent-a6000-20261002/deploy/agent
+umask 077
+docker inspect pskit-af3-receiver-cloud-20261002 > receiver-before-local-cutover.json
+docker stop pskit-af3-receiver-cloud-20261002
+docker inspect pskit-af3-receiver-cloud-20261002 --format '{{.State.Running}}'
+docker compose -f compose.a6000-receiver.yaml --profile cutover config --quiet
+docker compose -f compose.a6000-receiver.yaml --profile cutover up -d af3-receiver
+docker ps --filter name=pskit-af3-receiver --format '{{.Names}} {{.Status}}'
+```
+
+`receiver-before-local-cutover.json` 含有容器环境变量，文件必须保持 `0600`，也不能提交或打印。旧接收器应显示 `false`，列表中只允许一个运行中的新版 receiver；计算容器应持续运行。新接收器连接本机回调代理，先验证无密钥 404、带密钥的只读 owned-jobs，再执行获批的单个真 AF3 任务。验收前保留旧容器和原 spool/journal；失败时先停止新接收器并核对是否已有 claim，再决定恢复旧入口，不能同时运行两个接收器。
+
 ## 2026-10-02 私网部署记录
 
 - 阿里云目录：`/home/ecs-user/pskit-agent-cloud-20261002`。旧 `pskit` 容器与 `pskit.bioailab.net` 未修改；部署后旧站 HTTPS 返回 200。
