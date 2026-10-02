@@ -1,0 +1,48 @@
+# PSKit-only local overrides. The upstream self-hosted release remains intact.
+name: pskit-supabase
+
+services:
+  api-gw:
+    ports: !override
+      - "127.0.0.1:${API_GW_HTTP_PORT:-18130}:8000"
+
+  supavisor:
+    ports: !override
+      - "127.0.0.1:15432:5432"
+      - "127.0.0.1:16543:6543"
+
+  auth:
+    depends_on:
+      mailpit:
+        condition: service_healthy
+      templates-server:
+        condition: service_started
+    environment:
+      GOTRUE_JWT_KEYS: ${JWT_KEYS}
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://templates-server/confirmation.html
+      GOTRUE_MAILER_TEMPLATES_RECOVERY: http://templates-server/recovery.html
+      GOTRUE_MAILER_TEMPLATES_EMAIL_CHANGE: http://templates-server/email-change.html
+
+  realtime:
+    environment:
+      API_JWT_JWKS: ${JWT_JWKS}
+
+  storage:
+    environment:
+      JWT_JWKS: ${JWT_JWKS}
+
+  functions:
+    environment:
+      SUPABASE_JWKS: ${JWT_JWKS}
+
+  mailpit:
+    image: ghcr.io/axllent/mailpit:v1.31.3
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18131:8025"
+
+  templates-server:
+    image: caddy:2.10.2-alpine
+    command: ["caddy", "file-server", "--root", "/templates", "--listen", ":80"]
+    volumes:
+      - ./volumes/templates:/templates:ro

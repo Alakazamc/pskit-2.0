@@ -29,6 +29,7 @@ secrets/
 # Runtime data
 /data/
 /backend/data/
+/new_backend/data/
 /tasks/
 /backend/tasks/
 /artifacts/
