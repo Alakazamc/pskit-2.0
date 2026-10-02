@@ -38,6 +38,21 @@ services:
     ports: !override
       - "127.0.0.1:18185:8080"
 
+  # Private verification only. The production model gateway is configured
+  # server-side in cloud.backend.env; this service is inactive by default.
+  model-gateway-mock:
+    image: ${AGENT_BACKEND_IMAGE:?set AGENT_BACKEND_IMAGE}
+    build: !reset null
+    profiles: [private-test]
+    command: ["python", "-u", "/mock/mock_model_gateway.py", "--host", "0.0.0.0", "--port", "8000"]
+    volumes: !override
+      - ./tests/mock_model_gateway.py:/mock/mock_model_gateway.py:ro
+    networks:
+      - app
+    read_only: true
+    cap_drop: !override [ALL]
+    security_opt: !override [no-new-privileges:true]
+
 networks:
   supabase:
     name: pskit-agent-supabase_default

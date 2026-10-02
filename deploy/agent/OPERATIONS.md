@@ -6,7 +6,7 @@
 
 将 `infra/supabase`、`deploy/agent` 放在阿里云独立目录。Supabase 从 `.env.example` 创建权限 `0600` 的 `.env`，运行 `utils/generate-keys.sh --update-env` 和 `utils/add-new-auth-keys.sh --update-env` 生成全新密钥；两脚本会打印密钥，执行时须重定向输出。设置 `cloud.env.example` 中的域名、端口和登录开关，保留 `CLOUD_DISABLE_SIGNUP=true`、`ENABLE_EMAIL_AUTOCONFIRM=false`。真实 SMTP 缺失期间只创建管理测试账号，不能开放注册。
 
-应用在 `deploy/agent` 建立权限 `0600` 的 `.env`、`cloud.backend.env`、`cloud.proxy.env`。后两者使用同一枚新生成的 AF3 回调密钥，绝不能复用 WSL 测试密钥。Supabase publishable key 只放 Python 后端配置；service key 留在 Supabase 内。私网阶段使用 `compose.yaml`、`compose.local.yaml`、`compose.cloud.yaml` 顺序叠加，模型为隔离替身；正式运行前移除 local overlay，配置真实模型网关。默认游客和会员 GPU 额度均为 0。
+应用在 `deploy/agent` 建立权限 `0600` 的 `.env`、`cloud.backend.env`、`cloud.proxy.env`。后两者使用同一枚新生成的 AF3 回调密钥，绝不能复用 WSL 测试密钥。Supabase publishable key 只放 Python 后端配置；service key 留在 Supabase 内。私网阶段使用 `compose.yaml`、`compose.local.yaml`、`compose.cloud.yaml` 顺序叠加并启用 `--profile private-test`，模型替身使用已经传入的后端镜像；正式运行前移除 local overlay 和 private-test profile，配置真实模型网关。默认游客和会员 GPU 额度均为 0。
 
 启动前用 `docker compose config --quiet` 检查配置，核对所有宿主机端口只绑定 `127.0.0.1`。先启动 Supabase，再启动应用。检查 `127.0.0.1:18085`、`127.0.0.1:18088/health/ready`，以及无密钥时 `127.0.0.1:18185` 的拒绝响应。不要将这些端口直接开放到公网。
 

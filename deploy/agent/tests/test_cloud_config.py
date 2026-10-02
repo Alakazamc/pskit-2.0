@@ -10,14 +10,17 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def compose_config(files: list[Path], env_example: Path) -> dict:
+def compose_config(files: list[Path], env_example: Path,
+                   profiles: tuple[str, ...] = ()) -> dict:
     with tempfile.TemporaryDirectory() as directory:
         env_file = Path(directory) / "cloud.env"
         env_file.write_text(env_example.read_text())
         env = os.environ.copy()
         env.pop("COMPOSE_FILE", None)
         result = subprocess.run(
-            ["docker", "compose", "--env-file", str(env_file),
+            ["docker", "compose", *[argument for profile in profiles
+                                   for argument in ("--profile", profile)],
+             "--env-file", str(env_file),
              *[argument for path in files for argument in ("-f", str(path))],
              "config", "--format", "json"],
             cwd=files[0].parent, env=env, text=True, capture_output=True,
@@ -55,13 +58,17 @@ def test_cloud_supabase_is_private_and_uses_durable_volumes():
 
 def test_cloud_app_has_only_loopback_published_ports():
     base = ROOT / "deploy/agent"
-    config = compose_config([base / "compose.yaml", base / "compose.cloud.yaml"],
-                            base / "cloud.env.example")
+    config = compose_config([base / "compose.yaml", base / "compose.local.yaml",
+                             base / "compose.cloud.yaml"],
+                            base / "cloud.env.example", profiles=("private-test",))
     assert config["name"] == "pskit-agent-cloud"
     assert all(ip == "127.0.0.1" for ip in published_host_ips(config))
     assert config["services"]["backend"]["environment"]["RESEARCH_AGENT_MEMBER_DAILY_GPU_MINUTES"] == "0"
     assert config["services"]["backend"]["environment"]["RESEARCH_AGENT_AUTH_COOKIE_SECURE"] == "true"
     assert config["networks"]["supabase"]["name"] == "pskit-agent-supabase_default"
+    mock = config["services"]["model-gateway-mock"]
+    assert mock["image"] == config["services"]["backend"]["image"]
+    assert mock["profiles"] == ["private-test"]
 
 
 def test_private_nginx_is_wireguard_only():
