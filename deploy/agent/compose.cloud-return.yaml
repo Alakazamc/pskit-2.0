@@ -1,0 +1,7 @@
+# Overlay after compose.yaml and compose.cloud.yaml for the Aliyun return.
+# Start only backend and af3-callback-proxy; host Nginx serves React dist.
+name: pskit-agent-cloud
+
+volumes:
+  agent_data:
+    name: pskit-agent-cloud-return-20261003_agent_data
