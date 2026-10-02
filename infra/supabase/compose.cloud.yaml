@@ -1,0 +1,67 @@
+# Independent cloud instance. All host ports remain on loopback.
+name: pskit-agent-supabase
+
+services:
+  api-gw:
+    ports: !override
+      - "127.0.0.1:${CLOUD_SUPABASE_HTTP_PORT:-18130}:8000"
+
+  supavisor:
+    ports: !override []
+
+  auth:
+    depends_on:
+      templates-server:
+        condition: service_started
+    environment:
+      GOTRUE_DISABLE_SIGNUP: ${CLOUD_DISABLE_SIGNUP:-true}
+      GOTRUE_MAILER_AUTOCONFIRM: "false"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
+      GOTRUE_JWT_KEYS: ${JWT_KEYS}
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://templates-server/confirmation.html
+      GOTRUE_MAILER_TEMPLATES_RECOVERY: http://templates-server/recovery.html
+      GOTRUE_MAILER_TEMPLATES_EMAIL_CHANGE: http://templates-server/email-change.html
+
+  realtime:
+    environment:
+      API_JWT_JWKS: ${JWT_JWKS}
+
+  storage:
+    environment:
+      JWT_JWKS: ${JWT_JWKS}
+    volumes: !override
+      - agent-storage:/var/lib/storage
+
+  imgproxy:
+    volumes: !override
+      - agent-storage:/var/lib/storage:ro
+
+  functions:
+    environment:
+      SUPABASE_JWKS: ${JWT_JWKS}
+
+  db:
+    volumes: !override
+      - ./volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:ro
+      - ./volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:ro
+      - ./volumes/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:ro
+      - ./volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:ro
+      - agent-db-data:/var/lib/postgresql/data
+      - ./volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:ro
+      - ./volumes/db/logs.sql:/docker-entrypoint-initdb.d/migrations/99-logs.sql:ro
+      - ./volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:ro
+      - db-config:/etc/postgresql-custom
+
+  templates-server:
+    image: caddy:2.10.2-alpine
+    command: ["caddy", "file-server", "--root", "/templates", "--listen", ":80"]
+    volumes:
+      - ./volumes/templates:/templates:ro
+    restart: unless-stopped
+
+volumes:
+  agent-db-data:
+    name: pskit-agent-db-data
+  agent-storage:
+    name: pskit-agent-storage

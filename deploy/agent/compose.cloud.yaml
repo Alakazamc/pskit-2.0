@@ -1,0 +1,42 @@
+# Layer after compose.yaml (and compose.local.yaml for the private model stub).
+name: pskit-agent-cloud
+
+services:
+  backend:
+    image: ${AGENT_BACKEND_IMAGE:?set AGENT_BACKEND_IMAGE}
+    build: !reset null
+    env_file: !override
+      - ${AGENT_BACKEND_ENV_FILE:-./cloud.backend.env}
+    environment:
+      RESEARCH_AGENT_MODE: live
+      RESEARCH_AGENT_RUNTIME: pi
+      RESEARCH_AGENT_AF3_EXECUTOR: callback
+      RESEARCH_AGENT_MCP_EXECUTOR: disabled
+      RESEARCH_AGENT_ANONYMOUS_ENABLED: "false"
+      RESEARCH_AGENT_GUEST_DAILY_GPU_MINUTES: "0"
+      RESEARCH_AGENT_MEMBER_DAILY_GPU_MINUTES: "0"
+      RESEARCH_AGENT_FRONTEND_URL: ${AGENT_PUBLIC_URL:-https://agent.bioailab.net}
+      RESEARCH_AGENT_PUBLIC_API_URL: ${AGENT_PUBLIC_URL:-https://agent.bioailab.net}
+      SUPABASE_PUBLIC_URL: ${AGENT_PUBLIC_URL:-https://agent.bioailab.net}
+    ports: !override
+      - "127.0.0.1:18088:8000"
+
+  web:
+    image: ${AGENT_WEB_IMAGE:?set AGENT_WEB_IMAGE}
+    build: !reset null
+    ports: !override
+      - "127.0.0.1:18085:80"
+
+  af3-callback-proxy:
+    image: ${AGENT_BACKEND_IMAGE:?set AGENT_BACKEND_IMAGE}
+    volumes: !override
+      - type: bind
+        source: ${AGENT_AF3_PROXY_KEY_FILE:-./cloud.proxy.env}
+        target: /run/af3/callback.env
+        read_only: true
+    ports: !override
+      - "127.0.0.1:18185:8080"
+
+networks:
+  supabase:
+    name: pskit-agent-supabase_default
