@@ -42,6 +42,13 @@ def test_cloud_supabase_is_private_and_uses_durable_volumes():
     assert all(ip == "127.0.0.1" for ip in published_host_ips(config))
     assert "mailpit" not in config["services"]
     assert "templates-server" in config["services"]
+    templates = config["services"]["templates-server"]["volumes"]
+    assert any(volume["source"].endswith("/volumes/templates-cloud")
+               for volume in templates)
+    for filename in ("confirmation.html", "recovery.html", "email-change.html"):
+        content = (base / "volumes/templates-cloud" / filename).read_text()
+        assert "{{ .Token }}" in content
+        assert "ConfirmationURL" not in content
     auth = config["services"]["auth"]["environment"]
     assert auth["GOTRUE_DISABLE_SIGNUP"] == "true"
     assert auth["GOTRUE_MAILER_AUTOCONFIRM"] == "false"

@@ -56,8 +56,8 @@ services:
   templates-server:
     image: caddy:2.10.2-alpine
     command: ["caddy", "file-server", "--root", "/templates", "--listen", ":80"]
-    volumes:
-      - ./volumes/templates:/templates:ro
+    volumes: !override
+      - ./volumes/templates-cloud:/templates:ro
     restart: unless-stopped
 
 volumes:
