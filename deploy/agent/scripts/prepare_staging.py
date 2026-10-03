@@ -97,7 +97,10 @@ def _publish_directory(source: Path, target: Path) -> None:
 
 def _dist_hash(dist: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(p for p in dist.rglob("*") if p.is_file()):
+    contents = sorted(dist.rglob("*"))
+    if any(path.is_symlink() for path in contents):
+        raise ValueError("Frontend dist must not contain a symlink")
+    for path in (p for p in contents if p.is_file()):
         digest.update(str(path.relative_to(dist)).encode() + b"\0")
         digest.update(path.read_bytes())
     return digest.hexdigest()

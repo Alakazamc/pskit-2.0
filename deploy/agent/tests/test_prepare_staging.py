@@ -88,6 +88,16 @@ def test_existing_or_symlink_target_is_untouched(release, monkeypatch):
     assert marker.read_text() == "keep"
 
 
+def test_frontend_dist_symlink_is_rejected_before_install(release, monkeypatch):
+    target, dist = release
+    sensitive = dist.parent / "private-data"
+    sensitive.write_text("must never reach the web root")
+    (dist / "secret.txt").symlink_to(sensitive)
+    monkeypatch.setenv("STAGING_AUTH_KEYS_NODE", "node")
+    with pytest.raises(ValueError, match="symlink"):
+        prepare_staging(target, backend_image="fixed", frontend_dist=dist)
+
+
 def test_mid_generation_failure_leaves_no_valid_manifest(release, monkeypatch):
     target, dist = release
     monkeypatch.setenv("STAGING_AUTH_KEYS_NODE", "/does/not/exist")
