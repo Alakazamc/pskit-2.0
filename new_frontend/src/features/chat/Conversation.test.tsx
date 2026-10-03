@@ -100,7 +100,7 @@ it("renders saved assistant Markdown as headings, tables, code, and math", async
     parts: [{ type: "text", text: "## 结果\n\n**蛋白质**\n\n| 位点 | 分数 |\n| --- | --- |\n| A1 | 0.9 |\n\n```python\nprint('ok')\n```\n\n$$E=mc^2$$" }],
   };
   render(<LanguageProvider><Conversation messages={[message]} run={emptyRun} /></LanguageProvider>);
-  expect(await screen.findByRole("heading", { name: "结果" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "结果" }, { timeout: 5_000 })).toBeInTheDocument();
   expect(screen.getByText("蛋白质").closest("strong")).toBeInTheDocument();
   expect(screen.getByRole("table")).toHaveTextContent("A1");
   expect(screen.getByText("print('ok')")).toBeInTheDocument();

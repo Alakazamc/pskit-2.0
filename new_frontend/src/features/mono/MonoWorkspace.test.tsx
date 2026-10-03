@@ -131,7 +131,7 @@ it.each([
   )).toBe(false);
 });
 
-it("cancels a waiting run from the active chat", async () => {
+it("shows waiting inside the reply and cancels without a bar above the composer", async () => {
   loggedIn("/c/session-1");
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
@@ -152,8 +152,10 @@ it("cancels a waiting run from the active chat", async () => {
   vi.stubGlobal("fetch", fetcher);
   render(<App />);
 
-  const controls = await screen.findByRole("region", { name: "当前运行" });
-  await userEvent.setup().click(within(controls).getByRole("button", { name: "取消运行" }));
+  const spinner = await screen.findByRole("status", { name: "正在生成回复" });
+  expect(spinner.closest(".message-row.assistant")).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "当前运行" })).not.toBeInTheDocument();
+  await userEvent.setup().click(within(spinner.closest(".message-row.assistant") as HTMLElement).getByRole("button", { name: "取消运行" }));
   await waitFor(() => expect(fetcher.mock.calls.some(([input, init]) =>
     String(input).endsWith("/runs/run-1") && init?.method === "DELETE",
   )).toBe(true));

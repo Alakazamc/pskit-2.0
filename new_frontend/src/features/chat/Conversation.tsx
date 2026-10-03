@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from "react";
-import { Bot, Check, ChevronDown, ChevronUp, Circle, FlaskConical, LoaderCircle } from "lucide-react";
+import { Bot, Check, ChevronDown, ChevronUp, Circle, FlaskConical, LoaderCircle, Square } from "lucide-react";
 import type { Message } from "../../api/types";
 import type { RunView } from "./events";
 import { MessageParts } from "./MessageParts";
@@ -7,6 +7,28 @@ import { LazyMarkdownContent } from "./LazyMarkdownContent";
 import { ReplyCopyButton } from "./ReplyCopyButton";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { localizedRunError } from "./runErrors";
+import { errorTranslationKey } from "../../i18n/errors";
+
+function StopRunButton({ onCancel }: { onCancel: () => Promise<void> }) {
+  const { t } = useLanguage();
+  const [busy, setBusy] = useState(false);
+  const [requested, setRequested] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const stop = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await onCancel();
+      setRequested(true);
+    } catch (caught) {
+      const key = errorTranslationKey(caught);
+      setError(key ? t(key) : t("workspace.cancelFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <><button type="button" className="message-stop-button" aria-label={t("agent.cancel")} title={t("agent.cancel")} disabled={busy || requested} onClick={() => void stop()}><Square size={14} fill="currentColor" aria-hidden="true" /></button>{error && <span className="message-stop-error" role="alert">{error}</span>}</>;
+}
 
 function UserMessage({ message }: { message: Message }) {
   const { t } = useLanguage();
@@ -59,7 +81,7 @@ function UserMessage({ message }: { message: Message }) {
   </article>;
 }
 
-export function Conversation({ messages, run }: { messages: Message[]; run: RunView }) {
+export function Conversation({ messages, run, runId, onCancel }: { messages: Message[]; run: RunView; runId?: string | null; onCancel?: () => Promise<void> }) {
   const { t } = useLanguage();
   const runError = localizedRunError(run, t);
   const runActive = (run.status === "running" || run.status === "waiting") && !run.approval;
@@ -83,7 +105,7 @@ export function Conversation({ messages, run }: { messages: Message[]; run: RunV
         {message.role === "assistant" && <div className="assistant-avatar"><Bot size={17} /></div>}
         <div className="message-body">{message.role === "assistant" && <span className="message-author">Research Agent</span>}<MessageParts parts={message.parts} markdown={message.role === "assistant"} />{message.role === "assistant" && <div className="message-actions"><ReplyCopyButton text={message.parts.filter((part) => part.type === "text").map((part) => part.text).join("\n\n")} /></div>}</div>
       </article>)}
-      {run.status !== "idle" && run.status !== "completed" && <article className="message-row assistant"><div className="assistant-avatar"><Bot size={17} /></div><div className="message-body"><span className="message-author">Research Agent</span>{runError ? <p className="message-text">{runError}</p> : run.text && <LazyMarkdownContent text={run.text} streaming={runActive} />}{run.tools.filter((tool) => tool.status === "running").map((tool) => <div className="task-pill" key={tool.id}><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {tool.name}</div>)}{run.jobId && !["failed", "cancelled"].includes(run.status) && <div className="task-pill"><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {run.jobLabel || t("conversation.backgroundTask")}{Number.isFinite(run.progress) && ` · ${Math.round(run.progress)}%`}</div>}<div className="message-actions"><ReplyCopyButton text={runError ?? run.text} />{runActive && <span className="message-generating" role="status" aria-label={t("conversation.generating")}><LoaderCircle className="message-spinner" size={16} aria-hidden="true" /></span>}</div></div></article>}
+      {run.status !== "idle" && run.status !== "completed" && <article className="message-row assistant"><div className="assistant-avatar"><Bot size={17} /></div><div className="message-body"><span className="message-author">Research Agent</span>{runError ? <p className="message-text">{runError}</p> : run.text && <LazyMarkdownContent text={run.text} streaming={runActive} />}{run.tools.filter((tool) => tool.status === "running").map((tool) => <div className="task-pill" key={tool.id}><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {tool.name}</div>)}{run.jobId && !["failed", "cancelled"].includes(run.status) && <div className="task-pill"><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {run.jobLabel || t("conversation.backgroundTask")}{Number.isFinite(run.progress) && ` · ${Math.round(run.progress)}%`}</div>}<div className="message-actions"><ReplyCopyButton text={runError ?? run.text} />{runActive && <span className="message-generating" role="status" aria-label={t("conversation.generating")}><LoaderCircle className="message-spinner" size={16} aria-hidden="true" /></span>}{runActive && onCancel && <StopRunButton key={runId ?? "active"} onCancel={onCancel} />}</div></div></article>}
     </div>}
   </div>;
 }

@@ -55,9 +55,10 @@
 .message-markdown hr{border:0;border-top:1px solid var(--mono-border,var(--border));margin:1.1em 0}
 .message-markdown .katex-display{max-width:100%;overflow-x:auto;overflow-y:hidden;padding:4px 0}
 .message-actions{display:flex;align-items:center;gap:4px;margin-top:7px;min-height:28px}
-.message-copy-button{width:28px;height:28px;display:grid;place-items:center;flex:none;border:0;border-radius:8px;background:transparent;color:var(--mono-muted,var(--secondary));padding:0}
-.message-copy-button:hover:not(:disabled),.message-copy-button:focus-visible{background:var(--mono-subtle,var(--soft));color:var(--mono-text,var(--text))}
-.message-copy-button:disabled{opacity:.4;cursor:default}
+.message-copy-button,.message-stop-button{width:28px;height:28px;display:grid;place-items:center;flex:none;border:0;border-radius:8px;background:transparent;color:var(--mono-muted,var(--secondary));padding:0}
+.message-copy-button:hover:not(:disabled),.message-copy-button:focus-visible,.message-stop-button:hover:not(:disabled),.message-stop-button:focus-visible{background:var(--mono-subtle,var(--soft));color:var(--mono-text,var(--text))}
+.message-copy-button:disabled,.message-stop-button:disabled{opacity:.4;cursor:default}
+.message-stop-error{color:var(--mono-text,var(--text));font-size:12px}
 .message-generating{width:28px;height:28px;display:grid;place-items:center;color:var(--mono-muted,var(--secondary))}
 .progress-inline{color:var(--mono-muted,var(--secondary))}
 .message-spinner{animation:message-spinner-turn .85s linear infinite}

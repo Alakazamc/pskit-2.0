@@ -15,7 +15,7 @@ export function RunControls({ run, onCancel, onApproval }: {
   const [cancelRequested, setCancelRequested] = useState(false);
   const [handledApproval, setHandledApproval] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  if (run.status !== "running" && run.status !== "waiting") return null;
+  if ((run.status !== "running" && run.status !== "waiting") || !run.approval) return null;
 
   const cancel = async () => {
     setBusy(true);
