@@ -31,6 +31,7 @@ export type MessageRequest = Api.MessageRequest & {
   skills: ContextRef[];
   resources: ContextRef[];
 };
+export type ModelOption = Api.ModelOption;
 type Tagged<T extends { type?: string }> = T & { type: NonNullable<T["type"]> };
 export type MessagePart =
   | Tagged<Api.TextPart>
@@ -83,6 +84,7 @@ export interface ResearchApi {
   getMessages(sessionId: string, projectId?: string | null): Promise<Message[]>;
   getSkills(): Promise<CatalogItem[]>;
   getResources(): Promise<CatalogItem[]>;
+  getModels(): Promise<ModelOption[]>;
   getFiles(): Promise<FileRef[]>;
   uploadFile(file: File): Promise<FileRef>;
   downloadFile(id: string): Promise<Blob>;

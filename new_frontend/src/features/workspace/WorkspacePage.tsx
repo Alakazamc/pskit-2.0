@@ -50,6 +50,7 @@ export function WorkspacePage({ api, user, onLogout }: { api: ResearchApi; user:
   const usage = useQuery({ queryKey: ["usage", user.id], queryFn: () => api.getUsage() });
   const skills = useQuery({ queryKey: ["skills", user.id], queryFn: () => api.getSkills() });
   const resources = useQuery({ queryKey: ["resources", user.id], queryFn: () => api.getResources() });
+  const models = useQuery({ queryKey: ["models", user.id], queryFn: () => api.getModels() });
   const files = useQuery({ queryKey: ["files", user.id], queryFn: () => api.getFiles() });
   const artifacts = useQuery({ queryKey: ["artifacts", user.id], queryFn: () => api.getArtifacts() });
   const onCompleted = useCallback(() => {
@@ -141,7 +142,7 @@ export function WorkspacePage({ api, user, onLogout }: { api: ResearchApi; user:
           {!agentVisible && run.approval && <div className="mobile-approval-banner"><b>{t("agent.approvalRequired", { minutes: run.approval.estimatedMinutes })}</b><button onClick={() => void decideApproval(run.approval!.id, "approved")}>{t("agent.approve")}</button><button onClick={() => void decideApproval(run.approval!.id, "rejected")}>{t("agent.reject")}</button></div>}
           <Conversation messages={messages.data ?? []} run={run} />
           {error && <div className="workspace-error" role="alert">{t(error)}</div>}
-          <Composer onSend={send} onUpload={upload} skills={skills.data ?? []} resources={resources.data ?? []} disabled={sending} />
+          <Composer onSend={send} onUpload={upload} skills={skills.data ?? []} resources={resources.data ?? []} models={models.data ?? []} disabled={sending} />
         </> : <div className="project-overview"><div className="overview-icon"><Sparkles size={30} /></div><span className="eyebrow">{t("workspace.spaceEyebrow")}</span><h1>{activeProject?.name ?? t("workspace.overviewTitle")}</h1>{sessions.data?.length ? <><p>{t("workspace.overviewDescription")}</p><button className="primary-button" onClick={() => { const item = sessions.data?.[0]; if (item) selectSession(item.project_id, item.id); }}>{t("workspace.openSession")} <ChevronRight size={17} /></button></> : <p>{t(sessions.isLoading ? "workspace.loadingSessions" : activeProject ? "workspace.noProjectSessions" : "workspace.noProjects")}</p>}</div>}
       </Panel>
       {agentVisible && <><Separator className="resize-handle" /><Panel defaultSize="340px" minSize="280px" maxSize="520px" className="agent-panel-wrapper"><AgentPanel run={sessionId ? run : emptyRun} usage={usage.data} savedArtifacts={artifacts.data ?? []} onCancel={sessionId && visibleRunId ? () => { void cancel(); } : undefined} onApproval={sessionId && visibleRunId ? (id, decision) => { void decideApproval(id, decision); } : undefined} /></Panel></>}

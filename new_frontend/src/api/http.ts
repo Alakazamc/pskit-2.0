@@ -86,6 +86,7 @@ export function createHttpApi({ baseUrl = "/api/v1", token, fetcher = fetch, onU
     getMessages: (sessionId, projectId) => request(`${chatPath(sessionId, projectId)}/messages`),
     getSkills: () => request("/skills"),
     getResources: () => request("/resources"),
+    getModels: () => request("/models"),
     getFiles: () => request("/files"),
     uploadFile: (file) => request(`/files/content?name=${encodeURIComponent(file.name)}`, {
       method: "PUT", body: file,

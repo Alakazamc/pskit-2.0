@@ -3,7 +3,7 @@ import { ArrowUp, AtSign, CircleAlert, File, FilePlus2, FileText, Globe2, Plus, 
 import { useDropzone } from "react-dropzone";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { CatalogItem, ContextRef, MessageRequest } from "../../api/types";
+import type { CatalogItem, ContextRef, MessageRequest, ModelOption } from "../../api/types";
 import { useComposerStore } from "./composerStore";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { errorTranslationKey } from "../../i18n/errors";
@@ -23,13 +23,13 @@ type UploadTile = {
 function fileKind(file: File | string): UploadTile["kind"] {
   const name = typeof file === "string" ? file : file.name;
   if (typeof file !== "string" && file.type.startsWith("image/")) return "image";
-  if (/\.(png|jpe?g|gif|webp|avif|svg)$/i.test(name)) return "image";
+  if (/\.(png|jpe?g|gif|webp)$/i.test(name)) return "image";
   if (/\.pdf$/i.test(name)) return "pdf";
   if (/\.html?$/i.test(name)) return "html";
   return "file";
 }
 
-export function Composer({ onSend, onUpload, skills, projectSkillIds = [], resources, disabled = false }: { onSend: (message: MessageRequest) => Promise<boolean>; onUpload: (file: File, onProgress: (value: number) => void) => Promise<ContextRef>; skills: CatalogItem[]; projectSkillIds?: string[]; resources: CatalogItem[]; disabled?: boolean }) {
+export function Composer({ onSend, onUpload, skills, projectSkillIds = [], resources, models = [], disabled = false }: { onSend: (message: MessageRequest) => Promise<boolean>; onUpload: (file: File, onProgress: (value: number) => void) => Promise<ContextRef>; skills: CatalogItem[]; projectSkillIds?: string[]; resources: CatalogItem[]; models?: ModelOption[]; disabled?: boolean }) {
   const { t } = useLanguage();
   const [uploadTiles, setUploadTiles] = useState<UploadTile[]>([]);
   const [uploadError, setUploadError] = useState<TranslationKey | null>(null);
@@ -40,6 +40,10 @@ export function Composer({ onSend, onUpload, skills, projectSkillIds = [], resou
   const attachments = useComposerStore((state) => state.attachments);
   const selectedSkills = useComposerStore((state) => state.skills);
   const selectedResources = useComposerStore((state) => state.resources);
+  const model = useComposerStore((state) => state.model);
+  const setModel = useComposerStore((state) => state.setModel);
+  const availableModels = Array.isArray(models) ? models : [];
+  const selectedModel = availableModels.find((option) => option.id === model) ?? availableModels[0];
   const setText = useComposerStore((state) => state.setText);
   const addSkill = useComposerStore((state) => state.addSkill);
   const addResource = useComposerStore((state) => state.addResource);
@@ -65,10 +69,22 @@ export function Composer({ onSend, onUpload, skills, projectSkillIds = [], resou
     revokePreview(tile);
     setUploadTiles((current) => current.filter((item) => item.key !== tile.key));
   };
-  const { getRootProps, getInputProps, open, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, open, isDragActive, inputRef } = useDropzone({
     noClick: true, noKeyboard: true,
     onDrop: async (files) => {
       setUploadError(null);
+      if (files.some((file) => fileKind(file) === "image") && !selectedModel?.supports_images) {
+        setUploadError("composer.imageRequiresVisionModel");
+        if (inputRef.current) inputRef.current.value = "";
+        return;
+      }
+      const currentImageCount = attachments.filter((item) => fileKind(item.name) === "image").length
+        + uploadTiles.filter((item) => item.kind === "image" && item.status === "uploading").length;
+      if (currentImageCount + files.filter((file) => fileKind(file) === "image").length > 2) {
+        setUploadError("error.tooManyImages");
+        if (inputRef.current) inputRef.current.value = "";
+        return;
+      }
       const entries = files.map((file): { file: File; tile: UploadTile } => {
         const previewUrl = fileKind(file) === "image" && typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : undefined;
         if (previewUrl) objectUrls.current.add(previewUrl);
@@ -93,9 +109,14 @@ export function Composer({ onSend, onUpload, skills, projectSkillIds = [], resou
   const selectResource = (ref: CatalogItem) => { addResource(ref); setText(content.slice(0, -1)); };
   const send = async () => {
     if (!content.trim() || disabled || uploadTiles.some((tile) => tile.status === "uploading")) return;
+    if (attachments.some((item) => fileKind(item.name) === "image") && !selectedModel?.supports_images) {
+      setUploadError("composer.imageRequiresVisionModel");
+      return;
+    }
     const refs = (items: ContextRef[]) => items.map(({ id, name }) => ({ id, name }));
-    if (await onSend({ content: content.trim(), attachments: refs(attachments), skills: refs(selectedSkills), resources: refs(selectedResources) })) {
+    if (await onSend({ content: content.trim(), model: selectedModel?.id, attachments: refs(attachments), skills: refs(selectedSkills), resources: refs(selectedResources) })) {
       clear();
+      setModel(selectedModel?.id);
       uploadTiles.forEach(revokePreview);
       setUploadTiles([]);
     }
@@ -134,6 +155,7 @@ export function Composer({ onSend, onUpload, skills, projectSkillIds = [], resou
         </div>}
       </div>
       <div className="composer-toolbar">
+        {availableModels.length > 0 && <select className="composer-model-select" aria-label={t("composer.model")} value={selectedModel?.id ?? ""} onChange={(event) => setModel(event.target.value)}>{availableModels.map((option) => <option value={option.id} key={option.id}>{option.id}{option.supports_images ? ` · ${t("composer.supportsImages")}` : ""}</option>)}</select>}
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild><button className="add-button" type="button" aria-label={t("composer.addContext")}><Plus size={19} /></button></DropdownMenu.Trigger>
           <DropdownMenu.Portal container={portalContainer}><DropdownMenu.Content className="add-menu" side="top" sideOffset={8} align="start">

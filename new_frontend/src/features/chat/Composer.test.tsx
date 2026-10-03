@@ -17,7 +17,7 @@ describe("Composer file references", () => {
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(input, new File(["notes"], "notes.txt", { type: "text/plain" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "移除 notes.txt" })).toBeInTheDocument());
-    expect(screen.getByText("文本最多 1 MiB；可提取文字的 PDF 最多 10 MiB、100 页。")).toBeInTheDocument();
+    expect(screen.getByText(/文本最多 1 MiB/)).toBeInTheDocument();
     await user.type(screen.getByLabelText("消息内容"), "Analyze this");
     await user.click(screen.getByRole("button", { name: "发送消息" }));
     expect(onSend).toHaveBeenCalledWith(expect.objectContaining({ attachments: [{ id: "file-1", name: "notes.txt" }] }));
@@ -108,5 +108,49 @@ describe("Composer file references", () => {
     await user.type(screen.getByLabelText("Message"), "/");
     expect(screen.getByText("Project Skills")).toBeInTheDocument();
     expect(screen.getByText("Global Skills")).toBeInTheDocument();
+  });
+
+  it("offers gateway models and sends the selected model with the message", async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn().mockResolvedValue(true);
+    render(<LanguageProvider><Composer onSend={onSend} onUpload={vi.fn()} skills={[]} resources={[]}
+      models={[{ id: "text-model", supports_images: false },
+        { id: "vision-model", supports_images: true }]} /></LanguageProvider>);
+    await user.selectOptions(screen.getByRole("combobox", { name: "模型" }), "vision-model");
+    await user.type(screen.getByLabelText("消息内容"), "解释一下");
+    await user.click(screen.getByRole("button", { name: "发送消息" }));
+    expect(onSend).toHaveBeenCalledWith(expect.objectContaining({ model: "vision-model" }));
+  });
+
+  it("accepts image files only when the selected model supports images", async () => {
+    const user = userEvent.setup();
+    const onUpload = vi.fn().mockResolvedValue({ id: "image-1", name: "image.png" });
+    const { container } = render(<LanguageProvider><Composer onSend={vi.fn()} onUpload={onUpload}
+      skills={[]} resources={[]} models={[{ id: "text-model", supports_images: false },
+        { id: "vision-model", supports_images: true }]} /></LanguageProvider>);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const image = new File(["\x89PNG\r\n\x1a\n"], "image.png", { type: "image/png" });
+    await user.upload(input, image);
+    expect(onUpload).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("支持图片的模型");
+    await user.selectOptions(screen.getByRole("combobox", { name: "模型" }), "vision-model");
+    await user.upload(input, image);
+    await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(1));
+  });
+
+  it("limits a message to two images before uploading", async () => {
+    const user = userEvent.setup();
+    const onUpload = vi.fn(async (file: File) => ({ id: file.name, name: file.name }));
+    const { container } = render(<LanguageProvider><Composer onSend={vi.fn()} onUpload={onUpload}
+      skills={[]} resources={[]} models={[{ id: "vision-model", supports_images: true }]} /></LanguageProvider>);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(input, [
+      new File(["image"], "one.png", { type: "image/png" }),
+      new File(["image"], "two.png", { type: "image/png" }),
+    ]);
+    await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(2));
+    await user.upload(input, new File(["image"], "three.png", { type: "image/png" }));
+    expect(onUpload).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("alert")).toHaveTextContent("最多附加 2 张图片");
   });
 });

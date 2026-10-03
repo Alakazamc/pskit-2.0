@@ -673,6 +673,10 @@ export type MessageRequest = {
      */
     content: string;
     /**
+     * Model
+     */
+    model?: string | null;
+    /**
      * Attachments
      */
     attachments?: Array<ContextRef>;
@@ -684,6 +688,22 @@ export type MessageRequest = {
      * Resources
      */
     resources?: Array<ContextRef>;
+};
+
+/**
+ * ModelOption
+ *
+ * Public metadata for one gateway-visible model alias.
+ */
+export type ModelOption = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Supports Images
+     */
+    supports_images?: boolean;
 };
 
 /**
@@ -2184,6 +2204,24 @@ export type DownloadArtifactApiV1ArtifactsArtifactIdDownloadGetResponses = {
      */
     200: unknown;
 };
+
+export type ListModelsApiV1ModelsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/models';
+};
+
+export type ListModelsApiV1ModelsGetResponses = {
+    /**
+     * Response List Models Api V1 Models Get
+     *
+     * Successful Response
+     */
+    200: Array<ModelOption>;
+};
+
+export type ListModelsApiV1ModelsGetResponse = ListModelsApiV1ModelsGetResponses[keyof ListModelsApiV1ModelsGetResponses];
 
 export type ListProjectsApiV1gGetData = {
     body?: never;
