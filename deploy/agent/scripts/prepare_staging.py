@@ -172,6 +172,7 @@ def prepare_staging(target_dir: Path, *, backend_image: str, frontend_dist: Path
             "RESEARCH_AGENT_MCP_EXECUTOR=disabled",
             "RESEARCH_AGENT_ANONYMOUS_ENABLED=false",
             "RESEARCH_AGENT_AUTH_COOKIE_SECURE=false",
+            f"RESEARCH_AGENT_ADMIN_API_KEY={_secret(32)}",
             f"RESEARCH_AGENT_DATABASE_URL={app_dsn}",
             f"SUPABASE_PUBLISHABLE_KEY={auth['SUPABASE_PUBLISHABLE_KEY']}",
             "MODEL_GATEWAY_BASE_URL=http://gateway:4000/v1",

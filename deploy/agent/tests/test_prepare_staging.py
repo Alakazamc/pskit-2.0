@@ -56,6 +56,7 @@ def test_generates_distinct_private_staging_secrets(release, monkeypatch):
     assert supabase["SITE_URL"] == "http://10.9.8.1:18132"
     assert supabase["API_EXTERNAL_URL"] == "http://10.9.8.1:18132/auth/v1"
     assert backend["RESEARCH_AGENT_DATABASE_URL"].startswith("postgresql://pskit_app:")
+    assert len(backend["RESEARCH_AGENT_ADMIN_API_KEY"]) >= 32
     assert "MODEL_GATEWAY_API_KEY" not in backend
     assert litellm["LITELLM_PUBLIC_PORT"] == "4002"
     cloud = _values(target / "cloud.env")
