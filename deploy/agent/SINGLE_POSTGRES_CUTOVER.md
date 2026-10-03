@@ -162,7 +162,7 @@ docker run --rm --network none --user 0:0 \
 | 固定版 PG17、LiteLLM gateway 健康 | 本地候选 readiness/UI 均 200 | 2026-10-03：固定后端镜像 `sha256:48b939d59fcc2f5990f5c2da4a4e0d790f22daae326b2f857082c4de4e3c73ab` 已校验；候选 4001 readiness/UI 200，旧 4000 readiness 200，均健康；旧服务未停 |
 | 新预算/虚拟 key、模型工具流 | 本地 10/2 美元预算；mock 工具流 200；旧测试 key 被拒绝 | 2026-10-03：候选团队/用户预算 10/2 美元，新虚拟 key 复验成功、旧 key 被拒绝；真实提供商模型待用户配置及调用验收 |
 | SQLite→PG→SQLite 与 Pi 清单 | 本地迁移回归通过，36 表样本与字节哈希保留 | 待 A6000 停写后核对实际计数 |
-| Run/job/journal/owned-jobs/GPU | 本地门禁与回调契约测试 | 2026-10-03 只读预检：A6000 Run completed 12/failed 1，Agent job 0，receiver journal 0；`owned-jobs`、spool 中两份历史目录及受控真 AF3 待复核 |
+| Run/job/journal/owned-jobs/GPU | 本地门禁与回调契约测试 | 2026-10-03 只读预检：A6000 Run completed 12/failed 1，Agent job 0，receiver journal 0，认证的 `owned-jobs` 返回 0；spool 中两份历史目录须停接收器后归档，受控真 AF3 待执行 |
 | 备份及隔离 | 本地角色隔离测试通过 | 2026-10-03：Supabase PG17、旧 LiteLLM PG16、新 `litellm` DB 三份 dump 可列出，SHA-256 已记录；A6000 的 0700 私有目录已收异机副本并通过 SHA-256 复核；生产 `pskit_app` 无权读 `auth.users` |
 | 公网 HTTPS、SSE、上传、旧站 | 尚未在新拓扑切换 | 待私网验收、root 脚本执行后记录 |
 
