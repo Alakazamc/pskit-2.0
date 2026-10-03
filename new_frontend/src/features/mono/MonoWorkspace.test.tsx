@@ -529,6 +529,7 @@ it("runs a PDB search and shows the returned record with a source link", async (
   await actor.click(screen.getByRole("button", { name: "检索结构" }));
   expect(await screen.findByText("1A9N")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /查看 PDB 原始记录/ })).toHaveAttribute("href", "https://www.rcsb.org/structure/1A9N");
+  expect(screen.getByRole("link", { name: /查看三维结构/ })).toHaveAttribute("href", "/tools/structure?pdb=1A9N");
   expect(invoked).toEqual([{ query: "p53" }]);
   expect(invocationKey ?? "").toMatch(/^[0-9a-f-]{36}$/);
   await actor.click(within(screen.getByRole("navigation", { name: "主导航" })).getByRole("link", { name: "工具集" }));
@@ -564,6 +565,24 @@ it("reuses a PDB invocation key when the same submission is retried after an unc
   await waitFor(() => expect(keys).toHaveLength(2));
   expect(keys[0]).toBeTruthy();
   expect(keys[1]).toBe(keys[0]);
+});
+
+it("lists the structure viewer in the toolbox even without an MCP connection", async () => {
+  loggedIn("/tools");
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
+    if (path.endsWith("/g")) return json([{ id: "project-alice", name: "Personal", description: "" }]);
+    if (path.endsWith("/c") || path.endsWith("/skills") || path.endsWith("/resources") || path.endsWith("/mcp/tools")) return json([]);
+    return json({ detail: "Not found" }, 404);
+  }));
+  render(<App />);
+  const actor = userEvent.setup();
+  const viewer = await screen.findByRole("link", { name: /结构查看器/ });
+  expect(viewer).toHaveAttribute("href", "/tools/structure");
+  await actor.click(viewer);
+  expect(await screen.findByRole("heading", { name: "结构查看器", level: 1 })).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "PDB ID" })).toBeInTheDocument();
 });
 
 it("shows an uncertain MCP outcome without inviting a blind retry", async () => {
