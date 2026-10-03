@@ -1,0 +1,30 @@
+# Use -p pskit-agent-litellm-candidate and port 4001 until cutover.
+name: pskit-agent-litellm
+
+services:
+  gateway:
+    image: ghcr.io/berriai/litellm:v1.100.3
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASSWORD:?Set LITELLM_DB_PASSWORD}@db:5432/litellm
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?Set LITELLM_SALT_KEY}
+      STORE_MODEL_IN_DB: "True"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    ports:
+      - "${LITELLM_BIND_IP:-127.0.0.1}:${LITELLM_PUBLIC_PORT:-4000}:4000"
+    networks:
+      - supabase
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/readiness', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+
+networks:
+  supabase:
+    external: true
+    name: ${SUPABASE_DOCKER_NETWORK:-pskit-agent-supabase_default}

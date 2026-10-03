@@ -1,0 +1,12 @@
+model_list: []
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+
+litellm_settings:
+  # Pi sends OpenAI-only fields such as store=false; remove fields unsupported
+  # by the selected provider while preserving supported tool-call parameters.
+  drop_params: true
+  # Created by the one-time bootstrap command in README.md.
+  max_end_user_budget_id: pskit-member-monthly
