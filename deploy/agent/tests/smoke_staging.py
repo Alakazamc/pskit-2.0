@@ -37,7 +37,15 @@ def _legacy_litellm_psql(query: str) -> str:
                     "-c", f"BEGIN READ ONLY; {query}; COMMIT"])
 
 
-def snapshot_production() -> dict[str, int]:
+def _ledger_digest(database: str, schema: str, table: str, *, legacy: bool = False) -> str:
+    safe = table.replace('"', '""')
+    query = ("SELECT md5(COALESCE(string_agg(row_to_json(t)::text, '' "
+             "ORDER BY row_to_json(t)::text), '')) "
+             f'FROM "{schema}"."{safe}" t')
+    return (_legacy_litellm_psql(query) if legacy else _production_psql(database, query))
+
+
+def snapshot_production() -> dict[str, int | str]:
     labels = _docker(["docker", "inspect", "supabase-db", "--format",
                       "{{index .Config.Labels \"com.docker.compose.project\"}}"])
     if labels != "pskit-agent-supabase":
@@ -57,6 +65,9 @@ def snapshot_production() -> dict[str, int]:
             safe = table.replace('"', '""')
             result[f"{prefix}.{table}"] = int(_production_psql(
                 database, f'SELECT count(*) FROM "{schema}"."{safe}"'))
+            if database == "litellm" and any(term in table for term in
+                                               ("Spend", "Budget", "TeamTable", "UserTable", "VerificationToken")):
+                result[f"{prefix}.{table}.digest"] = _ledger_digest(database, schema, table)
     active_tables = _legacy_litellm_psql(
         "SELECT tablename FROM pg_catalog.pg_tables "
         "WHERE schemaname='public' ORDER BY tablename")
@@ -66,6 +77,10 @@ def snapshot_production() -> dict[str, int]:
         safe = table.replace('"', '""')
         result[f"active_litellm.{table}"] = int(_legacy_litellm_psql(
             f'SELECT count(*) FROM "public"."{safe}"'))
+        if any(term in table for term in
+               ("Spend", "Budget", "TeamTable", "UserTable", "VerificationToken")):
+            result[f"active_litellm.{table}.digest"] = _ledger_digest(
+                "litellm", "public", table, legacy=True)
     return result
 
 
@@ -73,6 +88,20 @@ def _checked(response: httpx.Response, label: str, status: int = 200):
     if response.status_code != status:
         raise SmokeFailure(f"{label}: HTTP {response.status_code}")
     return response.json() if response.content else None
+
+
+def _verify_usage(usage: dict, entries: list) -> None:
+    tokens = usage.get("tokens", {})
+    gpu = usage.get("gpu", {})
+    if (tokens.get("limit") != 20_000 or gpu.get("limit") != 5 or
+            not isinstance(tokens.get("used"), int) or tokens["used"] <= 0):
+        raise SmokeFailure("Staging quota or token metering is incorrect")
+    if not any(entry.get("resource") == "tokens" and entry.get("amount", 0) > 0
+               for entry in entries):
+        raise SmokeFailure("Staging token ledger has no metered entry")
+    if not any(entry.get("resource") == "gpu_minutes" and entry.get("kind") == "job"
+               for entry in entries):
+        raise SmokeFailure("Staging GPU ledger has no simulated job")
 
 
 def _probe(app: httpx.Client, email: str, password: str) -> dict[str, object]:
@@ -139,16 +168,22 @@ def _probe(app: httpx.Client, email: str, password: str) -> dict[str, object]:
         raise SmokeFailure("Staging AF3 simulation flag is false")
     _checked(app.delete(f"/api/v1/af3/jobs/{job['id']}", headers=headers),
              "Release staging GPU reservation")
+    exhausted = app.post("/api/v1/af3/jobs", headers=headers,
+                         json={"estimated_gpu_minutes": 6})
+    if exhausted.status_code != 409 or exhausted.json().get("detail", {}).get("code") != "GPU_DAILY_QUOTA_EXCEEDED":
+        raise SmokeFailure("Staging GPU quota enforcement is missing")
     entries = _checked(app.get("/api/v1/usage/entries", headers=headers),
                        "Staging usage entries")
     if not isinstance(entries, list):
         raise SmokeFailure("Staging usage entries are unavailable")
+    final_usage = _checked(app.get("/api/v1/usage", headers=headers), "Staging final quotas")
+    _verify_usage(final_usage, entries)
     return {"simulation": True, "events": events}
 
 
 def run_smoke(
     app: httpx.Client, email: str, password: str,
-    *, production_snapshot: Callable[[], dict[str, int]] = snapshot_production,
+    *, production_snapshot: Callable[[], dict[str, int | str]] = snapshot_production,
     probe: Callable[[httpx.Client, str, str], dict[str, object]] = _probe,
 ) -> dict[str, object]:
     if str(app.base_url).rstrip("/") not in {"http://10.9.8.1:18132", "http://127.0.0.1:18090"}:

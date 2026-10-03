@@ -94,3 +94,21 @@ def test_nginx_failure_restores_existing_staging_and_leaves_production(tmp_path)
     assert stage_conf.read_text() == "old staging vhost\n"
     assert (web_root / "index.html").read_text() == "old staging release"
     assert production.read_text() == "production vhost\n"
+
+
+def test_copy_failure_after_moving_old_site_restores_it(tmp_path):
+    host, _private, production, env = _fixture(tmp_path)
+    env["FAKE_WG_PRESENT"] = "1"
+    stage_conf = host / "etc/nginx/conf.d/agent-staging-private.conf"
+    stage_conf.write_text("old staging vhost\n")
+    web_root = host / "var/www/agent-staging"
+    web_root.mkdir(parents=True)
+    (web_root / "index.html").write_text("old staging release")
+    cp = Path(env["PATH"].split(":", 1)[0]) / "cp"
+    cp.write_text("#!/bin/sh\ncase \"$2\" in */vhost.conf) case \"$3\" in *agent-staging-private.conf) exit 73;; esac;; esac\nexec /bin/cp \"$@\"\n")
+    cp.chmod(0o755)
+    result = _install(env, "--replace-staging")
+    assert result.returncode != 0
+    assert stage_conf.read_text() == "old staging vhost\n"
+    assert (web_root / "index.html").read_text() == "old staging release"
+    assert production.read_text() == "production vhost\n"

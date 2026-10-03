@@ -9,6 +9,7 @@ import os
 import shutil
 import socket
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlsplit
@@ -50,6 +51,14 @@ def _dsn_password(value: str) -> str:
     return urlsplit(value).password or ""
 
 
+def _check_dsn(value: str, *, user: str, database: str) -> None:
+    parsed = urlsplit(value)
+    if (parsed.scheme != "postgresql" or parsed.username != user or
+            not parsed.password or parsed.hostname != "db" or parsed.port != 5432 or
+            parsed.path != f"/{database}" or parsed.query or parsed.fragment):
+        raise ValueError("Staging database destination is unexpected")
+
+
 def _check_prod_secret(value: str, fingerprints: Mapping[str, str]) -> None:
     if value and _hash(value) in fingerprints.values():
         raise ValueError("Staging secret matches production")
@@ -80,7 +89,33 @@ def validate_staging(
             name = volume.get("name", "")
             if name in forbidden_volumes or not name.endswith("-staging") and not name.startswith(project + "_"):
                 raise ValueError("Unexpected staging volume")
+        allowed_networks = {
+            "supabase": {"default": NETWORK},
+            "litellm": {"supabase": NETWORK},
+            "agent": {"app": "pskit-agent-staging_app", "supabase": NETWORK},
+        }[part]
+        if {key: item.get("name") for key, item in config.get("networks", {}).items()} != allowed_networks:
+            raise ValueError("Unexpected staging network")
         for service in config.get("services", {}).values():
+            service_networks = set(service.get("networks", {}))
+            if service_networks != ({"default"} if part == "supabase" else
+                                    {"supabase"} if part == "litellm" else
+                                    {"app", "supabase"}):
+                raise ValueError("Unexpected staging service network")
+            for mount in service.get("volumes", []):
+                source = mount.get("source", "")
+                if mount.get("type") == "volume":
+                    if source not in config.get("volumes", {}):
+                        raise ValueError("Unexpected staging service volume")
+                elif mount.get("type") == "bind":
+                    path = Path(source).resolve()
+                    allowed = (part == "supabase" and path.is_relative_to(SUPABASE / "volumes")
+                               or part == "litellm" and path in {
+                                   LITELLM / "config.staging.yaml", AGENT / "tests/mock_model_gateway.py"})
+                    if not allowed or mount.get("read_only") is not True:
+                        raise ValueError("Unexpected staging bind mount")
+                else:
+                    raise ValueError("Unexpected staging mount type")
             for port in service.get("ports", []):
                 if port.get("host_ip") not in {"127.0.0.1", "10.9.8.1"}:
                     raise ValueError("Staging has a public bind")
@@ -117,12 +152,22 @@ def validate_staging(
         raise ValueError("Unexpected staging service")
     if "model-stub" not in rendered["litellm"]["services"]:
         raise ValueError("Staging model stub is missing")
+    if (rendered["agent"]["services"]["backend"].get("image") != release.get("backend_image")
+            or rendered["litellm"]["services"]["model-stub"].get("image") != release.get("backend_image")):
+        raise ValueError("Staging image differs from release manifest")
 
     supabase_env = _env(root / "supabase.env")
     litellm_env = _env(root / "litellm.env")
     backend_path = root / "backend.env"
     backend_env = _env(backend_path if backend_path.exists() else root / "backend.env.base")
     admin_env = _env(root / "admin.env")
+    _check_dsn(admin_env.get("SHARED_POSTGRES_ADMIN_DSN", ""), user="postgres", database="postgres")
+    _check_dsn(backend_env.get("RESEARCH_AGENT_DATABASE_URL", ""),
+               user="pskit_app", database="postgres")
+    _check_dsn(rendered["agent"]["services"]["backend"]["environment"].get(
+        "RESEARCH_AGENT_DATABASE_URL", ""), user="pskit_app", database="postgres")
+    _check_dsn(rendered["litellm"]["services"]["gateway"]["environment"].get(
+        "DATABASE_URL", ""), user="litellm", database="litellm")
     for value in (
         supabase_env.get("POSTGRES_PASSWORD", ""), supabase_env.get("JWT_SECRET", ""),
         supabase_env.get("SUPABASE_SECRET_KEY", ""),
@@ -136,14 +181,13 @@ def validate_staging(
             "RESEARCH_AGENT_DATABASE_URL", "")),
     ):
         _check_prod_secret(value, production_fingerprints)
-    if not backend_env.get("RESEARCH_AGENT_DATABASE_URL", "").startswith(
-        "postgresql://pskit_app:",
-    ):
-        raise ValueError("Staging backend must use restricted PostgreSQL role")
-    if not rendered["litellm"]["services"]["gateway"]["environment"].get(
-        "DATABASE_URL", "",
-    ).startswith("postgresql://litellm:"):
-        raise ValueError("Staging LiteLLM database mismatch")
+    for config in rendered.values():
+        for service in config.get("services", {}).values():
+            for value in service.get("environment", {}).values():
+                if isinstance(value, str):
+                    _check_prod_secret(value, production_fingerprints)
+                    if "://" in value:
+                        _check_prod_secret(_dsn_password(value), production_fingerprints)
 
 
 def _production_fingerprints() -> dict[str, str]:
@@ -152,10 +196,8 @@ def _production_fingerprints() -> dict[str, str]:
         if not path.exists():
             continue
         for key, value in _env(path).items():
-            if key in {"POSTGRES_PASSWORD", "JWT_SECRET", "SUPABASE_SECRET_KEY",
-                       "SUPABASE_PUBLISHABLE_KEY", "LITELLM_MASTER_KEY",
-                       "LITELLM_SALT_KEY", "PSKIT_DB_PASSWORD", "LITELLM_DB_PASSWORD",
-                       "MODEL_GATEWAY_API_KEY"}:
+            if value and any(term in key for term in
+                             ("PASSWORD", "SECRET", "KEY", "TOKEN")):
                 result[f"{path.name}:{key}"] = _hash(value)
             if key in {"RESEARCH_AGENT_DATABASE_URL", "SHARED_POSTGRES_ADMIN_DSN"}:
                 result[f"{path.name}:{key}:password"] = _hash(_dsn_password(value))
@@ -179,7 +221,13 @@ def _compose_commands(root: Path, env_file: Path) -> tuple[dict[str, list[str]],
     passthrough = {"PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG",
                    "XDG_RUNTIME_DIR"}
     agent_env = {key: value for key, value in os.environ.items() if key in passthrough}
-    agent_env.update(_env(root / "cloud.env"))
+    cloud_env = _env(root / "cloud.env")
+    allowed_cloud_keys = {"AGENT_BACKEND_IMAGE", "AGENT_WEB_IMAGE", "AGENT_BACKEND_ENV_FILE",
+                          "AGENT_AF3_PROXY_KEY_FILE", "AGENT_PUBLIC_URL",
+                          "AGENT_PG_DATA_VOLUME", "SUPABASE_DOCKER_NETWORK"}
+    if set(cloud_env) != allowed_cloud_keys:
+        raise ValueError("Unexpected Staging Compose interpolation variable")
+    agent_env.update(cloud_env)
     agent_env["AGENT_BACKEND_ENV_FILE"] = str(env_file)
     agent_env["SUPABASE_DOCKER_NETWORK"] = NETWORK
     agent_env["STAGING_MODEL_IMAGE"] = agent_env["AGENT_BACKEND_IMAGE"]
@@ -244,9 +292,15 @@ def _backend_env(root: Path, key: str) -> None:
         if destination.read_text() != content:
             raise ValueError("Existing staging backend configuration differs")
         return
-    descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(descriptor, "w") as stream:
-        stream.write(content)
+    descriptor, temporary = tempfile.mkstemp(prefix=".backend-env-", dir=root)
+    try:
+        with os.fdopen(descriptor, "w") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary, destination, follow_symlinks=False)
+    finally:
+        os.unlink(temporary)
 
 
 def run_staging(

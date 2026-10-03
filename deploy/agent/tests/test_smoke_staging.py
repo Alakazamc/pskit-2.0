@@ -43,13 +43,31 @@ def test_production_snapshot_records_unmigrated_pskit_schema_as_empty(monkeypatc
             return ""
         if database == "litellm" and "pg_catalog.pg_tables" in query:
             return "LiteLLM_SpendLogs"
+        if "md5(" in query:
+            return "candidate-digest"
         if "LiteLLM_SpendLogs" in query:
             return "0"
         raise AssertionError(query)
 
     monkeypatch.setattr(smoke_staging, "_production_psql", psql)
-    monkeypatch.setattr(smoke_staging, "_legacy_litellm_psql", lambda query: "LiteLLM_SpendLogs" if "pg_catalog.pg_tables" in query else "3")
+    monkeypatch.setattr(smoke_staging, "_legacy_litellm_psql", lambda query: (
+        "LiteLLM_SpendLogs" if "pg_catalog.pg_tables" in query else
+        "ledger-digest" if "md5(" in query else "3"))
     assert smoke_staging.snapshot_production() == {
         "auth.users": 2, "pskit.__tables__": 0, "litellm.LiteLLM_SpendLogs": 0,
+        "litellm.LiteLLM_SpendLogs.digest": "candidate-digest",
         "active_litellm.LiteLLM_SpendLogs": 3,
+        "active_litellm.LiteLLM_SpendLogs.digest": "ledger-digest",
     }
+
+
+def test_smoke_requires_seeded_quota_and_metering():
+    usage = {"tokens": {"limit": 20_000, "used": 7},
+             "gpu": {"limit": 5, "used": 0, "reserved": 0}}
+    entries = [{"resource": "tokens", "kind": "model_attempt", "amount": 7},
+               {"resource": "gpu_minutes", "kind": "job", "amount": 0}]
+    smoke_staging._verify_usage(usage, entries)
+    with pytest.raises(SmokeFailure):
+        smoke_staging._verify_usage({**usage, "tokens": {"limit": 1, "used": 0}}, entries)
+    with pytest.raises(SmokeFailure):
+        smoke_staging._verify_usage(usage, [])

@@ -33,8 +33,12 @@ def stage(tmp_path):
              "SUPABASE_PUBLISHABLE_KEY=sb_publishable_stage\n")
     _private(root / "admin.env", "SHARED_POSTGRES_ADMIN_DSN=postgresql://postgres:stage-db@db:5432/postgres\n")
     _private(root / "cloud.env", "AGENT_BACKEND_IMAGE=pskit-agent-backend:fixed\n"
+             "AGENT_WEB_IMAGE=pskit-agent-web:unused-staging\n"
              "AGENT_BACKEND_ENV_FILE=" + str(root / "backend.env") + "\n"
-             "AGENT_PG_DATA_VOLUME=pskit-agent-staging_agent_data\n")
+             "AGENT_AF3_PROXY_KEY_FILE=" + str(root / "proxy.env") + "\n"
+             "AGENT_PUBLIC_URL=http://10.9.8.1:18132\n"
+             "AGENT_PG_DATA_VOLUME=pskit-agent-staging_agent_data\n"
+             "SUPABASE_DOCKER_NETWORK=pskit-agent-supabase-staging_default\n")
     _private(root / "proxy.env", "RESEARCH_AGENT_COMPUTE_CALLBACK_KEY=stage-callback\n")
     _private(root / "seed.env", "STAGING_USER_EMAIL=staging-user@example.invalid\n")
     _private(root / "manifest.json", json.dumps({
@@ -52,7 +56,8 @@ def rendered():
              "imgproxy", "meta", "functions", "db", "supavisor"]
     supabase = {
         "name": "pskit-agent-supabase-staging",
-        "services": {name: {"container_name": f"{name}-staging"} for name in names},
+        "services": {name: {"container_name": f"{name}-staging", "networks": {"default": None}}
+                     for name in names},
         "networks": {"default": {"name": STAGE_NETWORK}},
         "volumes": {
             "agent-db-data": {"name": "pskit-agent-db-data-staging"},
@@ -65,19 +70,23 @@ def rendered():
     litellm = {
         "name": "pskit-agent-litellm-staging",
         "services": {"gateway": {"ports": [{"host_ip": "10.9.8.1", "published": "4002"}],
+                                 "networks": {"supabase": None},
                                  "environment": {"DATABASE_URL": "postgresql://litellm:stage-pass@db:5432/litellm"}},
-                     "model-stub": {}},
+                     "model-stub": {"image": "pskit-agent-backend:fixed", "networks": {"supabase": None}}},
         "networks": {"supabase": {"name": STAGE_NETWORK}}, "volumes": {},
     }
     agent = {
         "name": "pskit-agent-staging",
         "services": {"backend": {
+            "image": "pskit-agent-backend:fixed",
+            "networks": {"app": None, "supabase": None},
             "ports": [{"host_ip": "127.0.0.1", "published": "18090"}],
             "environment": {"RESEARCH_AGENT_AF3_EXECUTOR": "mock",
                             "RESEARCH_AGENT_DATABASE_URL": "postgresql://pskit_app:stage-pass@db:5432/postgres",
                             "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_stage"},
         }},
-        "networks": {"supabase": {"name": STAGE_NETWORK}},
+        "networks": {"app": {"name": "pskit-agent-staging_app"},
+                     "supabase": {"name": STAGE_NETWORK}},
         "volumes": {"agent_data": {"name": "pskit-agent-staging_agent_data"}},
     }
     return {"supabase": supabase, "litellm": litellm, "agent": agent}
@@ -119,6 +128,53 @@ def test_preflight_rejects_same_production_secret_without_printing_it(stage, ren
     with pytest.raises(ValueError):
         staging.validate_staging(stage / "manifest.json", rendered, _production())
     assert "prod-db" not in "".join(capsys.readouterr())
+
+
+@pytest.mark.parametrize("change", [
+    "extra_network", "effective_secret", "remote_backend_db", "remote_litellm_db",
+    "production_bind", "unlocked_image",
+])
+def test_preflight_rejects_effective_production_state(stage, rendered, change):
+    if change == "extra_network":
+        rendered["agent"]["networks"]["production"] = {"name": "pskit-agent-supabase_default"}
+        rendered["agent"]["services"]["backend"]["networks"] = {"supabase": None, "production": None}
+    elif change == "effective_secret":
+        rendered["supabase"]["services"]["auth"]["environment"] = {"GOTRUE_JWT_SECRET": "prod-jwt"}
+    elif change == "remote_backend_db":
+        rendered["agent"]["services"]["backend"]["environment"]["RESEARCH_AGENT_DATABASE_URL"] = (
+            "postgresql://pskit_app:stage-pass@production-db:5432/postgres")
+    elif change == "remote_litellm_db":
+        rendered["litellm"]["services"]["gateway"]["environment"]["DATABASE_URL"] = (
+            "postgresql://litellm:stage-pass@production-db:5432/litellm")
+    elif change == "production_bind":
+        rendered["agent"]["services"]["backend"]["volumes"] = [{
+            "type": "bind", "source": "/home/prod/data", "target": "/data", "read_only": False}]
+    else:
+        rendered["agent"]["services"]["backend"]["image"] = "pskit-agent-backend:other"
+    with pytest.raises(ValueError):
+        staging.validate_staging(stage / "manifest.json", rendered, _production())
+
+
+def test_compose_rejects_cloud_env_production_override(stage):
+    with (stage / "cloud.env").open("a") as stream:
+        stream.write("POSTGRES_PASSWORD=prod-db\n")
+    with pytest.raises(ValueError):
+        staging._compose_commands(stage, stage / "backend.env.base")
+
+
+def test_backend_env_interrupted_publish_can_retry(stage, monkeypatch):
+    original_link = staging.os.link
+
+    def interrupted(*args, **kwargs):
+        raise OSError("interrupted")
+
+    monkeypatch.setattr(staging.os, "link", interrupted)
+    with pytest.raises(OSError):
+        staging._backend_env(stage, "sk-test")
+    assert not (stage / "backend.env").exists()
+    monkeypatch.setattr(staging.os, "link", original_link)
+    staging._backend_env(stage, "sk-test")
+    assert (stage / "backend.env").read_text().endswith("MODEL_GATEWAY_API_KEY=sk-test\n")
 
 
 def test_compose_never_inherits_production_secrets_from_shell(stage, monkeypatch):

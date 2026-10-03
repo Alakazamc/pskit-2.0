@@ -68,9 +68,27 @@ fi
 install -d -m 0755 "$conf_dir" "$web_parent"
 temp=$(mktemp -d "$web_parent/.agent-staging-install.XXXXXX")
 prior_conf=false
-prior_web=false
-cleanup() { rm -rf -- "$temp"; }
-trap cleanup EXIT
+mutating=false
+committed=false
+on_exit() {
+  local status=$1
+  if [[ $mutating == true && $committed != true ]]; then
+    set +e
+    if [[ $prior_conf == true ]]; then
+      cp -- "$temp/old-vhost.conf" "$target_conf"
+    else
+      rm -f -- "$target_conf"
+    fi
+    rm -rf -- "$web_root"
+    if [[ -e $temp/old-site ]]; then
+      mv -- "$temp/old-site" "$web_root"
+    fi
+    nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1
+  fi
+  rm -rf -- "$temp"
+  return "$status"
+}
+trap 'on_exit $?' EXIT
 cp -a -- "$dist_dir/." "$temp/site/"
 chmod -R a+rX "$temp/site"
 if [[ -n ${STAGING_TEST_ROOT:-} ]]; then
@@ -84,35 +102,21 @@ if [[ -e $target_conf ]]; then
   cp -a -- "$target_conf" "$temp/old-vhost.conf"
   prior_conf=true
 fi
+mutating=true
 if [[ -e $web_root ]]; then
   mv -- "$web_root" "$temp/old-site"
-  prior_web=true
 fi
 mv -- "$temp/site" "$web_root"
 cp -- "$temp/vhost.conf" "$target_conf"
 chmod 0644 "$target_conf"
 
-restore_staging() {
-  if [[ $prior_conf == true ]]; then
-    cp -- "$temp/old-vhost.conf" "$target_conf"
-  else
-    rm -f -- "$target_conf"
-  fi
-  rm -rf -- "$web_root"
-  if [[ $prior_web == true ]]; then
-    mv -- "$temp/old-site" "$web_root"
-  fi
-  nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1 || true
-}
-
 if ! nginx -t >/dev/null 2>&1; then
-  restore_staging
   echo "Nginx validation failed; previous Staging vhost restored" >&2
   exit 2
 fi
 if ! systemctl reload nginx >/dev/null 2>&1; then
-  restore_staging
   echo "Nginx reload failed; previous Staging vhost restored" >&2
   exit 2
 fi
+committed=true
 echo "WireGuard Staging site now serves the locked React dist"
