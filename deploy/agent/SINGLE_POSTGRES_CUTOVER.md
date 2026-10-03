@@ -49,6 +49,9 @@ A6000 的 `pskit-agent-a6000_agent_data` 是**最新 Agent 数据源**；阿里�
 
 ```bash
 cd /home/ecs-user/pskit-agent-cloud-20261002
+python3 deploy/agent/scripts/prepare_single_postgres_candidate.py "$PWD"
+test "$(stat -c %a deploy/agent/.env.stack-admin)" = 600
+test "$(stat -c %a infra/litellm/.env.shared)" = 600
 docker run --rm --network pskit-agent-supabase_default \
   --env-file deploy/agent/.env.stack-admin --read-only --cap-drop ALL \
   -v "$PWD/deploy/agent/scripts/provision_shared_postgres.py":/app/provision_shared_postgres.py:ro \
