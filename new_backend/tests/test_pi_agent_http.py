@@ -467,8 +467,11 @@ async def test_internal_model_preflight_requires_run_token_and_caps_each_request
             assert denied.json()["detail"]["code"] == "TOKEN_QUOTA_EXCEEDED"
 
 
+@pytest.mark.parametrize("gateway_kind", ["generic", "litellm"])
 @pytest.mark.asyncio
-async def test_model_proxy_keeps_upstream_key_server_side_and_releases_rejected_call(tmp_path):
+async def test_model_proxy_keeps_upstream_key_server_side_and_releases_rejected_call(
+    tmp_path, gateway_kind,
+):
     class BlockingPi:
         def __init__(self):
             self.started = asyncio.Event()
@@ -490,7 +493,8 @@ async def test_model_proxy_keeps_upstream_key_server_side_and_releases_rejected_
     runner = BlockingPi()
     app = create_app(Settings(agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3"),
                               model_gateway_base_url="https://gateway.example/v1",
-                              model_gateway_model="research-model"), pi_runner=runner)
+                              model_gateway_model="research-model",
+                              model_gateway_kind=gateway_kind), pi_runner=runner)
     app.state.agent_service.model_gateway_api_key = "server-secret"
     async with httpx.AsyncClient(transport=httpx.MockTransport(upstream)) as gateway_client:
         app.state.model_gateway_http_client = gateway_client
@@ -506,14 +510,22 @@ async def test_model_proxy_keeps_upstream_key_server_side_and_releases_rejected_
                 app.state.conversations.set_token_limit(owner, 1000)
                 token = app.state.agent_service.tool_token(run_id)
                 body = {"model": "research-model", "messages": [{"role": "user", "content": "Hi"}],
-                        "stream": True, "max_completion_tokens": 800}
+                        "stream": True, "max_completion_tokens": 800, "user": "forged-user"}
                 result = await client.post("/internal/model/v1/chat/completions",
-                                           headers={"Authorization": f"Bearer {run_id}.{token}"},
+                                           headers={"Authorization": f"Bearer {run_id}.{token}",
+                                                    "x-litellm-end-user-id": "forged-header"},
                                            json=body)
                 assert result.status_code == 429
                 assert received[0].url == "https://gateway.example/v1/chat/completions"
                 assert received[0].headers["authorization"] == "Bearer server-secret"
-                assert json.loads(received[0].content)["max_completion_tokens"] < 800
+                forwarded = json.loads(received[0].content)
+                assert forwarded["max_completion_tokens"] < 800
+                if gateway_kind == "litellm":
+                    assert forwarded["user"] == owner
+                    assert received[0].headers["x-litellm-end-user-id"] == owner
+                else:
+                    assert "user" not in forwarded
+                    assert "x-litellm-end-user-id" not in received[0].headers
                 assert (await client.get("/api/v1/usage", headers=headers)).json()["tokens"]["used"] < 100
                 streamed = await client.post("/internal/model/v1/chat/completions",
                                              headers={"Authorization": f"Bearer {run_id}.{token}"},

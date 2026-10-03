@@ -156,6 +156,16 @@ async def proxy_model_call(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail={"code": "RUN_NOT_ACTIVE"}) from exc
     payload[field] = maximum
+    # The caller can control this body and its headers, so discard any claimed identity.
+    payload.pop("user", None)
+    headers = {
+        "Authorization": f"Bearer {service.model_gateway_api_key}",
+        "Accept": "text/event-stream" if payload.get("stream") else "application/json",
+    }
+    if settings.model_gateway_kind == "litellm":
+        # LiteLLM tracks end-user spend from this header; the run owner is server-trusted.
+        payload["user"] = owner
+        headers["x-litellm-end-user-id"] = owner
     url = f"{base_url.rstrip('/').removesuffix('/v1')}/v1/chat/completions"
     client = getattr(request.app.state, "model_gateway_http_client", None)
     owned_client = client is None
@@ -164,8 +174,7 @@ async def proxy_model_call(
     try:
         upstream = await client.send(client.build_request(
             "POST", url, json=payload,
-            headers={"Authorization": f"Bearer {service.model_gateway_api_key}",
-                     "Accept": "text/event-stream" if payload.get("stream") else "application/json"},
+            headers=headers,
         ), stream=True)
     except httpx.HTTPError as exc:
         if owned_client:

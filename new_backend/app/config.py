@@ -62,6 +62,7 @@ class Settings:
     model_gateway_base_url: str = ""
     model_gateway_model: str = ""
     model_gateway_api_key: str = ""
+    model_gateway_kind: Literal["generic", "litellm"] = "generic"
     user_token_limits_json: str = "{}"
     admin_api_key: str = ""
     anonymous_enabled: bool | None = None
@@ -136,6 +137,7 @@ class Settings:
             model_gateway_base_url=os.getenv("MODEL_GATEWAY_BASE_URL", ""),
             model_gateway_model=os.getenv("MODEL_GATEWAY_MODEL", ""),
             model_gateway_api_key=os.getenv("MODEL_GATEWAY_API_KEY", ""),
+            model_gateway_kind=os.getenv("MODEL_GATEWAY_KIND", "generic"),
             user_token_limits_json=os.getenv("RESEARCH_AGENT_USER_TOKEN_LIMITS_JSON", "{}"),
             admin_api_key=os.getenv("RESEARCH_AGENT_ADMIN_API_KEY", ""),
             anonymous_enabled=(None if "RESEARCH_AGENT_ANONYMOUS_ENABLED" not in os.environ
@@ -168,6 +170,8 @@ class Settings:
         """
         if self.mode != "live":
             raise ValueError("Live configuration requested in mock mode")
+        if self.model_gateway_kind not in {"generic", "litellm"}:
+            raise ValueError("MODEL_GATEWAY_KIND must be generic or litellm")
         if not self.database_url:
             raise ValueError("RESEARCH_AGENT_DATABASE_URL is required in live mode")
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", self.database_schema):
