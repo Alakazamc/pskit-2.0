@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import json
+import re
 import subprocess
 
 
@@ -30,6 +31,14 @@ def test_split_public_routes_and_private_denials():
     assert "18085" not in config
     assert "pskit.bioailab.net" not in config
     assert "18185" not in config
+
+
+def test_email_confirmation_link_reaches_auth_without_opening_other_auth_routes():
+    config = (ROOT / "deploy/agent/host-nginx-agent-split.conf").read_text()
+    verify = re.search(r"location = /auth/v1/verify \{(.*?)\n    \}", config, re.S)
+    assert verify is not None
+    assert "proxy_pass http://127.0.0.1:18130;" in verify.group(1)
+    assert "location ^~ /auth/v1/ { return 404; }" in config
 
 
 def test_supabase_relay_is_wireguard_only():
