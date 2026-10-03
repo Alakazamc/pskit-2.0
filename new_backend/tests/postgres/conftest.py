@@ -1,0 +1,23 @@
+"""Fixtures for an isolated PostgreSQL schema per integration test."""
+
+import os
+import uuid
+
+import pytest
+
+
+@pytest.fixture
+def pg_schema() -> tuple[str, str]:
+    """Yield a unique schema and remove it after the test."""
+    dsn = os.environ.get("TEST_POSTGRES_DSN")
+    if not dsn:
+        pytest.skip("Set TEST_POSTGRES_DSN to run PostgreSQL integration tests")
+    import psycopg
+    from psycopg import sql
+
+    schema = f"pskit_test_{uuid.uuid4().hex}"
+    try:
+        yield dsn, schema
+    finally:
+        with psycopg.connect(dsn, autocommit=True) as connection:
+            connection.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema)))

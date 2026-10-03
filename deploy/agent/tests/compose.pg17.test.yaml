@@ -1,0 +1,13 @@
+services:
+  db:
+    image: supabase/postgres:17.6.1.136
+    environment:
+      POSTGRES_PASSWORD: pskit-test-only
+      POSTGRES_DB: postgres
+    ports:
+      - "127.0.0.1:15433:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
