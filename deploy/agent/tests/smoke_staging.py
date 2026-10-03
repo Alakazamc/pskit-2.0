@@ -31,6 +31,12 @@ def _production_psql(database: str, query: str) -> str:
                     "-c", f"BEGIN READ ONLY; {query}; COMMIT"])
 
 
+def _legacy_litellm_psql(query: str) -> str:
+    return _docker(["docker", "exec", "pskit-agent-litellm-db-1", "psql", "-XqAt", "-v",
+                    "ON_ERROR_STOP=1", "-U", "litellm", "-d", "litellm",
+                    "-c", f"BEGIN READ ONLY; {query}; COMMIT"])
+
+
 def snapshot_production() -> dict[str, int]:
     labels = _docker(["docker", "inspect", "supabase-db", "--format",
                       "{{index .Config.Labels \"com.docker.compose.project\"}}"])
@@ -43,11 +49,23 @@ def snapshot_production() -> dict[str, int]:
             "SELECT tablename FROM pg_catalog.pg_tables "
             f"WHERE schemaname='{schema}' ORDER BY tablename")
         if not table_list:
-            raise SmokeFailure("Production schema is not ready for staging smoke")
+            if schema == "pskit":
+                result["pskit.__tables__"] = 0
+                continue
+            raise SmokeFailure("Production LiteLLM schema is not ready for staging smoke")
         for table in table_list.splitlines():
             safe = table.replace('"', '""')
             result[f"{prefix}.{table}"] = int(_production_psql(
                 database, f'SELECT count(*) FROM "{schema}"."{safe}"'))
+    active_tables = _legacy_litellm_psql(
+        "SELECT tablename FROM pg_catalog.pg_tables "
+        "WHERE schemaname='public' ORDER BY tablename")
+    if not active_tables:
+        raise SmokeFailure("Active production LiteLLM schema is unavailable")
+    for table in active_tables.splitlines():
+        safe = table.replace('"', '""')
+        result[f"active_litellm.{table}"] = int(_legacy_litellm_psql(
+            f'SELECT count(*) FROM "public"."{safe}"'))
     return result
 
 

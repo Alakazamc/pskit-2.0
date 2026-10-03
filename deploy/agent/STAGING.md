@@ -21,8 +21,21 @@ Staging 是阿里云上按需启动的预发布环境。它有单独的 Supabase
 ```bash
 export STAGING_CONFIG_DIR=/home/ecs-user/pskit-agent-staging-private
 bash deploy/agent/staging.sh up
-python deploy/agent/scripts/seed_staging.py --config-dir "$STAGING_CONFIG_DIR"
-python deploy/agent/tests/smoke_staging.py --config-dir "$STAGING_CONFIG_DIR" --private-api
+docker run --rm --network host --read-only --cap-drop ALL \
+  --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
+  -e PYTHONPATH=/release \
+  -v "$PWD:/release:ro" -v "$STAGING_CONFIG_DIR:/staging:ro" \
+  --entrypoint python pskit-agent-backend:<固定发布标签> \
+  /release/deploy/agent/scripts/seed_staging.py --config-dir /staging
+docker run --rm --network host --read-only --cap-drop ALL \
+  --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
+  --group-add "$(stat -c %g /var/run/docker.sock)" \
+  -e PYTHONPATH=/release \
+  -v "$PWD:/release:ro" -v "$STAGING_CONFIG_DIR:/staging:ro" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /usr/bin/docker:/usr/bin/docker:ro \
+  --entrypoint python pskit-agent-backend:<固定发布标签> \
+  /release/deploy/agent/tests/smoke_staging.py --config-dir /staging --private-api
 ```
 
 `up` 先做静态隔离预检，启动 Staging Supabase 并创建单独 `litellm` 逻辑库和 `pskit` schema，再启动 LiteLLM/模型替身、签发虚拟 key，最后启动 Agent。失败时保留 Staging 卷和日志；不会调用生产 `stack.sh`。首轮 seed 通过 Supabase 管理接口创建已确认邮箱的 `staging-user@example.invalid`，再次运行只复用已有项目、会话和文件。测试密码在 `seed.env`，不要贴到聊天或终端日志。
@@ -36,13 +49,9 @@ STAGING_CONFIG_DIR=/home/ecs-user/pskit-agent-staging-private \
 
 此脚本只安装 `/etc/nginx/conf.d/agent-staging-private.conf` 与 `/var/www/agent-staging`，校验 manifest 中的 `dist` 哈希和 Nginx 语法。已有 Staging 入口时，更新同一入口需显式加 `--replace-staging`；验证或 reload 失败会恢复之前的 Staging 配置。生产 `agent.bioailab.net.conf` 不会被改写。
 
-然后从可访问 WireGuard 的浏览器打开 `http://10.9.8.1:18132/login`，并运行：
+然后从可访问 WireGuard 的浏览器打开 `http://10.9.8.1:18132/login`，并重复上面的 smoke 容器命令，删去末尾的 `--private-api`，以验证私网 Nginx 入口。
 
-```bash
-python deploy/agent/tests/smoke_staging.py --config-dir "$STAGING_CONFIG_DIR"
-```
-
-验收包括登录、文件上传、Agent SSE、Token/GPU 额度、AF3 `simulation=true` 和私有路径拒绝。脚本在前后只读采集生产 `auth.users`、`pskit` 表、`litellm` 表计数，任何变化都报错。它不访问 `10.9.8.2`，不提交真实 AF3 任务。
+验收包括登录、文件上传、Agent SSE、Token/GPU 额度、AF3 `simulation=true` 和私有路径拒绝。脚本在前后只读采集生产 `auth.users`、`pskit` 表、候选单库及当前运行中的 LiteLLM 表计数，任何变化都报错。它不访问 `10.9.8.2`，不提交真实 AF3 任务。阿里云宿主机不要求安装 `httpx`；上述验收命令使用固定后端镜像，Docker socket 只供读取生产容器计数，运行结束即卸载。
 
 ## 日常发布与停止
 
