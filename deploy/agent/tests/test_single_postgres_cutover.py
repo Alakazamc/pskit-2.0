@@ -26,22 +26,24 @@ def sqlite_sources(tmp_path):
         db.execute("INSERT INTO agent_jobs VALUES ('job-done', 'completed')")
     with sqlite3.connect(journal) as db:
         db.execute("CREATE TABLE jobs (id text)")
-    return agent, journal
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    return agent, journal, jobs_dir
 
 
 def test_runbook_blocks_cutover_with_active_job_or_unacked_journal(sqlite_sources):
-    agent, journal = sqlite_sources
-    assert check_quiescence(agent, journal) == (0, 0, 0)
+    agent, journal, jobs_dir = sqlite_sources
+    assert check_quiescence(agent, journal, jobs_dir) == (0, 0, 0, 0)
     with sqlite3.connect(agent) as db:
         db.execute("INSERT INTO agent_jobs VALUES ('job-running', 'running')")
     with pytest.raises(RuntimeError, match="active|unfinished"):
-        check_quiescence(agent, journal)
+        check_quiescence(agent, journal, jobs_dir)
     with sqlite3.connect(agent) as db:
         db.execute("DELETE FROM agent_jobs WHERE id='job-running'")
     with sqlite3.connect(journal) as db:
         db.execute("INSERT INTO jobs VALUES ('job-unacked')")
     with pytest.raises(RuntimeError, match="journal|unacked"):
-        check_quiescence(agent, journal)
+        check_quiescence(agent, journal, jobs_dir)
     text = RUNBOOK.read_text()
     assert "check_single_postgres_quiescence.py" in text
     assert "owned-jobs" in text and "spool" in text
@@ -49,23 +51,30 @@ def test_runbook_blocks_cutover_with_active_job_or_unacked_journal(sqlite_source
 
 
 def test_missing_receiver_journal_fails_closed(sqlite_sources):
-    agent, journal = sqlite_sources
+    agent, journal, jobs_dir = sqlite_sources
     journal.unlink()
     with pytest.raises((ValueError, FileNotFoundError)):
-        check_quiescence(agent, journal)
+        check_quiescence(agent, journal, jobs_dir)
 
 
 def test_unknown_or_null_run_status_blocks_cutover(sqlite_sources):
-    agent, journal = sqlite_sources
+    agent, journal, jobs_dir = sqlite_sources
     with sqlite3.connect(agent) as db:
         db.execute("INSERT INTO agent_runs VALUES ('run-unknown', NULL)")
     with pytest.raises(RuntimeError, match="active"):
-        check_quiescence(agent, journal)
+        check_quiescence(agent, journal, jobs_dir)
     with sqlite3.connect(agent) as db:
         db.execute("DELETE FROM agent_runs WHERE id='run-unknown'")
         db.execute("INSERT INTO agent_jobs VALUES ('job-unknown', NULL)")
     with pytest.raises(RuntimeError, match="active"):
-        check_quiescence(agent, journal)
+        check_quiescence(agent, journal, jobs_dir)
+
+
+def test_orphaned_spool_directory_blocks_cutover(sqlite_sources):
+    agent, journal, jobs_dir = sqlite_sources
+    (jobs_dir / "old-job").mkdir()
+    with pytest.raises(RuntimeError, match="spool"):
+        check_quiescence(agent, journal, jobs_dir)
 
 
 def test_runbook_requires_reverse_export_after_new_write():

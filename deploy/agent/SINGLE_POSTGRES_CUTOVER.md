@@ -2,7 +2,7 @@
 
 本手册适用于阿里云 `pskit-agent-supabase` 的 PostgreSQL 17、阿里云 Python/Pi、阿里云 LiteLLM，以及 A6000 上唯一的 AF3 接收器。前端由阿里云宿主机 Nginx 提供 `dist`。旧 `pskit.bioailab.net` 不参与切换。
 
-**当前状态：本文件是待执行手册。下面的本地替身记录不能当作生产验收。** 在候选模型的真实提供商 API key、受控 AF3 任务和阿里云 root 操作完成前，不停 A6000 生产写入，也不切公网 Nginx。任何阶段只有一个 Agent 后端可以写业务数据。所有命令必须在注明的主机运行；不要执行 `down -v`，不要删除旧 PG16 卷、A6000 Agent 卷或原始快照。
+**当前状态：候选阶段已执行，正式切换待验收。下面的本地替身记录不能当作生产验收。** 在候选模型的真实提供商 API key、受控 AF3 任务和阿里云 root 操作完成前，不停 A6000 生产写入，也不切公网 Nginx。任何阶段只有一个 Agent 后端可以写业务数据。所有命令必须在注明的主机运行；不要执行 `down -v`，不要删除旧 PG16 卷、A6000 Agent 卷或原始快照。
 
 ## 0. 路径、凭据和容量
 
@@ -90,12 +90,12 @@ docker run --rm --network none --user 0:0 \
   -v /data/jhli/pskit-af3-receiver-test-20261002/spool:/receiver:ro \
   -v "$PWD/scripts/check_single_postgres_quiescence.py":/gate.py:ro \
   pskit-agent-backend:litellm-20261003 \
-  python /gate.py /snapshot/agent.sqlite3 /receiver/journal.sqlite3
+  python /gate.py /snapshot/agent.sqlite3 /receiver/journal.sqlite3 /receiver/jobs
 tar -C backups -czf backups/a6000-stopped.tar.gz a6000-stopped
 (cd backups && sha256sum a6000-stopped.tar.gz > a6000-stopped.tar.gz.sha256)
 ```
 
-门禁必须输出 `runs=0, jobs=0, journal=0`。还须以接收器的回调密钥发只读 `owned-jobs` 请求确认 0，确认 compute 容器无任务、spool 无未 ACK 结果；脚本无法替代这三个外部检查。若门禁失败，保持 A6000 写入冻结，查明状态后重新快照，绝不进入导入。传输归档到阿里云的 0700 私有目录，执行 `sha256sum -c a6000-stopped.tar.gz.sha256` 后解压，检查清单及 `agent.sqlite3` 完整性。源卷和原始包保留。
+门禁必须输出 `runs=0, jobs=0, journal=0, spool=0`。还须以接收器的回调密钥发只读 `owned-jobs` 请求确认 0，并确认 compute 容器无任务；脚本无法替代这两个外部检查。2026-10-03 预检发现 spool `jobs/` 内有两个历史 `outcome.json` 目录，虽然 journal 和 Agent job 表都是 0，**此时门禁必失败**。停止接收器后先核对它们的任务 ID 在旧后端不存在、没有未 ACK 回调；将目录连同哈希和接收器日志归档到 0700 私有目录，绝不直接删除或重放，再重新运行门禁。若仍失败，保持 A6000 写入冻结，查明状态后重新快照，绝不进入导入。传输归档到阿里云的 0700 私有目录，执行 `sha256sum -c a6000-stopped.tar.gz.sha256` 后解压，检查清单及 `agent.sqlite3` 完整性。源卷和原始包保留。
 
 ## 4. 导入 `pskit`、切网关、私网验收
 
@@ -159,10 +159,11 @@ docker run --rm --network none --user 0:0 \
 
 | 检查项 | 本地替身结果 | 阿里云/A6000 实际结果 |
 | --- | --- | --- |
-| 固定版 PG17、LiteLLM gateway 健康 | 本地候选 readiness/UI 均 200 | 待执行 |
-| 新预算/虚拟 key、模型工具流 | 本地 10/2 美元预算；mock 工具流 200；旧测试 key 被拒绝 | 待用户在候选 UI 配置真实提供商 |
+| 固定版 PG17、LiteLLM gateway 健康 | 本地候选 readiness/UI 均 200 | 2026-10-03：固定后端镜像 `sha256:48b939d59fcc2f5990f5c2da4a4e0d790f22daae326b2f857082c4de4e3c73ab` 已校验；候选 4001 readiness/UI 200，旧 4000 readiness 200，均健康；旧服务未停 |
+| 新预算/虚拟 key、模型工具流 | 本地 10/2 美元预算；mock 工具流 200；旧测试 key 被拒绝 | 2026-10-03：候选团队/用户预算 10/2 美元，新虚拟 key 复验成功、旧 key 被拒绝；真实提供商模型待用户配置及调用验收 |
 | SQLite→PG→SQLite 与 Pi 清单 | 本地迁移回归通过，36 表样本与字节哈希保留 | 待 A6000 停写后核对实际计数 |
-| Run/job/journal/owned-jobs/GPU | 本地门禁与回调契约测试 | 待生产读取与受控真 AF3 |
+| Run/job/journal/owned-jobs/GPU | 本地门禁与回调契约测试 | 2026-10-03 只读预检：A6000 Run completed 12/failed 1，Agent job 0，receiver journal 0；`owned-jobs`、spool 中两份历史目录及受控真 AF3 待复核 |
+| 备份及隔离 | 本地角色隔离测试通过 | 2026-10-03：Supabase PG17、旧 LiteLLM PG16、新 `litellm` DB 三份 dump 可列出，SHA-256 已记录；A6000 的 0700 私有目录已收异机副本并通过 SHA-256 复核；生产 `pskit_app` 无权读 `auth.users` |
 | 公网 HTTPS、SSE、上传、旧站 | 尚未在新拓扑切换 | 待私网验收、root 脚本执行后记录 |
 
 记录时间、镜像 digest、源/目标卷名、快照 SHA-256、匿名化行数与状态、HTTP 状态、真 AF3 job ID 和 ACK 状态。不得记录密码、API key、回调密钥、文件内容或聊天文本。
