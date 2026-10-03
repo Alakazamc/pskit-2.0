@@ -123,6 +123,9 @@ class PostgresStatements:
 
     def execute(self, statement: str, parameters: tuple = ()) -> QueryResult:
         """Run one repository statement and detach its result from the pool."""
+        if statement.strip().upper() == "BEGIN IMMEDIATE":
+            self.begin_immediate()
+            return QueryResult([], 0)
         statement = re.sub(r"\browid\b", "ordinal", statement)
         statement = statement.replace("json_extract(e.payload, '$.type')", "(e.payload::jsonb ->> 'type')")
         statement = statement.replace("json_extract(payload, '$.type')", "(payload::jsonb ->> 'type')")
@@ -145,3 +148,43 @@ class PostgresStatements:
         with self:
             for arguments in parameters:
                 self.execute(statement, arguments)
+
+    def begin_immediate(self) -> None:
+        """Start a manually committed transaction with a shared admission lock."""
+        if getattr(self._local, "stack", ()):
+            raise RuntimeError("A transaction is already active")
+        manager = self.database.connection()
+        connection = manager.__enter__()
+        self._local.stack = [(manager, connection)]
+        try:
+            connection.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended('pskit-run-admission', 0))"
+            )
+        except BaseException as error:
+            self._local.stack.pop()
+            manager.__exit__(type(error), error, error.__traceback__)
+            raise
+
+    def commit(self) -> None:
+        """Finish a manual transaction, if one is open."""
+        stack = getattr(self._local, "stack", ())
+        if stack:
+            manager, connection = stack.pop()
+            try:
+                connection.commit()
+            finally:
+                manager.__exit__(None, None, None)
+
+    def rollback(self) -> None:
+        """Discard a manual transaction, if one is open."""
+        stack = getattr(self._local, "stack", ())
+        if stack:
+            manager, connection = stack.pop()
+            try:
+                connection.rollback()
+            finally:
+                manager.__exit__(None, None, None)
+
+    def close(self) -> None:
+        """Leave the externally owned pool open."""
+        self.rollback()

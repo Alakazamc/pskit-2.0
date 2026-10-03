@@ -46,6 +46,7 @@ class WorkspaceMixin:
         """
         project = Project(id=new_project_id(name), name=name, description=description, icon=icon)
         with self.db:
+            self._require_not_deleting(user_id)
             self.db.execute(
                 "INSERT INTO workspace_projects (id,user_id,name,description,archived_at,icon) VALUES (?,?,?,?,NULL,?)",
                 (project.id, user_id, name, description, icon),
@@ -67,6 +68,7 @@ class WorkspaceMixin:
         if project is None:
             return None
         with self.db:
+            self._require_not_deleting(user_id)
             self.db.execute(
                 "INSERT INTO workspace_projects (id,user_id,name,description,archived_at,icon) VALUES (?,?,?,?,NULL,?) "
                 "ON CONFLICT(id) DO UPDATE SET name=excluded.name",
@@ -89,6 +91,7 @@ class WorkspaceMixin:
         if project is None:
             return None
         with self.db:
+            self._require_not_deleting(user_id)
             self.db.execute(
                 "INSERT INTO workspace_projects (id,user_id,name,description,archived_at,icon) VALUES (?,?,?,?,NULL,?) "
                 "ON CONFLICT(id) DO UPDATE SET icon=excluded.icon",
@@ -110,6 +113,7 @@ class WorkspaceMixin:
         if project is None:
             return False
         with self.db:
+            self._require_not_deleting(user_id)
             self.db.execute(
                 "INSERT INTO workspace_projects (id,user_id,name,description,archived_at,icon) VALUES (?,?,?,?,?,?) "
                 "ON CONFLICT(id) DO UPDATE SET archived_at=excluded.archived_at",
@@ -132,6 +136,7 @@ class WorkspaceMixin:
             return None
         session = Session(id=str(uuid.uuid4()), project_id=project_id, title=title)
         with self.db:
+            self._require_not_deleting(user_id)
             self.db.execute(
                 "INSERT INTO workspace_sessions VALUES (?,?,?,?,NULL)",
                 (session.id, user_id, project_id, title),
@@ -156,6 +161,7 @@ class WorkspaceMixin:
         if not any(project.id == project_id for project in self.projects_for(user_id)):
             return None
         with self.db:
+            self._require_not_deleting(user_id)
             row = self.db.execute(
                 "SELECT title FROM workspace_sessions WHERE id=? AND user_id=? AND archived_at IS NULL",
                 (session_id, user_id),
@@ -225,6 +231,7 @@ class WorkspaceMixin:
             return None
         defaults = set(settings.default_skill_ids)
         with self.db:
+            self._require_not_deleting(user_id)
             self.db.execute(
                 "DELETE FROM workspace_project_skills WHERE user_id=? AND project_id=?",
                 (user_id, project_id),
@@ -256,6 +263,7 @@ class WorkspaceMixin:
         ).fetchone()
         project_id = row[0] if row else self.project_for(user_id).id
         with self.db:
+            self._require_not_deleting(user_id)
             self.db.execute(
                 "INSERT INTO workspace_sessions VALUES (?,?,?,?,NULL) "
                 "ON CONFLICT(id) DO UPDATE SET title=excluded.title",
@@ -282,6 +290,7 @@ class WorkspaceMixin:
         project_id = row[0] if row else self.project_for(user_id).id
         title = row[1] if row else "新的科研任务"
         with self.db:
+            self._require_not_deleting(user_id)
             self.db.execute(
                 "INSERT INTO workspace_sessions VALUES (?,?,?,?,?) "
                 "ON CONFLICT(id) DO UPDATE SET archived_at=excluded.archived_at",

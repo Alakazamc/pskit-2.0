@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 import sqlite3
@@ -15,6 +16,8 @@ from app.contracts.capabilities import McpTool
 from app.contracts.catalog import CatalogItem, FileRef, FileUploadRequest
 from app.contracts.conversation import ContextRef, MessageRequest
 from app.db.migrations import migrate_catalog_schema
+from app.db.postgres import PostgresDatabase, PostgresStatements
+from app.domain.identity_policy import GuestAccountDeleting
 
 MAX_TEXT_FILE_BYTES = 1024 * 1024
 MAX_PDF_FILE_BYTES = 10 * 1024 * 1024
@@ -50,12 +53,10 @@ class InvalidFileUpload(Exception):
 
 class ContextNotFound(Exception):
     """A selected Skill, resource, or file is unavailable to the user."""
-    pass
 
 
 class SkillVersionConflict(Exception):
     """A registered Skill version conflicts with an existing definition."""
-    pass
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,7 @@ class CatalogStore:
         skills: list[CatalogItem] | None = None,
         resources: list[CatalogItem] | None = None,
         mcp_tools: list[McpTool] | None = None,
-        db_path: str | None = None,
+        db_path: str | PostgresDatabase | None = None,
         skill_root: Path | None = None,
         available_tools: set[str] | None = None,
         defer_unknown_tool_validation: bool = False,
@@ -143,11 +144,13 @@ class CatalogStore:
         self._file_contents: dict[str, dict[str, str]] = {}
         self._file_bytes: dict[str, dict[str, bytes]] = {}
         self._skill_grants: dict[str, set[str]] = {}
-        self.db = sqlite3.connect(db_path, check_same_thread=False) if db_path else None
+        self.db = (PostgresStatements(db_path) if isinstance(db_path, PostgresDatabase)
+                   else sqlite3.connect(db_path, check_same_thread=False) if db_path else None)
         if self.db:
             try:
-                migrate_catalog_schema(self.db)
-                self.db.execute("PRAGMA journal_mode=WAL")
+                if not isinstance(db_path, PostgresDatabase):
+                    migrate_catalog_schema(self.db)
+                    self.db.execute("PRAGMA journal_mode=WAL")
                 self._sync_registered_skills()
             except BaseException:
                 self.db.close()
@@ -312,9 +315,7 @@ class CatalogStore:
         if allowed is not None and tool_name not in allowed:
             return False
         policy = getattr(self, "guest_capabilities", None)
-        if policy is not None and not policy.mcp_allowed_for(user_id, tool_name):
-            return False
-        return True
+        return policy is None or policy.mcp_allowed_for(user_id, tool_name)
 
     def resources_for(self, user_id: str) -> list[CatalogItem]:
         """List MCP resources visible under user grants and tier policy."""
@@ -341,6 +342,7 @@ class CatalogStore:
             raise ValueError("Unknown or duplicate Skill ID")
         if self.db:
             with self.db:
+                self._require_account_active(user_id)
                 self.db.execute(
                     "INSERT INTO catalog_skill_grants (user_id,skill_ids_json) VALUES (?,?) "
                     "ON CONFLICT(user_id) DO UPDATE SET skill_ids_json=excluded.skill_ids_json",
@@ -461,6 +463,8 @@ class CatalogStore:
                 raise InvalidFileUpload("INVALID_TEXT_ENCODING", 422) from exc
         else:
             raise InvalidFileUpload("UNSUPPORTED_FILE_TYPE", 415)
+        # PostgreSQL text excludes NUL; the original bytes stay intact in bytea.
+        content = content.replace("\x00", "\ufffd")
         return self._persist_file(user_id, Path(name).name, len(raw), content, raw,
                                   max_total_bytes)
 
@@ -530,6 +534,7 @@ class CatalogStore:
         if self.db:
             self.db.execute("BEGIN IMMEDIATE")
             try:
+                self._require_account_active(user_id)
                 used = self.stored_bytes_for(user_id)
                 if total_limit is not None and used + size > total_limit:
                     raise InvalidFileUpload("STORAGE_QUOTA_EXCEEDED", 413)
@@ -582,6 +587,7 @@ class CatalogStore:
         """
         if self.db:
             with self.db:
+                self._require_account_active(user_id)
                 return bool(self.db.execute(
                     "DELETE FROM catalog_files WHERE id=? AND user_id=?", (file_id, user_id)
                 ).rowcount)
@@ -592,6 +598,23 @@ class CatalogStore:
         self._file_contents.get(user_id, {}).pop(file_id, None)
         self._file_bytes.get(user_id, {}).pop(file_id, None)
         return True
+
+    def _require_account_active(self, user_id: str) -> None:
+        """Serialize PostgreSQL writes against guest deletion claims."""
+        if isinstance(self.db, PostgresStatements):
+            row = self.db.execute(
+                "SELECT cleanup_state FROM account_tiers WHERE user_id=? FOR UPDATE",
+                (user_id,),
+            ).fetchone()
+            if row is not None and row[0] == "deleting":
+                raise GuestAccountDeleting
+            deleted = self.db.execute(
+                "SELECT 1 FROM guest_cleanup_audit WHERE user_hash=? "
+                "AND outcome='deleted' LIMIT 1",
+                (hashlib.sha256(user_id.encode()).hexdigest(),),
+            ).fetchone()
+            if deleted:
+                raise GuestAccountDeleting
 
     def resolve_context(self, user_id: str, payload: MessageRequest) -> ResolvedContext:
         """Resolve requested Skills, resources, and files against server state.

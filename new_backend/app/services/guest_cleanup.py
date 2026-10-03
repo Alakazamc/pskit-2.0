@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
+from app.db.postgres import PostgresDatabase, PostgresStatements
 from app.domain.identity_policy import IdentityPolicyStore
 
 
@@ -25,7 +26,7 @@ class GuestCleanupService:
     """Select old guests and coordinate deletion through a shared SQLite file."""
 
     def __init__(
-        self, path: str, admin: GuestAdmin | None, *, pi_session_dir: str | None = None,
+        self, path: str | PostgresDatabase, admin: GuestAdmin | None, *, pi_session_dir: str | None = None,
     ) -> None:
         """Open shared policy storage and bind the remote identity admin.
 
@@ -38,6 +39,13 @@ class GuestCleanupService:
         self.db = self.policy.db
         self.admin = admin
         self.pi_session_dir = Path(pi_session_dir).resolve() if pi_session_dir else None
+
+    def _tables(self) -> set[str]:
+        """List only PSKit tables in the bound persistence schema."""
+        statement = ("SELECT tablename FROM pg_tables WHERE schemaname=current_schema()"
+                     if isinstance(self.db, PostgresStatements)
+                     else "SELECT name FROM sqlite_master WHERE type='table'")
+        return {row[0] for row in self.db.execute(statement)}
 
     def collect_candidates(self, now: datetime) -> list[str]:
         """List inactive guests plus stale deletion claims eligible for retry.
@@ -73,9 +81,7 @@ class GuestCleanupService:
             Eligible user IDs in sorted order.
         """
         cutoff = (now - timedelta(days=30)).isoformat()
-        tables = {row[0] for row in self.db.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'",
-        )}
+        tables = self._tables()
         blockers = []
         for table in ("agent_runs", "agent_jobs", "agent_approvals"):
             if table in tables:
@@ -113,7 +119,8 @@ class GuestCleanupService:
         self.db.execute("BEGIN IMMEDIATE")
         try:
             row = self.db.execute(
-                "SELECT tier,cleanup_state FROM account_tiers WHERE user_id=?", (user_id,),
+                "SELECT tier,cleanup_state FROM account_tiers WHERE user_id=?" +
+                (" FOR UPDATE" if isinstance(self.db, PostgresStatements) else ""), (user_id,),
             ).fetchone()
             claim = self.db.execute(
                 "SELECT state,claimed_at FROM guest_cleanup_claims WHERE user_id=?", (user_id,),
@@ -230,9 +237,7 @@ class GuestCleanupService:
             ).fetchone()
             if claim is None or claim[0] != "remote_deleted":
                 raise ValueError("Cleanup claim was lost")
-            tables = {row[0] for row in self.db.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'",
-            )}
+            tables = self._tables()
             if "agent_events" in tables and "agent_runs" in tables:
                 self.db.execute(
                     "DELETE FROM agent_events WHERE run_id IN "
@@ -283,9 +288,7 @@ class GuestCleanupService:
         """
         if self.pi_session_dir is None:
             return
-        tables = {row[0] for row in self.db.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'",
-        )}
+        tables = self._tables()
         if "pi_sessions" not in tables:
             return
         rows = self.db.execute(
@@ -334,6 +337,6 @@ class GuestCleanupService:
                 self._mark_remote_deleted(user_id, token)
             self._purge_local(user_id, token)
             return True
-        except Exception:
+        except Exception:  # noqa: BLE001 - release the claim after any remote/provider failure
             self._release(user_id, token, remote_deleted=remote_deleted)
             return False

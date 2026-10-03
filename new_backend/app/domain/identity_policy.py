@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 from app.db.migrations import migrate_identity_policy_schema
+from app.db.postgres import PostgresDatabase, PostgresStatements
 
 AccountTier = Literal["guest", "member"]
 
@@ -17,7 +18,7 @@ class IdentityPolicyStore:
     """Persist guest/member tiers and guest email upgrade state."""
 
     def __init__(
-        self, path: str, *, guest_token_limit: int = 20_000, guest_gpu_limit: int = 0,
+        self, path: str | PostgresDatabase, *, guest_token_limit: int = 20_000, guest_gpu_limit: int = 0,
         member_token_limit: int = 1_000_000, member_gpu_limit: int = 60,
         guest_max_active_runs: int = 1,
     ) -> None:
@@ -31,15 +32,19 @@ class IdentityPolicyStore:
             member_gpu_limit: Default daily member GPU minutes.
             guest_max_active_runs: Maximum concurrent Runs for a guest.
         """
-        if path != ":memory:":
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(path, check_same_thread=False)
+        if isinstance(path, PostgresDatabase):
+            self.db = PostgresStatements(path)
+        else:
+            if path != ":memory:":
+                Path(path).parent.mkdir(parents=True, exist_ok=True)
+            self.db = sqlite3.connect(path, check_same_thread=False)
         self.guest_token_limit = guest_token_limit
         self.guest_gpu_limit = guest_gpu_limit
         self.member_token_limit = member_token_limit
         self.member_gpu_limit = member_gpu_limit
         self.guest_max_active_runs = guest_max_active_runs
-        migrate_identity_policy_schema(self.db)
+        if not isinstance(path, PostgresDatabase):
+            migrate_identity_policy_schema(self.db)
 
     def observe_verified_user(self, user_id: str, is_anonymous: bool | None) -> None:
         """Record verified identity activity without demoting an existing member.
@@ -65,7 +70,8 @@ class IdentityPolicyStore:
             if deleted:
                 raise GuestAccountDeleting
             state = self.db.execute(
-                "SELECT cleanup_state FROM account_tiers WHERE user_id=?", (user_id,),
+                "SELECT cleanup_state FROM account_tiers WHERE user_id=?" +
+                (" FOR UPDATE" if isinstance(self.db, PostgresStatements) else ""), (user_id,),
             ).fetchone()
             if state is not None and state[0] == "deleting":
                 raise GuestAccountDeleting
@@ -118,7 +124,8 @@ class IdentityPolicyStore:
         self.db.execute("BEGIN IMMEDIATE")
         try:
             state = self.db.execute(
-                "SELECT cleanup_state FROM account_tiers WHERE user_id=?", (user_id,),
+                "SELECT cleanup_state FROM account_tiers WHERE user_id=?" +
+                (" FOR UPDATE" if isinstance(self.db, PostgresStatements) else ""), (user_id,),
             ).fetchone()
             if state is not None and state[0] == "deleting":
                 raise GuestAccountDeleting
@@ -158,7 +165,8 @@ class IdentityPolicyStore:
         self.db.execute("BEGIN IMMEDIATE")
         try:
             state = self.db.execute(
-                "SELECT cleanup_state FROM account_tiers WHERE user_id=?", (user_id,),
+                "SELECT cleanup_state FROM account_tiers WHERE user_id=?" +
+                (" FOR UPDATE" if isinstance(self.db, PostgresStatements) else ""), (user_id,),
             ).fetchone()
             if state is not None and state[0] == "deleting":
                 raise GuestAccountDeleting

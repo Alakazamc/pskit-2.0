@@ -1,5 +1,6 @@
 """Store persistence methods for the conversation store."""
 
+import hashlib
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -168,10 +169,20 @@ class PersistentConversationStore(WorkspaceMixin, RunsMixin, Af3Mixin, UsageMixi
         Raises:
             GuestAccountDeleting: Cleanup already owns the account.
         """
-        if getattr(self, "identity_policy", None) is None:
+        if (getattr(self, "identity_policy", None) is None
+                and not isinstance(self.db, PostgresStatements)):
             return
         row = self.db.execute(
-            "SELECT cleanup_state FROM account_tiers WHERE user_id=?", (user_id,),
+            "SELECT cleanup_state FROM account_tiers WHERE user_id=?" +
+            (" FOR UPDATE" if isinstance(self.db, PostgresStatements) else ""), (user_id,),
         ).fetchone()
         if row is not None and row[0] == "deleting":
             raise GuestAccountDeleting
+        if isinstance(self.db, PostgresStatements):
+            deleted = self.db.execute(
+                "SELECT 1 FROM guest_cleanup_audit WHERE user_hash=? "
+                "AND outcome='deleted' LIMIT 1",
+                (hashlib.sha256(user_id.encode()).hexdigest(),),
+            ).fetchone()
+            if deleted:
+                raise GuestAccountDeleting

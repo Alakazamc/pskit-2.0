@@ -5,12 +5,13 @@ from pathlib import Path
 from time import time
 
 from app.db.migrations import migrate_component_database
+from app.db.postgres import PostgresDatabase, PostgresStatements
 
 
 class GuestRateLimiter:
     """Share anonymous account creation limits through SQLite."""
 
-    def __init__(self, path: str, *, secret: str, limit_per_hour: int) -> None:
+    def __init__(self, path: str | PostgresDatabase, *, secret: str, limit_per_hour: int) -> None:
         """Open the rate-limit database and migrate its event table.
 
         Args:
@@ -18,9 +19,12 @@ class GuestRateLimiter:
             secret: HMAC key used to avoid storing raw client addresses.
             limit_per_hour: Maximum guest identities per client and hour.
         """
-        if path != ":memory:":
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(path, check_same_thread=False, timeout=5)
+        if isinstance(path, PostgresDatabase):
+            self.db = PostgresStatements(path)
+        else:
+            if path != ":memory:":
+                Path(path).parent.mkdir(parents=True, exist_ok=True)
+            self.db = sqlite3.connect(path, check_same_thread=False, timeout=5)
         self.secret = secret.encode()
         self.limit_per_hour = limit_per_hour
 
@@ -35,9 +39,10 @@ class GuestRateLimiter:
                 "ON guest_creation_events(client_hash,created_at)"
             )
 
-        migrate_component_database(self.db, "guest_rate_limit", (
-            ("anonymous creation events", create_events),
-        ), {"guest_creation_events": {"client_hash", "created_at"}})
+        if not isinstance(path, PostgresDatabase):
+            migrate_component_database(self.db, "guest_rate_limit", (
+                ("anonymous creation events", create_events),
+            ), {"guest_creation_events": {"client_hash", "created_at"}})
 
     def claim(self, client_address: str) -> bool:
         """Atomically consume a guest creation slot for a client address.
