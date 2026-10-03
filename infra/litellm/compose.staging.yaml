@@ -1,0 +1,28 @@
+# Apply after compose.shared-postgres.yaml, with -p pskit-agent-litellm-staging.
+name: pskit-agent-litellm-staging
+
+services:
+  gateway:
+    volumes: !override
+      - ./config.staging.yaml:/app/config.yaml:ro
+    depends_on:
+      model-stub:
+        condition: service_started
+    ports: !override
+      - "10.9.8.1:4002:4000"
+
+  model-stub:
+    image: ${STAGING_MODEL_IMAGE:?Set fixed staging backend image}
+    command: ["python", "-u", "/mock/mock_model_gateway.py", "--host", "0.0.0.0", "--port", "8000"]
+    volumes:
+      - ../../deploy/agent/tests/mock_model_gateway.py:/mock/mock_model_gateway.py:ro
+    networks:
+      - supabase
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+networks:
+  supabase:
+    name: ${SUPABASE_DOCKER_NETWORK:?Set staging Supabase network}

@@ -1,0 +1,57 @@
+# Apply after docker-compose.yml and compose.cloud.yaml, with -p pskit-agent-supabase-staging.
+name: pskit-agent-supabase-staging
+
+services:
+  studio:
+    container_name: supabase-studio-staging
+    volumes: !override
+      - agent-snippets:/app/snippets
+      - ./volumes/functions:/app/edge-functions:ro
+
+  api-gw:
+    container_name: supabase-envoy-staging
+    ports: !override
+      - "127.0.0.1:18131:8000"
+
+  auth:
+    container_name: supabase-auth-staging
+    environment:
+      GOTRUE_DISABLE_SIGNUP: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "false"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+
+  rest:
+    container_name: supabase-rest-staging
+
+  realtime:
+    container_name: realtime-dev.supabase-realtime-staging
+
+  storage:
+    container_name: supabase-storage-staging
+
+  imgproxy:
+    container_name: supabase-imgproxy-staging
+
+  meta:
+    container_name: supabase-meta-staging
+
+  functions:
+    container_name: supabase-edge-functions-staging
+    volumes: !override
+      - ./volumes/functions:/home/deno/functions:ro
+      - deno-cache:/root/.cache/deno
+
+  db:
+    container_name: supabase-db-staging
+
+  supavisor:
+    container_name: supabase-pooler-staging
+    ports: !override []
+
+volumes:
+  agent-db-data:
+    name: pskit-agent-db-data-staging
+  agent-storage:
+    name: pskit-agent-storage-staging
+  agent-snippets:
+    name: pskit-agent-snippets-staging

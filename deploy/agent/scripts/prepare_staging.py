@@ -180,6 +180,7 @@ def prepare_staging(target_dir: Path, *, backend_image: str, frontend_dist: Path
         ]) + "\n")
         _private_write(temp / "cloud.env", "\n".join([
             f"AGENT_BACKEND_IMAGE={backend_image}",
+            "AGENT_WEB_IMAGE=pskit-agent-web:unused-staging",
             f"AGENT_BACKEND_ENV_FILE={target / 'backend.env'}",
             f"AGENT_AF3_PROXY_KEY_FILE={target / 'proxy.env'}",
             "AGENT_PUBLIC_URL=http://10.9.8.1:18132",

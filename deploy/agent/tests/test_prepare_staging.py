@@ -61,6 +61,7 @@ def test_generates_distinct_private_staging_secrets(release, monkeypatch):
     cloud = _values(target / "cloud.env")
     assert cloud["AGENT_BACKEND_ENV_FILE"] == str(target / "backend.env")
     assert cloud["AGENT_AF3_PROXY_KEY_FILE"] == str(target / "proxy.env")
+    assert cloud["AGENT_WEB_IMAGE"] == "pskit-agent-web:unused-staging"
     manifest = json.loads((target / "manifest.json").read_text())
     assert manifest["backend_image"] == "pskit-agent-backend:test-fixed"
     assert manifest["frontend_dist"] == str(dist)
