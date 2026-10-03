@@ -169,6 +169,7 @@ docker run --rm --network none --user 0:0 \
 | SQLite→PG→SQLite 与 Pi 清单 | 本地迁移回归通过，36 表样本与字节哈希保留 | 待 A6000 停写后核对实际计数 |
 | Run/job/journal/owned-jobs/GPU | 本地门禁与回调契约测试 | 2026-10-03 只读预检：A6000 Run completed 12/failed 1，Agent job 0，receiver journal 0，认证的 `owned-jobs` 返回 0；spool 中两份历史目录须停接收器后归档，受控真 AF3 待执行 |
 | 备份及隔离 | 本地角色隔离测试通过 | 2026-10-03：Supabase PG17、旧 LiteLLM PG16、新 `litellm` DB 三份 dump 可列出，SHA-256 已记录；A6000 的 0700 私有目录已收异机副本并通过 SHA-256 复核；生产 `pskit_app` 无权读 `auth.users` |
+| 云端后端预配置 | 本地 Compose 合同测试通过 | 2026-10-03：独立 0600 的 `cloud.backend.pg17.env`、`cloud.env`、`.env.stack` 已准备；Compose 渲染通过；受限 `pskit_app` DSN 实际连接成功，云端后端尚未启动 |
 | 公网 HTTPS、SSE、上传、旧站 | 尚未在新拓扑切换 | 待私网验收、root 脚本执行后记录 |
 
 记录时间、镜像 digest、源/目标卷名、快照 SHA-256、匿名化行数与状态、HTTP 状态、真 AF3 job ID 和 ACK 状态。不得记录密码、API key、回调密钥、文件内容或聊天文本。
