@@ -104,7 +104,34 @@ def _verify_usage(usage: dict, entries: list) -> None:
         raise SmokeFailure("Staging GPU ledger has no simulated job")
 
 
-def _probe(app: httpx.Client, email: str, password: str) -> dict[str, object]:
+def _verify_token_quota(
+    app: httpx.Client, headers: dict[str, str], user_id: str, session_path: str,
+    admin_key: str,
+) -> None:
+    if not admin_key:
+        raise SmokeFailure("Staging admin key is missing")
+    admin_url = f"/api/v1/admin/users/{user_id}/limits"
+    admin_headers = {"X-Admin-Key": admin_key}
+    # A timeout can happen after the server applied the first change. Restore
+    # even if its response was lost.
+    lowered = True
+    try:
+        _checked(app.put(admin_url, headers=admin_headers,
+                         json={"token_monthly_limit": 0, "gpu_daily_minutes": 5}),
+                 "Set staging Token test limit")
+        denied = app.post(f"{session_path}/messages", headers=headers,
+                          json={"content": "Token quota rejection probe."})
+        if (denied.status_code != 409 or
+                denied.json().get("detail", {}).get("code") != "TOKEN_QUOTA_EXCEEDED"):
+            raise SmokeFailure("Staging Token quota enforcement is missing")
+    finally:
+        if lowered:
+            _checked(app.put(admin_url, headers=admin_headers,
+                             json={"token_monthly_limit": 20_000, "gpu_daily_minutes": 5}),
+                     "Restore staging Token limit")
+
+
+def _probe(app: httpx.Client, email: str, password: str, admin_key: str) -> dict[str, object]:
     if app.base_url.host == "10.9.8.1" and app.get("/login").status_code != 200:
         raise SmokeFailure("Staging React login page is unavailable")
     for path in ("/internal/compute/af3/jobs/claim", "/auth/v1/admin/users"):
@@ -117,6 +144,9 @@ def _probe(app: httpx.Client, email: str, password: str) -> dict[str, object]:
     token = login.get("access_token")
     if not token:
         raise SmokeFailure("Staging login returned no access token")
+    user_id = login.get("user", {}).get("id")
+    if not user_id:
+        raise SmokeFailure("Staging login returned no user ID")
     headers = {"Authorization": f"Bearer {token}"}
     usage = _checked(app.get("/api/v1/usage", headers=headers), "Staging quotas")
     if not isinstance(usage.get("tokens"), dict) or not isinstance(usage.get("gpu"), dict):
@@ -178,18 +208,21 @@ def _probe(app: httpx.Client, email: str, password: str) -> dict[str, object]:
         raise SmokeFailure("Staging usage entries are unavailable")
     final_usage = _checked(app.get("/api/v1/usage", headers=headers), "Staging final quotas")
     _verify_usage(final_usage, entries)
+    _verify_token_quota(app, headers, user_id,
+                        f"/api/v1/g/{key}/c/{session['id']}", admin_key)
     return {"simulation": True, "events": events}
 
 
 def run_smoke(
     app: httpx.Client, email: str, password: str,
     *, production_snapshot: Callable[[], dict[str, int | str]] = snapshot_production,
-    probe: Callable[[httpx.Client, str, str], dict[str, object]] = _probe,
+    probe: Callable[[httpx.Client, str, str, str], dict[str, object]] = _probe,
+    admin_key: str = "",
 ) -> dict[str, object]:
     if str(app.base_url).rstrip("/") not in {"http://10.9.8.1:18132", "http://127.0.0.1:18090"}:
         raise SmokeFailure("Smoke target must be the staging private endpoint")
     baseline = production_snapshot()
-    result = probe(app, email, password)
+    result = probe(app, email, password, admin_key)
     if result.get("simulation") is not True:
         raise SmokeFailure("Staging AF3 simulation was not confirmed")
     if production_snapshot() != baseline:
@@ -203,11 +236,13 @@ def main() -> None:
     parser.add_argument("--private-api", action="store_true")
     args = parser.parse_args()
     credentials = _private_env(args.config_dir / "seed.env")
+    backend = _private_env(args.config_dir / "backend.env.base")
     url = "http://127.0.0.1:18090" if args.private_api else "http://10.9.8.1:18132"
     try:
         with httpx.Client(base_url=url, timeout=30, trust_env=False) as app:
             result = run_smoke(app, credentials["STAGING_USER_EMAIL"],
-                               credentials["STAGING_USER_PASSWORD"])
+                               credentials["STAGING_USER_PASSWORD"],
+                               admin_key=backend["RESEARCH_AGENT_ADMIN_API_KEY"])
     except (SmokeFailure, httpx.HTTPError, OSError, ValueError, KeyError) as exc:
         raise SystemExit(f"Staging smoke failed: {exc if isinstance(exc, SmokeFailure) else 'request or configuration error'}") from None
     print(f"Staging smoke passed: login, file, SSE, quota, simulated AF3; events={result['events']}")

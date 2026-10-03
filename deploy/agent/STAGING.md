@@ -51,7 +51,7 @@ STAGING_CONFIG_DIR=/home/ecs-user/pskit-agent-staging-private \
 
 然后从可访问 WireGuard 的浏览器打开 `http://10.9.8.1:18132/login`，并重复上面的 smoke 容器命令，删去末尾的 `--private-api`，以验证私网 Nginx 入口。
 
-验收包括登录、文件上传、Agent SSE、Token/GPU 额度及用量记录、GPU 超额拒绝、AF3 `simulation=true` 和私有路径拒绝。脚本在前后只读采集生产 `auth.users`、`pskit` 表、候选单库及当前运行中的 LiteLLM 表计数，并校验 LiteLLM 计费相关表内容摘要；任何变化都报错。它不访问 `10.9.8.2`，不提交真实 AF3 任务。阿里云宿主机不要求安装 `httpx`；上述验收命令使用固定后端镜像，Docker socket 只供读取生产容器计数和摘要，运行结束即卸载。
+验收包括登录、文件上传、Agent SSE、Token/GPU 额度及用量记录、Token/GPU 超额拒绝、AF3 `simulation=true` 和私有路径拒绝。Token 超额探测只临时修改合成账号额度，并在 `finally` 中恢复 20,000。脚本在前后只读采集生产 `auth.users`、`pskit` 表、候选单库及当前运行中的 LiteLLM 表计数，并校验 LiteLLM 计费相关表内容摘要；任何变化都报错。它不访问 `10.9.8.2`，不提交真实 AF3 任务。阿里云宿主机不要求安装 `httpx`；上述验收命令使用固定后端镜像，Docker socket 只供读取生产容器计数和摘要，运行结束即卸载。
 
 ## 日常发布与停止
 

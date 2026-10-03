@@ -18,7 +18,7 @@ def test_smoke_requires_unchanged_production_snapshot():
         with pytest.raises(SmokeFailure, match="production"):
             run_smoke(client, "staging-user@example.invalid", "secret",
                       production_snapshot=lambda: next(counts),
-                      probe=lambda app, email, password: {"simulation": True, "events": 2})
+                      probe=lambda app, email, password, admin: {"simulation": True, "events": 2})
 
 
 def test_smoke_rejects_real_af3_and_never_calls_a6000():
@@ -29,7 +29,7 @@ def test_smoke_rejects_real_af3_and_never_calls_a6000():
         with pytest.raises(SmokeFailure, match="simulation"):
             run_smoke(client, "staging-user@example.invalid", "secret",
                       production_snapshot=lambda: {"auth.users": 2},
-                      probe=lambda app, email, password: {"simulation": False, "events": 2})
+                      probe=lambda app, email, password, admin: {"simulation": False, "events": 2})
     assert all("10.9.8.2" not in url for url in calls)
 
 
@@ -71,3 +71,36 @@ def test_smoke_requires_seeded_quota_and_metering():
         smoke_staging._verify_usage({**usage, "tokens": {"limit": 1, "used": 0}}, entries)
     with pytest.raises(SmokeFailure):
         smoke_staging._verify_usage(usage, [])
+
+
+def test_token_quota_probe_restores_limit_after_rejection():
+    calls = []
+
+    def respond(request):
+        calls.append((request.method, request.url.path))
+        if request.method == "PUT":
+            return httpx.Response(200, json={"tokens": {"limit": 0}})
+        return httpx.Response(409, json={"detail": {"code": "TOKEN_QUOTA_EXCEEDED"}})
+
+    with httpx.Client(transport=httpx.MockTransport(respond),
+                      base_url="http://127.0.0.1:18090") as client:
+        smoke_staging._verify_token_quota(client, {"Authorization": "Bearer stage"},
+                                          "user-stage", "/api/v1/g/g-p-stage/c/session-stage",
+                                          "stage-admin")
+    assert [method for method, _path in calls] == ["PUT", "POST", "PUT"]
+
+
+def test_token_quota_probe_restores_after_ambiguous_first_response():
+    calls = []
+
+    def respond(request):
+        calls.append(request.method)
+        return httpx.Response(503 if len(calls) == 1 else 200, json={})
+
+    with httpx.Client(transport=httpx.MockTransport(respond),
+                      base_url="http://127.0.0.1:18090") as client:
+        with pytest.raises(SmokeFailure):
+            smoke_staging._verify_token_quota(client, {"Authorization": "Bearer stage"},
+                                              "user-stage", "/api/v1/g/g-p-stage/c/session-stage",
+                                              "stage-admin")
+    assert calls == ["PUT", "PUT"]
