@@ -5,19 +5,22 @@ from collections.abc import Callable
 from pathlib import Path
 from threading import Lock
 
+import psycopg
+
 from app.db.migrations import migrate_mcp_capacity_schema, migrate_pdf_capacity_schema
+from app.db.postgres import PostgresDatabase, PostgresStatements
 from app.ports.providers import ProviderUnavailable
 
 
-class _SqliteCapacityStore:
-    """An admission lease shared by Python instances using the same SQLite file."""
+class _CapacityStore:
+    """An admission lease shared by Python instances using the same database."""
 
     config_table: str
     lease_table: str
     label: str
     migrate: Callable[[sqlite3.Connection], None]
 
-    def __init__(self, path: str, max_calls: int) -> None:
+    def __init__(self, path: str | PostgresDatabase, max_calls: int) -> None:
         """Open a shared lease database and enforce one common capacity.
 
         Args:
@@ -27,16 +30,21 @@ class _SqliteCapacityStore:
         Raises:
             ValueError: Another instance configured a different limit.
         """
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._lock = Lock()
-        self.db = sqlite3.connect(path, check_same_thread=False, timeout=0.05)
+        if isinstance(path, PostgresDatabase):
+            self.db = PostgresStatements(path)
+        else:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            self.db = sqlite3.connect(path, check_same_thread=False, timeout=0.05)
         try:
-            self.migrate(self.db)
-            self.db.execute("PRAGMA journal_mode=WAL")
+            if not isinstance(path, PostgresDatabase):
+                self.migrate(self.db)
+                self.db.execute("PRAGMA journal_mode=WAL")
             with self.db:
-                self.db.execute(
-                    f"INSERT OR IGNORE INTO {self.config_table} VALUES ('global',?)", (max_calls,),
-                )
+                statement = (f"INSERT INTO {self.config_table} VALUES ('global',?) "
+                             "ON CONFLICT (scope) DO NOTHING" if isinstance(path, PostgresDatabase)
+                             else f"INSERT OR IGNORE INTO {self.config_table} VALUES ('global',?)")
+                self.db.execute(statement, (max_calls,))
             configured = self.db.execute(
                 f"SELECT max_calls FROM {self.config_table} WHERE scope='global'",
             ).fetchone()[0]
@@ -82,7 +90,7 @@ class _SqliteCapacityStore:
                 )
                 self.db.commit()
                 return token
-            except sqlite3.Error as exc:
+            except (sqlite3.Error, psycopg.Error) as exc:
                 self.db.rollback()
                 raise ProviderUnavailable(f"{self.label} capacity store unavailable") from exc
 
@@ -107,7 +115,7 @@ class _SqliteCapacityStore:
                         "WHERE token=? AND expires_at>?",
                         (time.time() + lease_seconds, token, time.time()),
                     ).rowcount)
-            except sqlite3.Error as exc:
+            except (sqlite3.Error, psycopg.Error) as exc:
                 raise ProviderUnavailable(f"{self.label} capacity store unavailable") from exc
 
     def release(self, token: str) -> None:
@@ -123,11 +131,11 @@ class _SqliteCapacityStore:
             try:
                 with self.db:
                     self.db.execute(f"DELETE FROM {self.lease_table} WHERE token=?", (token,))
-            except sqlite3.Error as exc:
+            except (sqlite3.Error, psycopg.Error) as exc:
                 raise ProviderUnavailable(f"{self.label} capacity store unavailable") from exc
 
 
-class McpCapacityStore(_SqliteCapacityStore):
+class McpCapacityStore(_CapacityStore):
     """Shared admission pool for remote MCP calls."""
     config_table = "mcp_capacity_config"
     lease_table = "mcp_execution_leases"
@@ -135,7 +143,7 @@ class McpCapacityStore(_SqliteCapacityStore):
     migrate = staticmethod(migrate_mcp_capacity_schema)
 
 
-class PdfCapacityStore(_SqliteCapacityStore):
+class PdfCapacityStore(_CapacityStore):
     """Shared admission pool for PDF parser subprocesses."""
     config_table = "pdf_capacity_config"
     lease_table = "pdf_execution_leases"

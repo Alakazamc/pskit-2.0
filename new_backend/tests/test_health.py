@@ -7,6 +7,8 @@ import pytest
 from app.config import Settings
 from app.main import create_app
 
+pytestmark = pytest.mark.usefixtures("live_database")
+
 
 @pytest.mark.asyncio
 async def test_health_reports_configured_modes_without_secrets(tmp_path):

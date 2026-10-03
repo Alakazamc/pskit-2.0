@@ -5,6 +5,8 @@ from app.config import Settings
 from app.contracts.models import UserIdentity
 from app.main import create_app
 
+pytestmark = pytest.mark.usefixtures("live_database")
+
 
 class StubIdentity:
     async def verify(self, access_token: str):

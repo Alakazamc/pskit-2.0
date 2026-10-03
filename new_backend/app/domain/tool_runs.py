@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.db.migrations import migrate_tool_run_schema
+from app.db.postgres import PostgresDatabase, PostgresStatements
 
 
 class ToolRun(BaseModel):
@@ -22,18 +23,20 @@ class ToolRun(BaseModel):
 class ToolRunStore:
     """Store tool history in SQLite or an isolated in-memory mock."""
 
-    def __init__(self, db_path: str | None = None) -> None:
+    def __init__(self, db_path: str | PostgresDatabase | None = None) -> None:
         """Open persistent history when a database path is supplied.
 
         Args:
             db_path: Optional SQLite path; absence selects the mock store.
         """
         self._runs: dict[str, dict[str, ToolRun]] = {}
-        self.db = sqlite3.connect(db_path, check_same_thread=False) if db_path else None
+        self.db = (PostgresStatements(db_path) if isinstance(db_path, PostgresDatabase)
+                   else sqlite3.connect(db_path, check_same_thread=False) if db_path else None)
         if self.db:
             try:
-                migrate_tool_run_schema(self.db)
-                self.db.execute("PRAGMA journal_mode=WAL")
+                if not isinstance(db_path, PostgresDatabase):
+                    migrate_tool_run_schema(self.db)
+                    self.db.execute("PRAGMA journal_mode=WAL")
             except BaseException:
                 self.db.close()
                 raise
@@ -57,7 +60,9 @@ class ToolRunStore:
         if self.db:
             with self.db:
                 self.db.execute(
-                    "INSERT INTO tool_runs VALUES (?,?,?,?,?,?,?,NULL)",
+                    "INSERT INTO tool_runs "
+                    "(id,user_id,tool,title,arguments_json,result_json,created_at,project_id) "
+                    "VALUES (?,?,?,?,?,?,?,NULL)",
                     (run.id, user_id, run.tool, run.title, json.dumps(arguments),
                      json.dumps(result), run.created_at.isoformat()),
                 )

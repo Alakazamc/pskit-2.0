@@ -8,6 +8,8 @@ from app.config import Settings
 from app.contracts.models import UserIdentity
 from app.main import create_app
 
+pytestmark = pytest.mark.usefixtures("live_database")
+
 
 def _settings(tmp_path):
     return Settings(

@@ -8,7 +8,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH=/app/pi/node_modules/.bin:${PATH} \
     RESEARCH_AGENT_INTERNAL_API_URL=http://127.0.0.1:8000 \
-    RESEARCH_AGENT_DB_PATH=/data/agent.sqlite3 \
     RESEARCH_AGENT_PI_SESSION_DIR=/data/pi-sessions
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 && \

@@ -8,6 +8,8 @@ from app.config import Settings
 from app.contracts.models import UserIdentity
 from app.main import create_app
 
+pytestmark = pytest.mark.usefixtures("live_database")
+
 
 @pytest.mark.asyncio
 async def test_mock_guest_upgrades_same_identity_without_losing_data_or_usage(tmp_path):

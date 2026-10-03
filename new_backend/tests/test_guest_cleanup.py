@@ -17,6 +17,8 @@ from app.main import create_app
 from app.services.guest_cleanup import GuestCleanupService
 from scripts.cleanup_guests import main as cleanup_main
 
+pytestmark = pytest.mark.usefixtures("live_database")
+
 
 def _age_user(policy: IdentityPolicyStore, user_id: str, days: int = 31) -> None:
     policy.db.execute(
@@ -237,7 +239,7 @@ async def test_claimed_guest_cannot_use_api_or_start_upgrade(tmp_path):
             pass
 
     app.state.identity_provider = Provider()
-    running = asyncio.create_task(GuestCleanupService(path, Admin()).purge_one("guest-1"))
+    running = asyncio.create_task(GuestCleanupService(app.state.database, Admin()).purge_one("guest-1"))
     await asyncio.wait_for(entered.wait(), timeout=1)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                  base_url="http://test") as client:

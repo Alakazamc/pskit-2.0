@@ -11,6 +11,8 @@ from app.adapters.live.supabase_auth import SupabaseIdentityAdapter
 from app.config import Settings
 from app.main import create_app
 
+pytestmark = pytest.mark.usefixtures("live_database")
+
 
 @pytest.mark.asyncio
 async def test_google_start_uses_public_supabase_url():

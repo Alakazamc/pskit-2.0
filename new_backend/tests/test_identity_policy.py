@@ -8,6 +8,8 @@ from app.domain.identity_policy import IdentityPolicyStore
 from app.domain.persistent_conversation import PersistentConversationStore
 from app.main import create_app
 
+pytestmark = pytest.mark.usefixtures("live_database")
+
 
 @pytest.mark.asyncio
 async def test_verified_guest_tier_survives_backend_restart(tmp_path):

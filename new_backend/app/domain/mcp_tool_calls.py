@@ -5,26 +5,33 @@ from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
 
+import psycopg
+
 from app.contracts.capabilities import McpInvokeResult
 from app.db.migrations import migrate_mcp_tool_calls_schema
+from app.db.postgres import PostgresDatabase, PostgresStatements
 from app.ports.providers import ProviderUnavailable
 
 
 class McpToolCallStore:
     """Prevent replay of a Pi tool call even when its first outcome is uncertain."""
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str | PostgresDatabase) -> None:
         """Open shared SQLite storage for durable Pi MCP call identities.
 
         Args:
             path: Database path shared by all Pi API instances.
         """
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._lock = Lock()
-        self.db = sqlite3.connect(path, check_same_thread=False, timeout=5)
+        if isinstance(path, PostgresDatabase):
+            self.db = PostgresStatements(path)
+        else:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            self.db = sqlite3.connect(path, check_same_thread=False, timeout=5)
         try:
-            migrate_mcp_tool_calls_schema(self.db)
-            self.db.execute("PRAGMA journal_mode=WAL")
+            if not isinstance(path, PostgresDatabase):
+                migrate_mcp_tool_calls_schema(self.db)
+                self.db.execute("PRAGMA journal_mode=WAL")
         except BaseException:
             self.db.close()
             raise
@@ -61,7 +68,9 @@ class McpToolCallStore:
                 ).fetchone()
                 if row is None:
                     self.db.execute(
-                        "INSERT INTO mcp_tool_calls VALUES (?,?,?,?,?,?,?)",
+                        "INSERT INTO mcp_tool_calls "
+                        "(run_id,tool_call_id,name,arguments_hash,status,result_json,created_at) "
+                        "VALUES (?,?,?,?,?,?,?)",
                         (run_id, tool_call_id, name, arguments_hash, "running", None,
                          datetime.now(UTC).isoformat()),
                     )
@@ -74,7 +83,7 @@ class McpToolCallStore:
                     answer = ("unknown", None)
                 self.db.commit()
                 return answer
-            except sqlite3.Error as exc:
+            except (sqlite3.Error, psycopg.Error) as exc:
                 self.db.rollback()
                 raise ProviderUnavailable("MCP tool call store unavailable") from exc
 
@@ -107,7 +116,7 @@ class McpToolCallStore:
                     "WHERE run_id=? AND status='completed' ORDER BY created_at,rowid",
                     (run_id,),
                 ).fetchall()
-            except sqlite3.Error as exc:
+            except (sqlite3.Error, psycopg.Error) as exc:
                 raise ProviderUnavailable("MCP tool call store unavailable") from exc
         return [(row[0], row[1], McpInvokeResult.model_validate_json(row[2])) for row in rows]
 
@@ -132,7 +141,7 @@ class McpToolCallStore:
                         "DELETE FROM mcp_tool_calls WHERE run_id=? AND tool_call_id=? AND status='running'",
                         (run_id, tool_call_id),
                     )
-            except sqlite3.Error as exc:
+            except (sqlite3.Error, psycopg.Error) as exc:
                 raise ProviderUnavailable("MCP tool call store unavailable") from exc
 
     def _set_status(self, run_id: str, tool_call_id: str, status: str, result_json: str | None) -> None:
@@ -145,5 +154,5 @@ class McpToolCallStore:
                         "WHERE run_id=? AND tool_call_id=? AND status='running'",
                         (status, result_json, run_id, tool_call_id),
                     )
-            except sqlite3.Error as exc:
+            except (sqlite3.Error, psycopg.Error) as exc:
                 raise ProviderUnavailable("MCP tool call store unavailable") from exc

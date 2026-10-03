@@ -26,6 +26,7 @@ from app.contracts.models import (
     UserIdentity,
 )
 from app.db.migrations import migrate_oauth_schema
+from app.db.postgres import PostgresDatabase, PostgresStatements
 from app.domain.store import DemoStore
 from app.ports.providers import ProviderUnavailable
 
@@ -243,11 +244,13 @@ def _clear_refresh_cookie() -> JSONResponse:
 
 
 class OAuthFlowStore:
-    def __init__(self, db_path: str | None = None) -> None:
-        """Use SQLite or memory to hold short-lived OAuth PKCE state."""
+    def __init__(self, db_path: str | PostgresDatabase | None = None) -> None:
+        """Use PostgreSQL, legacy SQLite, or memory for short-lived OAuth state."""
         self._pending: dict[str, tuple[str, float, str | None]] = {}
-        self.db: sqlite3.Connection | None = None
-        if db_path:
+        self.db: sqlite3.Connection | PostgresStatements | None = None
+        if isinstance(db_path, PostgresDatabase):
+            self.db = PostgresStatements(db_path)
+        elif db_path:
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
             self.db = sqlite3.connect(db_path, check_same_thread=False)
             try:
@@ -280,11 +283,15 @@ class OAuthFlowStore:
         """Atomically consume an unexpired OAuth state once."""
         if self.db:
             self.db.execute("BEGIN IMMEDIATE")
-            with self.db:
+            try:
                 entry = self.db.execute(
                     "SELECT verifier,expires_at,guest_user_id FROM oauth_flows WHERE state=?", (state,)
                 ).fetchone()
                 self.db.execute("DELETE FROM oauth_flows WHERE state=?", (state,))
+                self.db.commit()
+            except BaseException:
+                self.db.rollback()
+                raise
             return (entry[0], entry[2]) if entry and entry[1] > time() else None
         entry = self._pending.pop(state, None)
         return (entry[0], entry[2]) if entry and entry[1] > time() else None

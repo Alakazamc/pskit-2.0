@@ -6,6 +6,8 @@ import pytest
 from app.config import Settings
 from app.main import create_app
 
+pytestmark = pytest.mark.usefixtures("live_database")
+
 FOLD_INPUT = {
     "name": "RNA complex", "modelSeeds": [1],
     "sequences": [{"protein": {"id": "A", "sequence": "PVLSCGEWQL"}}],
@@ -128,17 +130,17 @@ async def test_live_worker_skips_legacy_job_with_unknown_gpu_memory_requirement(
     from app.contracts.capabilities import Af3FoldInput
     from app.domain.persistent_conversation import PersistentConversationStore
 
-    db_path = str(tmp_path / "shared.sqlite3")
-    legacy = PersistentConversationStore(db_path).create_af3_job(
-        "alice", 20, fold_input=Af3FoldInput.model_validate(FOLD_INPUT),
-    )
     app = create_app(Settings(
-        mode="live", agent_runtime="pi", agent_db_path=db_path,
+        mode="live", agent_runtime="pi", agent_db_path=str(tmp_path / "unused.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
         model_gateway_base_url="https://gateway.example.org/v1", model_gateway_model="research-model",
         model_gateway_api_key="server-key", af3_executor="callback",
         compute_callback_key="compute-key", af3_min_gpu_memory_mb=40_960,
     ), pi_runner=object())
+    app.state.identity_policy.observe_verified_user("alice", False)
+    legacy = PersistentConversationStore(app.state.database).create_af3_job(
+        "alice", 20, fold_input=Af3FoldInput.model_validate(FOLD_INPUT),
+    )
     current = app.state.conversations.create_af3_job(
         "alice", 20, fold_input=Af3FoldInput.model_validate(FOLD_INPUT),
     )

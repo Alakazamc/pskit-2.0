@@ -74,7 +74,15 @@ def test_proxy_rejects_wrong_worker_key_path_and_oversized_body():
         ]
         for method, path, body, key, expected in cases:
             connection = http.client.HTTPConnection("127.0.0.1", proxy.server_port)
-            connection.request(method, path, body=body, headers={"X-Compute-Key": key})
+            if expected == 413:
+                # The proxy rejects Content-Length before reading the body;
+                # uploading 1 MiB races its early close and can raise BrokenPipe.
+                connection.putrequest(method, path)
+                connection.putheader("X-Compute-Key", key)
+                connection.putheader("Content-Length", str(len(body)))
+                connection.endheaders()
+            else:
+                connection.request(method, path, body=body, headers={"X-Compute-Key": key})
             response = connection.getresponse()
             assert response.status == expected
             response.read()

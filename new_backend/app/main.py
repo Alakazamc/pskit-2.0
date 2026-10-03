@@ -32,11 +32,12 @@ from app.api import (
     workspace,
 )
 from app.config import Settings
+from app.db.postgres import PostgresDatabase
 from app.domain.catalog import CatalogStore
 from app.domain.conversation import ConversationStore
 from app.domain.guest_capabilities import GuestCapabilityPolicy, LoginRequired
-from app.domain.identity_policy import GuestAccountDeleting, IdentityPolicyStore
 from app.domain.guest_rate_limit import GuestRateLimiter
+from app.domain.identity_policy import GuestAccountDeleting, IdentityPolicyStore
 from app.domain.internal_auth import load_or_create_internal_tool_secret
 from app.domain.mcp_capacity import McpCapacityStore, PdfCapacityStore
 from app.domain.mcp_tool_calls import McpToolCallStore
@@ -151,6 +152,9 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
             model_gateway_model=settings.model_gateway_model or None,
             system_prompt=(Path(__file__).resolve().parents[1] / "pi" / "system-prompt.md").read_text(),
         )
+    database = (PostgresDatabase(settings.database_url, schema=settings.database_schema)
+                if settings.mode == "live" else None)
+    storage = database if database is not None else settings.agent_db_path
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         """Start discovery and background schedulers, then release them on exit."""
@@ -212,6 +216,8 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
                     await mock_scheduler
                 except asyncio.CancelledError:
                     pass
+            if database is not None:
+                database.close()
 
     app = FastAPI(title="PSKit Research Agent API", version="0.1.0", lifespan=lifespan)
 
@@ -229,11 +235,12 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
     app.state.metrics = RequestMetrics()
     app.add_middleware(ObservabilityMiddleware, metrics=app.state.metrics)
     app.state.settings = settings
+    app.state.database = database
     app.state.pdf_processor = PdfProcessingPool(
         max_concurrent=settings.pdf_max_concurrent_parses,
         queue_timeout_seconds=settings.pdf_queue_timeout_seconds,
         parse_timeout_seconds=settings.pdf_parse_timeout_seconds,
-        shared=PdfCapacityStore(settings.agent_db_path, settings.pdf_max_concurrent_parses)
+        shared=PdfCapacityStore(storage, settings.pdf_max_concurrent_parses)
         if settings.agent_runtime == "pi" else None,
     )
     app.state.af3_executor = af3_executor
@@ -242,7 +249,7 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
     app.state.mcp_checked = False
     app.state.mcp_last_checked_at = None
     app.state.oauth_flows = auth.OAuthFlowStore(
-        settings.agent_db_path if settings.mode == "live" else None
+        database
     )
     app.state.demo_store = DemoStore()
     app.state.identity_provider = (
@@ -256,12 +263,12 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
         ConversationStore()
         if settings.agent_runtime == "mock"
         else PersistentConversationStore(
-            settings.agent_db_path, af3_min_gpu_memory_mb=settings.af3_min_gpu_memory_mb,
+            storage, af3_min_gpu_memory_mb=settings.af3_min_gpu_memory_mb,
         )
     )
-    app.state.tool_runs = ToolRunStore(settings.agent_db_path if settings.agent_runtime == "pi" else None)
+    app.state.tool_runs = ToolRunStore(storage if settings.agent_runtime == "pi" else None)
     app.state.mcp_tool_calls = McpToolCallStore(
-        settings.agent_db_path if settings.agent_runtime == "pi" else ":memory:"
+        storage if settings.agent_runtime == "pi" else ":memory:"
     )
     if mcp_servers and mcp_provider is None:
         mcp_provider = MultiRemoteMcp({
@@ -282,7 +289,7 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
         app.state.mcp = LimitedMcp(
             app.state.mcp, max_calls=settings.mcp_max_concurrent_calls,
             queue_timeout_seconds=settings.mcp_queue_timeout_seconds,
-            shared=McpCapacityStore(settings.agent_db_path, settings.mcp_max_concurrent_calls)
+            shared=McpCapacityStore(storage, settings.mcp_max_concurrent_calls)
             if settings.agent_runtime == "pi" else None,
             lease_seconds=max(10, settings.mcp_timeout_seconds + 5),
         )
@@ -299,7 +306,7 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
             af3_execution_timeout_seconds=settings.af3_execution_timeout_seconds,
             max_active_runs=settings.pi_max_active_runs,
             max_active_runs_per_user=settings.pi_max_active_runs_per_user,
-            tool_token_secret=load_or_create_internal_tool_secret(settings.agent_db_path),
+            tool_token_secret=load_or_create_internal_tool_secret(storage),
             mcp_tool_calls=app.state.mcp_tool_calls,
         )
         if settings.agent_runtime == "pi" and pi_runner is not None
@@ -307,13 +314,13 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
     )
     app.state.catalog = CatalogStore(
         mcp_tools=app.state.mcp.tools(),
-        db_path=settings.agent_db_path if settings.agent_runtime == "pi" else None,
+        db_path=storage if settings.agent_runtime == "pi" else None,
         available_tools={tool.name for tool in app.state.mcp.tools()}
         | ({"submit_af3"} if af3_executor != "disabled" else set()),
         defer_unknown_tool_validation=mcp_executor == "remote",
     )
     app.state.identity_policy = IdentityPolicyStore(
-        settings.agent_db_path
+        storage
         if settings.mode == "live" or settings.agent_runtime == "pi" else ":memory:",
         guest_token_limit=settings.guest_monthly_token_limit,
         guest_gpu_limit=settings.guest_daily_gpu_minute_limit,
@@ -333,7 +340,7 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
     if settings.agent_runtime == "pi":
         app.state.conversations.identity_policy = app.state.identity_policy
     app.state.guest_rate_limiter = GuestRateLimiter(
-        settings.agent_db_path if settings.mode == "live" else ":memory:",
+        storage if settings.mode == "live" else ":memory:",
         secret=settings.anonymous_rate_secret or "pskit-mock-anonymous-rate-secret",
         limit_per_hour=settings.anonymous_rate_limit_per_hour,
     ) if settings.effective_anonymous_enabled() else None

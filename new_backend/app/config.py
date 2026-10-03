@@ -1,7 +1,7 @@
 import json
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -21,6 +21,8 @@ class Settings:
     mode: Literal["mock", "live"] = "mock"
     agent_runtime: Literal["mock", "pi"] = "mock"
     agent_db_path: str = "./data/agent.sqlite3"
+    database_url: str = field(default_factory=lambda: os.getenv("RESEARCH_AGENT_DATABASE_URL", ""))
+    database_schema: str = field(default_factory=lambda: os.getenv("RESEARCH_AGENT_DATABASE_SCHEMA", "pskit"))
     pdf_parse_timeout_seconds: float = 30.0
     pdf_max_concurrent_parses: int = 2
     pdf_queue_timeout_seconds: float = 5.0
@@ -89,6 +91,8 @@ class Settings:
             mode=os.getenv("RESEARCH_AGENT_MODE", "mock"),
             agent_runtime=os.getenv("RESEARCH_AGENT_RUNTIME", "mock"),
             agent_db_path=os.getenv("RESEARCH_AGENT_DB_PATH", "./data/agent.sqlite3"),
+            database_url=os.getenv("RESEARCH_AGENT_DATABASE_URL", ""),
+            database_schema=os.getenv("RESEARCH_AGENT_DATABASE_SCHEMA", "pskit"),
             pdf_parse_timeout_seconds=float(os.getenv("RESEARCH_AGENT_PDF_PARSE_TIMEOUT_SECONDS", "30")),
             pdf_max_concurrent_parses=int(os.getenv("RESEARCH_AGENT_PDF_MAX_CONCURRENT_PARSES", "2")),
             pdf_queue_timeout_seconds=float(os.getenv("RESEARCH_AGENT_PDF_QUEUE_TIMEOUT_SECONDS", "5")),
@@ -164,6 +168,10 @@ class Settings:
         """
         if self.mode != "live":
             raise ValueError("Live configuration requested in mock mode")
+        if not self.database_url:
+            raise ValueError("RESEARCH_AGENT_DATABASE_URL is required in live mode")
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", self.database_schema):
+            raise ValueError("RESEARCH_AGENT_DATABASE_SCHEMA must be a SQL identifier")
         required = {
             "SUPABASE_URL": self.supabase_url,
             "SUPABASE_PUBLISHABLE_KEY": self.supabase_publishable_key,
