@@ -20,4 +20,8 @@ def pg_schema() -> tuple[str, str]:
         yield dsn, schema
     finally:
         with psycopg.connect(dsn, autocommit=True) as connection:
-            connection.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema)))
+            owned = [name for (name,) in connection.execute(
+                "SELECT nspname FROM pg_namespace"
+            ) if name == schema or name.startswith(f"{schema}_preimport_")]
+            for name in owned:
+                connection.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(name)))

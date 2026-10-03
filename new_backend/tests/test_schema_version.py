@@ -4,6 +4,23 @@ import pytest
 
 from app.db.migrations import SCHEMA_VERSION
 from app.domain.persistent_conversation import PersistentConversationStore
+from scripts.agent_data_migrate import _sqlite_copy, _upgrade_sqlite_copy
+
+
+def test_offline_import_upgrades_only_disposable_copy(tmp_path):
+    """Legacy schema migration must never rewrite the source snapshot."""
+    source = tmp_path / "source.sqlite3"
+    store = PersistentConversationStore(str(source))
+    store.db.close()
+    with sqlite3.connect(source) as db:
+        db.execute("DELETE FROM core_schema_migrations WHERE version=14")
+        db.execute("PRAGMA user_version=13")
+    disposable = tmp_path / "working.sqlite3"
+    _sqlite_copy(source, disposable)
+    _upgrade_sqlite_copy(disposable)
+    with sqlite3.connect(source) as old, sqlite3.connect(disposable) as upgraded:
+        assert old.execute("PRAGMA user_version").fetchone() == (13,)
+        assert upgraded.execute("PRAGMA user_version").fetchone() == (SCHEMA_VERSION,)
 
 
 def test_version_thirteen_projects_get_default_icon_without_losing_data(tmp_path):

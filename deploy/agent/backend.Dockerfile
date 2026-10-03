@@ -22,6 +22,7 @@ COPY --from=pi-build /opt/pi/node_modules /app/pi/node_modules
 COPY pi/package.json pi/extension.js pi/system-prompt.md ./pi/
 COPY skills ./skills
 COPY scripts/af3_callback_proxy.py ./scripts/af3_callback_proxy.py
+COPY scripts/agent_data_migrate.py ./scripts/agent_data_migrate.py
 USER agent
 VOLUME /data
 EXPOSE 8000
