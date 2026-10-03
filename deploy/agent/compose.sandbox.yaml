@@ -1,0 +1,48 @@
+# Optional overlay after the existing local/cloud/staging Compose files.
+# The manager alone controls Docker; each user sandbox is created on the app network.
+services:
+  backend:
+    environment:
+      RESEARCH_AGENT_PI_EXECUTION: sandbox
+      RESEARCH_AGENT_INTERNAL_API_URL: http://backend:8000
+      PSKIT_SANDBOX_MANAGER_URL: http://sandbox-manager:8090
+      PSKIT_SANDBOX_MANAGER_TOKEN: ${AGENT_SANDBOX_MANAGER_TOKEN:?Set a private manager token}
+    depends_on:
+      sandbox-manager:
+        condition: service_healthy
+
+  sandbox-manager:
+    image: ${AGENT_SANDBOX_IMAGE:?Set the fixed backend image for sandboxes}
+    user: "0:0"
+    command:
+      - python
+      - -m
+      - uvicorn
+      - app.sandbox_manager:create_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8090"
+    environment:
+      PSKIT_SANDBOX_MANAGER_TOKEN: ${AGENT_SANDBOX_MANAGER_TOKEN:?Set a private manager token}
+      PSKIT_SANDBOX_BRIDGE_SECRET: ${AGENT_SANDBOX_BRIDGE_SECRET:?Set a private bridge secret}
+      PSKIT_SANDBOX_IMAGE: ${AGENT_SANDBOX_IMAGE:?Set the fixed backend image for sandboxes}
+      PSKIT_SANDBOX_NETWORK: ${AGENT_SANDBOX_NETWORK:?Set the private Compose app network name}
+      PSKIT_SANDBOX_NAMESPACE: ${AGENT_SANDBOX_NAMESPACE:?Set a unique environment namespace}
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+    networks:
+      - app
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped

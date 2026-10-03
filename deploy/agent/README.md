@@ -1,5 +1,7 @@
 # 新版 Agent 本地 Docker 联调
 
+可选的用户专属 Pi 容器部署方式见 [SANDBOX.md](SANDBOX.md)。
+
 这套 Compose 在本机启动 React/Nginx、Python/Pi 和独立的 AF3 回调代理。它复用本机已运行的 Supabase Docker 网络，使用独立的 `pskit-agent-local_agent_data` 卷；模型由 Compose 内的替身响应，AF3 由联调脚本模拟领取和完成。现有 WSL 后端及 A6000 接收器不需要停机。
 
 ## 准备

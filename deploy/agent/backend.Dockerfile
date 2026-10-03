@@ -13,7 +13,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd --gid 10001 agent && useradd --uid 10001 --gid 10001 --home-dir /home/agent --create-home agent && \
-    mkdir -p /data && chown agent:agent /data
+    mkdir -p /data /workspace && chown agent:agent /data /workspace
 COPY pyproject.toml ./
 COPY app ./app
 RUN python -m pip install --no-cache-dir .

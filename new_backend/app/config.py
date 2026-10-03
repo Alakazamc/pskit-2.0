@@ -48,6 +48,9 @@ class Settings:
     pi_provider: str = ""
     pi_model: str = ""
     pi_session_dir: str = "./data/pi-sessions"
+    pi_execution: Literal["local", "sandbox"] = "local"
+    sandbox_manager_url: str = ""
+    sandbox_manager_token: str = ""
     pi_max_active_runs: int = 4
     pi_max_active_runs_per_user: int = 2
     supabase_url: str = ""
@@ -121,6 +124,9 @@ class Settings:
             pi_provider=os.getenv("RESEARCH_AGENT_PI_PROVIDER", ""),
             pi_model=os.getenv("RESEARCH_AGENT_PI_MODEL", ""),
             pi_session_dir=os.getenv("RESEARCH_AGENT_PI_SESSION_DIR", "./data/pi-sessions"),
+            pi_execution=os.getenv("RESEARCH_AGENT_PI_EXECUTION", "local"),
+            sandbox_manager_url=os.getenv("PSKIT_SANDBOX_MANAGER_URL", ""),
+            sandbox_manager_token=os.getenv("PSKIT_SANDBOX_MANAGER_TOKEN", ""),
             pi_max_active_runs=int(os.getenv("RESEARCH_AGENT_PI_MAX_ACTIVE_RUNS", "4")),
             pi_max_active_runs_per_user=int(
                 os.getenv("RESEARCH_AGENT_PI_MAX_ACTIVE_RUNS_PER_USER", "2")
@@ -195,6 +201,10 @@ class Settings:
             )
         if self.agent_runtime == "pi" and not (self.model_gateway_model or self.new_api_model):
             raise ValueError("MODEL_GATEWAY_MODEL is required in live Pi mode")
+        if self.agent_runtime == "pi" and self.pi_execution == "sandbox":
+            if not self.sandbox_manager_url or not self.sandbox_manager_token:
+                raise ValueError("Sandbox manager URL and token are required")
+            self._validate_http_base_url(self.sandbox_manager_url, "PSKIT_SANDBOX_MANAGER_URL")
         mapping = json.loads(self.new_api_user_tokens_json)
         if mapping != {}:
             raise ValueError("NEW_API_USER_TOKENS_JSON is no longer supported; use MODEL_GATEWAY_API_KEY")

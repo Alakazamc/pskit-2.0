@@ -13,6 +13,7 @@ from app.adapters.live.limited_mcp import LimitedMcp
 from app.adapters.live.multi_remote_mcp import MultiRemoteMcp
 from app.adapters.live.pi_rpc import PiRpcRunner
 from app.adapters.live.remote_mcp import RemoteMcp
+from app.adapters.live.sandbox_pi import SandboxPiRunner
 from app.adapters.live.supabase_auth import SupabaseIdentityAdapter
 from app.adapters.mock.af3 import MockAf3
 from app.adapters.mock.auth import MockIdentityProvider
@@ -135,23 +136,32 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
         if not settings.anonymous_captcha_required:
             raise ValueError("RESEARCH_AGENT_ANONYMOUS_CAPTCHA_REQUIRED must be enabled in live mode")
     if settings.agent_runtime == "pi" and pi_runner is None:
-        local_pi = Path(__file__).resolve().parents[1] / "pi" / "node_modules" / ".bin" / "pi"
-        executable = str(local_pi) if settings.pi_executable == "pi" and local_pi.is_file() else settings.pi_executable
-        if which(executable) is None and not Path(executable).is_file():
-            raise ValueError("Pi executable not found; set RESEARCH_AGENT_PI_EXECUTABLE")
-        pi_runner = PiRpcRunner(
-            executable=executable,
-            session_dir=settings.pi_session_dir,
-            extension=str(Path(__file__).resolve().parents[1] / "pi" / "extension.js"),
-            provider=settings.pi_provider or None,
-            model=settings.pi_model or None,
-            new_api_base_url=None,
-            new_api_model=settings.new_api_model or None,
-            model_gateway_base_url=(f"{settings.internal_api_url.rstrip('/')}/internal/model"
-                                    if settings.mode == "live" else None),
-            model_gateway_model=settings.model_gateway_model or None,
-            system_prompt=(Path(__file__).resolve().parents[1] / "pi" / "system-prompt.md").read_text(),
-        )
+        if settings.pi_execution == "sandbox":
+            if not settings.sandbox_manager_url or not settings.sandbox_manager_token:
+                raise ValueError("Sandbox manager URL and token are required")
+            pi_runner = SandboxPiRunner(
+                manager_url=settings.sandbox_manager_url,
+                manager_token=settings.sandbox_manager_token,
+                model=settings.model_gateway_model or settings.new_api_model or settings.pi_model,
+            )
+        else:
+            local_pi = Path(__file__).resolve().parents[1] / "pi" / "node_modules" / ".bin" / "pi"
+            executable = str(local_pi) if settings.pi_executable == "pi" and local_pi.is_file() else settings.pi_executable
+            if which(executable) is None and not Path(executable).is_file():
+                raise ValueError("Pi executable not found; set RESEARCH_AGENT_PI_EXECUTABLE")
+            pi_runner = PiRpcRunner(
+                executable=executable,
+                session_dir=settings.pi_session_dir,
+                extension=str(Path(__file__).resolve().parents[1] / "pi" / "extension.js"),
+                provider=settings.pi_provider or None,
+                model=settings.pi_model or None,
+                new_api_base_url=None,
+                new_api_model=settings.new_api_model or None,
+                model_gateway_base_url=(f"{settings.internal_api_url.rstrip('/')}/internal/model"
+                                        if settings.mode == "live" else None),
+                model_gateway_model=settings.model_gateway_model or None,
+                system_prompt=(Path(__file__).resolve().parents[1] / "pi" / "system-prompt.md").read_text(),
+            )
     database = (PostgresDatabase(settings.database_url, schema=settings.database_schema)
                 if settings.mode == "live" else None)
     storage = database if database is not None else settings.agent_db_path

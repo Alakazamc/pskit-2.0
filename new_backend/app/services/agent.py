@@ -193,6 +193,7 @@ class AgentService:
         if capabilities is not None:
             allowed = {name for name in allowed if capabilities.mcp_allowed_for(user_id, name)}
         environment = {
+            "PSKIT_USER_ID": user_id,
             "PSKIT_RUN_ID": run_id,
             "PSKIT_AGENT_TOOL_TOKEN": self.tool_token(run_id),
             "PSKIT_INTERNAL_API_URL": self.internal_api_url,
