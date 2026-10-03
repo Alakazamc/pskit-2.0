@@ -5,13 +5,40 @@ import json
 import secrets
 import uuid
 from datetime import datetime, timedelta
-from app.contracts.capabilities import Af3ComputeClaim, Af3FoldInput, Af3GpuReconciliation, Af3Job, Af3JobRequest, ComputeResourceRequirements, ComputeWorkerResources
+
+from app.contracts.capabilities import (
+    Af3ComputeClaim,
+    Af3FoldInput,
+    Af3GpuReconciliation,
+    Af3Job,
+    Af3JobRequest,
+    ComputeResourceRequirements,
+    ComputeWorkerResources,
+)
 from app.contracts.catalog import ArtifactRef
+from app.contracts.conversation import (
+    ApprovalDecisionResponse,
+    ApprovalRef,
+    ApprovalRequiredData,
+    ApprovalRequiredEvent,
+    ApprovalResolvedData,
+    ApprovalResolvedEvent,
+    ArtifactCreatedData,
+    ArtifactCreatedEvent,
+    RunCancelledData,
+    RunCancelledEvent,
+    RunFailedData,
+    RunFailedEvent,
+    TaskUpdatedData,
+    TaskUpdatedEvent,
+    UsageUpdatedData,
+    UsageUpdatedEvent,
+)
 from app.domain.af3_requests import Af3IdempotencyConflict, af3_request_fingerprint
-from app.contracts.conversation import ApprovalDecisionResponse, ApprovalRef, ApprovalRequiredData, ApprovalRequiredEvent, ApprovalResolvedData, ApprovalResolvedEvent, ArtifactCreatedData, ArtifactCreatedEvent, RunCancelledData, RunCancelledEvent, RunFailedData, RunFailedEvent, TaskUpdatedData, TaskUpdatedEvent, UsageUpdatedData, UsageUpdatedEvent
 from app.domain.quota import GpuQuotaExceeded
 
-from .common import ComputeLeaseConflict, GpuReconciliationConflict, current_time as _now
+from .common import ComputeLeaseConflict, GpuReconciliationConflict
+from .common import current_time as _now
 
 
 class Af3Mixin:
@@ -333,7 +360,14 @@ class Af3Mixin:
         """
         now = _now()
         claimed: list[Af3ComputeClaim] = []
-        with self._immediate_transaction():
+        postgres = getattr(self, "database", None) is not None
+        transaction = self.db if postgres else self._immediate_transaction()
+        with transaction:
+            if postgres:
+                self.db.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(?, 0))",
+                    (f"pskit-af3-worker:{worker_id}",),
+                )
             active_requirements = self.db.execute(
                 "SELECT resource_requirements_json FROM agent_jobs "
                 "WHERE worker_id=? AND status='running'",
@@ -355,13 +389,22 @@ class Af3Mixin:
                         or required.gpu_count > available_gpus
                         or required.min_gpu_memory_mb > resources.gpu_memory_mb):
                     continue
+                if postgres and self.db.execute(
+                    "SELECT id FROM agent_jobs WHERE id=? AND status='queued' "
+                    "FOR UPDATE SKIP LOCKED",
+                    (job_id,),
+                ).fetchone() is None:
+                    continue
                 lease_token = secrets.token_urlsafe(32)
-                self.db.execute(
+                changed = self.db.execute(
                     "UPDATE agent_jobs SET status='running',worker_id=?,lease_expires_at=?,lease_token=?, "
-                    "attempts=attempts+1,first_claimed_at=COALESCE(first_claimed_at,?) WHERE id=?",
+                    "attempts=attempts+1,first_claimed_at=COALESCE(first_claimed_at,?) "
+                    "WHERE id=? AND status='queued'",
                     (worker_id, (now + timedelta(seconds=lease_seconds)).isoformat(),
                      lease_token, now.isoformat(), job_id),
-                )
+                ).rowcount
+                if not changed:
+                    continue
                 if run_id:
                     self._append_event_in_transaction(run_id, TaskUpdatedEvent(
                         run_id=run_id,
@@ -644,7 +687,7 @@ class Af3Mixin:
             ).fetchone()
             if row is None:
                 return None
-            (user_id, run_id, previous, worker_id, lease_expires_at, current_attempt,
+            (user_id, run_id, previous, worker_id, _lease_expires_at, current_attempt,
              current_token, first_claimed_at, accounting_status, prior_minutes) = row
             if previous not in {"queued", "running"}:
                 if accounting_status in {"pending_reconciliation", "reconciled"}:
@@ -883,6 +926,8 @@ class Af3Mixin:
             ComputeLeaseConflict: The worker lease is stale.
             ValueError: Uploaded content conflicts or the job is closed.
         """
+        if len(content) > 20 * 1024 * 1024:
+            raise ValueError("Artifact exceeds the 20 MiB limit")
         digest = hashlib.sha256(content).hexdigest()
         with self._immediate_transaction():
             job = self.db.execute(
@@ -892,7 +937,7 @@ class Af3Mixin:
             ).fetchone()
             if job is None:
                 return None
-            (user_id, status, worker_id, lease_expires_at, current_attempt,
+            (user_id, status, worker_id, _lease_expires_at, current_attempt,
              current_token, first_claimed_at) = job
             if status in {"queued", "running"} and worker_id is not None and (
                 attempt != current_attempt or lease_token != current_token
