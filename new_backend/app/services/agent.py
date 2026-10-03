@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import hashlib
 import hmac
 import json
@@ -22,6 +23,7 @@ from app.contracts.conversation import (
     ToolStartedEvent,
     ToolUpdatedEvent,
 )
+from app.domain.catalog import image_mime_type
 from app.domain.mcp_tool_calls import McpToolCallStore
 from app.domain.persistent_conversation import PersistentConversationStore
 from app.domain.quota import TokenQuotaExceeded
@@ -92,6 +94,7 @@ class AgentService:
         self.max_active_runs_per_user = max_active_runs_per_user
         self._tool_secret = tool_token_secret or secrets.token_bytes(32)
         self.mcp_tool_calls = mcp_tool_calls
+        self.catalog = None
         self._instance_id = uuid.uuid4().hex
         self._locks: dict[str, asyncio.Lock] = {}
         self._tasks: set[asyncio.Task] = set()
@@ -204,6 +207,11 @@ class AgentService:
                 tool.model_dump() for tool in self.mcp_tools if tool.name in allowed
             ]),
         }
+        model_id = self.store.run_context(run_id).get("model_id")
+        if model_id:
+            environment["PSKIT_MODEL_ID"] = model_id
+        if self.store.run_context(run_id).get("model_supports_images") is True:
+            environment["PSKIT_MODEL_SUPPORTS_IMAGES"] = "1"
         if self.model_gateway_api_key is not None:
             environment["MODEL_GATEWAY_API_KEY"] = (
                 f"{run_id}.{self.tool_token(run_id)}" if self.model_gateway_proxy_enabled
@@ -303,11 +311,25 @@ class AgentService:
                 self._record_progress_event(user_id, run_id, event)
 
             try:
+                image_ids = self.store.run_context(run_id).get("image_ids", [])
+                images = []
+                for file_id in image_ids:
+                    if self.catalog is None:
+                        raise RuntimeError("Image catalog is unavailable")
+                    file = next((item for item in self.catalog.files_for(user_id)
+                                 if item.id == file_id), None)
+                    raw = self.catalog.file_bytes_for(user_id, file_id) if file else None
+                    mime = image_mime_type(file.name, raw) if raw is not None and file else None
+                    if mime is None:
+                        raise RuntimeError("Run image is unavailable")
+                    images.append({"type": "image", "data": base64.b64encode(raw).decode(),
+                                   "mimeType": mime})
                 result = await self.runner.prompt(
                     session_id, content, on_event,
                     session_file=self.store.session_file_for(user_id, session_id),
                     environment=self._environment(user_id, run_id),
                     system_prompt_suffix=instructions,
+                    **({"images": images} if images else {}),
                 )
                 if not self.store.owns_lease(run_id, self._instance_id):
                     return

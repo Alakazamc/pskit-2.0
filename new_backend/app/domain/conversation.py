@@ -20,13 +20,12 @@ from app.contracts.conversation import (
     Session,
     TextPart,
 )
-from app.domain.quota import QuotaLedger
 from app.domain.project_routes import new_project_id
+from app.domain.quota import QuotaLedger
 
 
 class IdempotencyConflict(Exception):
     """A message request key was reused with different content."""
-    pass
 
 
 def _now() -> datetime:
@@ -74,7 +73,9 @@ class ConversationStore:
         quota: QuotaLedger, estimated_tokens: int,
         idempotency_key: str | None, request_hash: str,
         *, waiting: bool = False, instructions: str = "",
-        allowed_tools: tuple[str, ...] = (), user_prompt: str = "",
+        allowed_tools: tuple[str, ...] = (), user_prompt: str = "", model_id: str = "",
+        image_ids: tuple[str, ...] = (),
+        model_supports_images: bool = False,
     ) -> tuple[RunRef, bool] | None:
         """Charge mock Tokens and accept a user message once per request key.
 
@@ -99,7 +100,7 @@ class ConversationStore:
             IdempotencyConflict: The key was reused with different input.
             TokenQuotaExceeded: The mock ledger rejects the charge.
         """
-        del instructions, allowed_tools, user_prompt
+        del instructions, allowed_tools, user_prompt, model_id, image_ids, model_supports_images
         if self.messages_for(user_id, session_id) is None:
             return None
         key = (user_id, session_id, idempotency_key) if idempotency_key else None

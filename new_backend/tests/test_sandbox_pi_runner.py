@@ -25,7 +25,13 @@ async def test_agent_runner_streams_pi_from_the_users_sandbox():
     async def ensure():
         return {"base_url": "http://pskit-sbx-test-123:8091", "token": "bridge-secret"}
 
-    bridge = create_bridge_app("user-1", "bridge-secret", lambda _: FakePi())
+    selected_models = []
+
+    def make_pi(model):
+        selected_models.append(model)
+        return FakePi()
+
+    bridge = create_bridge_app("user-1", "bridge-secret", make_pi)
     runner = SandboxPiRunner(
         manager_url="http://sandbox-manager:8090", manager_token="manager-secret",
         model="claude-opus-4-8", manager_transport=httpx.ASGITransport(app=manager),
@@ -39,6 +45,13 @@ async def test_agent_runner_streams_pi_from_the_users_sandbox():
     assert result == {"session_file": "/workspace/sessions/session-1/turn.jsonl",
                       "text": "沙箱完成"}
     assert events[0]["assistantMessageEvent"]["delta"] == "沙箱完成"
+    assert selected_models == ["claude-opus-4-8"]
+
+    selected_models.clear()
+    await runner.prompt("session-2", "读图片", lambda _: None,
+                        environment={"PSKIT_USER_ID": "user-1",
+                                     "PSKIT_MODEL_ID": "vision-model"})
+    assert selected_models == ["vision-model"]
 
 
 @pytest.mark.asyncio

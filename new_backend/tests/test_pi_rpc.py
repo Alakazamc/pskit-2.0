@@ -8,6 +8,53 @@ from app.adapters.live.pi_rpc import PiRpcError, PiRpcRunner
 
 
 @pytest.mark.asyncio
+async def test_pi_rpc_sends_image_content_and_declares_vision_input(tmp_path):
+    executable = tmp_path / "fake-pi-image"
+    capture = tmp_path / "command.json"
+    executable.write_text(
+        """#!/usr/bin/env python3
+import json
+import os
+import pathlib
+import sys
+for line in sys.stdin:
+    command = json.loads(line)
+    if command['type'] == 'get_state':
+        print(json.dumps({'id': command['id'], 'type': 'response', 'success': True,
+                          'data': {'sessionFile': '/tmp/image-session.jsonl'}}), flush=True)
+    elif command['type'] == 'prompt':
+        pathlib.Path(os.environ['TEST_IMAGE_CAPTURE']).write_text(json.dumps(command))
+        print(json.dumps({'id': command['id'], 'type': 'response', 'success': True,
+                          'data': {'disposition': 'started'}}), flush=True)
+        print(json.dumps({'type': 'message_end', 'message': {'role': 'assistant',
+                          'content': [{'type': 'text', 'text': 'seen'}]}}), flush=True)
+        print(json.dumps({'type': 'agent_settled'}), flush=True)
+        break
+""", encoding="utf-8",
+    )
+    executable.chmod(0o755)
+    runner = PiRpcRunner(
+        executable=str(executable), session_dir=str(tmp_path / "sessions"),
+        model_gateway_base_url="http://gateway:4000/v1", model_gateway_model="text-model",
+    )
+    images = [{"type": "image", "data": "cG5n", "mimeType": "image/png"}]
+    result = await runner.prompt(
+        "session-alice", "Describe", lambda _: None,
+        images=images, environment={
+            "TEST_IMAGE_CAPTURE": str(capture), "MODEL_GATEWAY_API_KEY": "test-key",
+            "PSKIT_MODEL_ID": "vision-model", "PSKIT_MODEL_SUPPORTS_IMAGES": "1",
+        },
+    )
+    config = json.loads((tmp_path / "sessions" / "session-alice" / ".pi-config"
+                         / "models.json").read_text())
+    assert json.loads(capture.read_text())["images"] == images
+    assert config["providers"]["model-gateway"]["models"] == [
+        {"id": "vision-model", "input": ["text", "image"]},
+    ]
+    assert result["text"] == "seen"
+
+
+@pytest.mark.asyncio
 async def test_pi_rpc_marks_early_process_exit_as_retryable(tmp_path):
     executable = tmp_path / "fake-pi-exit"
     executable.write_text("#!/usr/bin/env python3\nraise SystemExit(1)\n", encoding="utf-8")
@@ -129,12 +176,53 @@ for line in sys.stdin.buffer:
         "session-alice", "你好", lambda _: None,
         environment={"MODEL_GATEWAY_API_KEY": "server-secret"},
     )
-    config = json.loads((tmp_path / "sessions" / ".pi-config" / "models.json").read_text())
-    retry = json.loads((tmp_path / "sessions" / ".pi-config" / "settings.json").read_text())["retry"]
+    config = json.loads((tmp_path / "sessions/session-alice/.pi-config/models.json").read_text())
+    retry = json.loads((tmp_path / "sessions/session-alice/.pi-config/settings.json").read_text())["retry"]
     assert result["text"] == "完成"
     assert "server-secret" not in json.dumps(config)
     assert retry == {"enabled": True, "maxRetries": 3, "baseDelayMs": 2000,
                      "maxAgentDelayMs": 60000, "provider": {"maxRetries": 0}}
+
+
+@pytest.mark.asyncio
+async def test_pi_rpc_uses_selected_model_and_separate_session_configs(tmp_path):
+    executable = tmp_path / "fake-pi-model"
+    executable.write_text(
+        """#!/usr/bin/env python3
+import json, os, pathlib, sys
+model = sys.argv[sys.argv.index('--model') + 1]
+config = json.loads((pathlib.Path(os.environ['PI_CODING_AGENT_DIR']) / 'models.json').read_text())
+assert config['providers']['model-gateway']['models'][0]['id'] == model
+for line in sys.stdin.buffer:
+ command = json.loads(line)
+ if command['type'] == 'get_state':
+  print(json.dumps({'id': command['id'], 'type': 'response', 'success': True,
+                    'data': {'sessionFile': '/tmp/selected-model.jsonl'}}), flush=True)
+ elif command['type'] == 'prompt':
+  print(json.dumps({'id': command['id'], 'type': 'response', 'success': True,
+                    'data': {'disposition': 'started'}}), flush=True)
+  print(json.dumps({'type': 'message_end', 'message': {'role': 'assistant',
+                    'content': [{'type': 'text', 'text': model}]}}), flush=True)
+  print(json.dumps({'type': 'agent_settled'}), flush=True)
+  break
+""", encoding="utf-8")
+    executable.chmod(0o755)
+    runner = PiRpcRunner(
+        executable=str(executable), session_dir=str(tmp_path / "sessions"),
+        model_gateway_base_url="https://gateway.example/v1", model_gateway_model="default-model",
+    )
+
+    first = await runner.prompt("session-1", "hello", lambda _: None, environment={
+        "MODEL_GATEWAY_API_KEY": "server-secret", "PSKIT_MODEL_ID": "chosen-model",
+    })
+    second = await runner.prompt("session-2", "hello", lambda _: None, environment={
+        "MODEL_GATEWAY_API_KEY": "server-secret", "PSKIT_MODEL_ID": "default-model",
+    })
+
+    assert first["text"] == "chosen-model"
+    assert second["text"] == "default-model"
+    assert (tmp_path / "sessions/session-1/.pi-config/models.json").exists()
+    assert (tmp_path / "sessions/session-2/.pi-config/models.json").exists()
 
 
 @pytest.mark.asyncio
@@ -173,7 +261,7 @@ for line in sys.stdin.buffer:
         "session-alice", "你好", lambda _: None,
         environment={"MODEL_GATEWAY_API_KEY": "server-secret"},
     )
-    config = json.loads((tmp_path / "sessions" / ".pi-config" / "models.json").read_text())
+    config = json.loads((tmp_path / "sessions/session-alice/.pi-config/models.json").read_text())
     assert result["text"] == "完成"
     assert "server-secret" not in json.dumps(config)
 

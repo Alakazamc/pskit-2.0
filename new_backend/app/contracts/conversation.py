@@ -3,7 +3,6 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-
 ProjectIcon = Literal[
     "folder", "flask", "atom", "dna", "microscope", "beaker",
     "book", "database", "cpu", "network", "sparkles", "layers",
@@ -131,6 +130,7 @@ class ContextRef(BaseModel):
 
 class MessageRequest(BaseModel):
     content: str = Field(min_length=1)
+    model: str | None = Field(default=None, min_length=1, max_length=200)
     attachments: list[ContextRef] = Field(default_factory=list)
     skills: list[ContextRef] = Field(default_factory=list)
     resources: list[ContextRef] = Field(default_factory=list)

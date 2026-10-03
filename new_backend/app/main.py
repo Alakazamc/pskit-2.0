@@ -28,6 +28,7 @@ from app.api import (
     health,
     internal,
     metrics,
+    models,
     runs,
     usage,
     workspace,
@@ -48,6 +49,7 @@ from app.domain.store import DemoStore
 from app.domain.tool_runs import ToolRunStore
 from app.ports.providers import ProviderUnavailable
 from app.services.agent import AgentService
+from app.services.model_catalog import ModelCatalog
 from app.services.observability import ObservabilityMiddleware, RequestMetrics
 from app.services.pdf_processing import PdfProcessingPool
 
@@ -329,6 +331,13 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
         | ({"submit_af3"} if af3_executor != "disabled" else set()),
         defer_unknown_tool_validation=mcp_executor == "remote",
     )
+    app.state.model_catalog = ModelCatalog(
+        base_url=settings.model_gateway_base_url or settings.new_api_base_url,
+        api_key=settings.model_gateway_api_key,
+        default_model=settings.model_gateway_model or settings.new_api_model or settings.pi_model
+        or "mock-model",
+        image_model_ids=settings.model_gateway_image_models(),
+    )
     app.state.identity_policy = IdentityPolicyStore(
         storage
         if settings.mode == "live" or settings.agent_runtime == "pi" else ":memory:",
@@ -347,6 +356,7 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
     app.state.catalog.guest_storage_limit_bytes = settings.guest_storage_limit_bytes
     if app.state.agent_service is not None:
         app.state.agent_service.guest_capabilities = app.state.guest_capabilities
+        app.state.agent_service.catalog = app.state.catalog
     if settings.agent_runtime == "pi":
         app.state.conversations.identity_policy = app.state.identity_policy
     app.state.guest_rate_limiter = GuestRateLimiter(
@@ -373,6 +383,7 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
     app.include_router(runs.router)
     app.include_router(capabilities.router)
     app.include_router(catalog.router)
+    app.include_router(models.router)
     app.include_router(workspace.router)
     app.include_router(internal.router)
     app.include_router(admin.router)

@@ -1,5 +1,6 @@
 """The private sandbox HTTP boundary preserves Pi RPC events and ownership."""
 
+import base64
 import json
 
 import httpx
@@ -63,3 +64,28 @@ async def test_sandbox_bridge_rejects_path_traversal_before_starting_pi():
         }, headers={"Authorization": "Bearer bridge-secret"})
     assert response.status_code == 422
     assert runner.calls == []
+
+
+@pytest.mark.asyncio
+async def test_sandbox_bridge_forwards_valid_image_and_rejects_invalid_image():
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="
+    )
+
+    runner = RecordingRunner()
+    app = create_bridge_app("user-123", "bridge-secret", lambda _: runner)
+    payload = {"user_id": "user-123", "session_id": "session-abc",
+               "message": "Describe", "model": "vision-model"}
+    headers = {"Authorization": "Bearer bridge-secret"}
+    image = {"type": "image", "mimeType": "image/png",
+             "data": base64.b64encode(png).decode()}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                 base_url="http://sandbox") as client:
+        invalid = await client.post("/v1/pi/prompt", json={**payload, "images": [
+            {**image, "data": base64.b64encode(b"fake").decode()},
+        ]}, headers=headers)
+        accepted = await client.post("/v1/pi/prompt", json={**payload, "images": [image]},
+                                     headers=headers)
+    assert invalid.status_code == 422
+    assert accepted.status_code == 200
+    assert runner.calls[0][2]["images"] == [image]

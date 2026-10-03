@@ -16,6 +16,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.adapters.live.pi_rpc import PiRpcError, PiRpcRunner
+from app.domain.catalog import MAX_IMAGE_FILE_BYTES, image_mime_type
 
 
 class SandboxPrompt(BaseModel):
@@ -30,6 +31,7 @@ class SandboxPrompt(BaseModel):
     environment: dict[str, str] = Field(default_factory=dict)
     allow_handled: bool = False
     system_prompt_suffix: str = ""
+    images: list[dict[str, str]] = Field(default_factory=list, max_length=2)
 
 
 def _default_runner(model: str) -> PiRpcRunner:
@@ -67,6 +69,20 @@ def create_bridge_app(
             raise HTTPException(status_code=401, detail="Unauthorized")
         if request.user_id != owner_id:
             raise HTTPException(status_code=403, detail="Sandbox owner mismatch")
+        for image in request.images:
+            mime, encoded = image.get("mimeType"), image.get("data")
+            if image.get("type") != "image" or not isinstance(encoded, str) or not isinstance(mime, str):
+                raise HTTPException(status_code=422, detail="Invalid image")
+            if len(encoded) > MAX_IMAGE_FILE_BYTES * 4 // 3 + 8:
+                raise HTTPException(status_code=413, detail="Image exceeds size limit")
+            try:
+                raw = base64.b64decode(encoded, validate=True)
+            except binascii.Error as exc:
+                raise HTTPException(status_code=422, detail="Invalid image") from exc
+            suffix = {"image/png": ".png", "image/jpeg": ".jpg",
+                      "image/gif": ".gif", "image/webp": ".webp"}.get(mime, "")
+            if len(raw) > MAX_IMAGE_FILE_BYTES or image_mime_type("image" + suffix, raw) != mime:
+                raise HTTPException(status_code=422, detail="Invalid image")
         if request.session_file is not None:
             session_root = (Path(os.environ.get(
                 "RESEARCH_AGENT_PI_SESSION_DIR", "/workspace/sessions",
@@ -104,6 +120,7 @@ def create_bridge_app(
                     environment=request.environment,
                     allow_handled=request.allow_handled,
                     system_prompt_suffix=request.system_prompt_suffix,
+                    **({"images": request.images} if request.images else {}),
                 )
                 await queue.put({"kind": "result", "data": result})
             except PiRpcError as exc:

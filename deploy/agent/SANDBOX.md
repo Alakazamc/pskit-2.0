@@ -23,7 +23,7 @@ AGENT_SANDBOX_MANAGER_TOKEN=<独立随机密钥，至少 16 字符>
 AGENT_SANDBOX_BRIDGE_SECRET=<另一枚独立随机密钥，至少 16 字符>
 ```
 
-`AGENT_SANDBOX_IMAGE` 必须对应当前 `AGENT_BACKEND_IMAGE` 的内容。`AGENT_SANDBOX_NETWORK` 应以 `docker network ls` 核对实际 Compose `app` 网络名称；Staging 通常是 `pskit-agent-staging_app`。不要将管理令牌或 bridge secret 放入前端构建变量。
+`AGENT_SANDBOX_IMAGE` 必须对应当前 `AGENT_BACKEND_IMAGE` 的内容。`AGENT_SANDBOX_NETWORK` 应以 `docker network ls` 核对实际 Compose `app` 网络名称；Staging 通常是 `pskit-agent-staging_app`。不要将管理令牌或 bridge secret 放入前端构建变量。模型别名从 LiteLLM 动态读取；如果 LiteLLM 未返回 `supports_vision`，可在后端环境设置 `MODEL_GATEWAY_IMAGE_MODELS_JSON=["模型别名"]`，仅为已验证支持图片的别名开启图片上传。
 
 生产 Compose 在原有四个文件后叠加沙箱文件；第一次切换前先执行配置检查，确认 `sandbox-manager` 没有 `ports`，且只有它挂载 Docker socket：
 

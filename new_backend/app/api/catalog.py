@@ -7,8 +7,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 
 from app.api.auth import CurrentUserDep
-from app.contracts.catalog import ArtifactPreview, ArtifactRef, CatalogItem, FileRef, FileUploadRequest
+from app.contracts.catalog import (
+    ArtifactPreview,
+    ArtifactRef,
+    CatalogItem,
+    FileRef,
+    FileUploadRequest,
+)
 from app.domain.catalog import (
+    IMAGE_MIME_TYPES,
+    MAX_IMAGE_FILE_BYTES,
     MAX_PDF_FILE_BYTES,
     MAX_TEXT_FILE_BYTES,
     TEXT_FILE_SUFFIXES,
@@ -69,13 +77,14 @@ async def upload_file(
 async def upload_streamed_file(
     name: str, request: Request, user: CurrentUserDep, catalog: CatalogDep,
 ) -> FileRef:
-    """Stream and validate a text or PDF upload against storage limits."""
+    """Stream and validate a text, PDF, or image upload against storage limits."""
     from pathlib import Path
 
     suffix = Path(name).suffix.lower()
-    if suffix != ".pdf" and suffix not in TEXT_FILE_SUFFIXES:
+    if suffix != ".pdf" and suffix not in TEXT_FILE_SUFFIXES | IMAGE_MIME_TYPES.keys():
         raise HTTPException(status_code=415, detail={"code": "UNSUPPORTED_FILE_TYPE"})
-    maximum = MAX_PDF_FILE_BYTES if suffix == ".pdf" else MAX_TEXT_FILE_BYTES
+    maximum = (MAX_PDF_FILE_BYTES if suffix == ".pdf" else
+               MAX_IMAGE_FILE_BYTES if suffix in IMAGE_MIME_TYPES else MAX_TEXT_FILE_BYTES)
     single_limit = catalog.single_file_limit_for(user.id)
     if single_limit is not None:
         maximum = min(maximum, single_limit)

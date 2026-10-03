@@ -26,8 +26,8 @@ from app.contracts.conversation import (
 )
 from app.domain.catalog import ContextNotFound
 from app.domain.conversation import IdempotencyConflict
-from app.domain.quota import GpuQuotaExceeded, TokenQuotaExceeded
 from app.domain.project_routes import project_id_from_key
+from app.domain.quota import GpuQuotaExceeded, TokenQuotaExceeded
 
 router = APIRouter(prefix="/api/v1", tags=["workspace"])
 
@@ -282,9 +282,18 @@ async def send_message(
     if existing:
         return existing
     try:
+        selected_model = await request.app.state.model_catalog.resolve(payload.model)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "MODEL_UNAVAILABLE"}) from exc
+    try:
         context = catalog.resolve_context(user.id, payload)
     except ContextNotFound as exc:
         raise HTTPException(status_code=404, detail={"code": "CONTEXT_NOT_FOUND"}) from exc
+    if context.image_ids and not selected_model.supports_images:
+        raise HTTPException(status_code=422,
+                            detail={"code": "MODEL_DOES_NOT_SUPPORT_IMAGES"})
+    if len(context.image_ids) > 2:
+        raise HTTPException(status_code=422, detail={"code": "TOO_MANY_IMAGES"})
     payload = payload.model_copy(update={"attachments": list(context.attachments)})
     pi_mode = request.app.state.settings.agent_runtime == "pi"
     if pi_mode and request.app.state.agent_service is None:
@@ -302,11 +311,15 @@ async def send_message(
             detail={"code": "GPU_DAILY_QUOTA_EXCEEDED", "message": "Daily GPU quota exhausted"},
         )
     estimate = max(1, (len(context.user_prompt) + len(context.system_instructions)) // 4)
+    estimate += len(context.image_ids) * 1024
     try:
         accepted = conversations.accept_message(
             user.id, session_id, payload, quotas, estimate, idempotency_key, fingerprint,
             waiting=wants_af3, instructions=context.system_instructions,
             allowed_tools=context.allowed_tools, user_prompt=context.user_prompt,
+            model_id=selected_model.id,
+            model_supports_images=selected_model.supports_images,
+            image_ids=context.image_ids,
         )
     except TokenQuotaExceeded as exc:
         raise HTTPException(

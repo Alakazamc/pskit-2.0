@@ -249,7 +249,9 @@ class RunsMixin:
         self, user_id: str, session_id: str, payload: MessageRequest,
         quota, estimated_tokens: int, idempotency_key: str | None, request_hash: str,
         *, waiting: bool = False, instructions: str = "",
-        allowed_tools: tuple[str, ...] = (), user_prompt: str = "",
+        allowed_tools: tuple[str, ...] = (), user_prompt: str = "", model_id: str = "",
+        image_ids: tuple[str, ...] = (),
+        model_supports_images: bool = False,
     ) -> tuple[RunRef, bool] | None:
         """Admit a message, reserve Tokens, and queue its Run atomically.
 
@@ -320,7 +322,9 @@ class RunsMixin:
                 "(id,user_id,session_id,status,created_at,context_json) VALUES (?,?,?,?,?,?)",
                 (run_id, user_id, session_id, "queued", _now().isoformat(),
                  json.dumps({"instructions": instructions, "allowed_tools": allowed_tools,
-                             "user_prompt": user_prompt})),
+                             "user_prompt": user_prompt, "model_id": model_id,
+                             "model_supports_images": model_supports_images,
+                             "image_ids": list(image_ids)})),
             )
             if idempotency_key:
                 self.db.execute(

@@ -37,6 +37,7 @@ class SandboxPiRunner:
         environment: dict[str, str] | None = None,
         allow_handled: bool = False,
         system_prompt_suffix: str = "",
+        images: list[dict[str, str]] | None = None,
     ) -> dict[str, str]:
         """Ensure the user's sandbox, then relay one Pi turn without local Pi."""
         owner_id = (environment or {}).get("PSKIT_USER_ID")
@@ -63,9 +64,11 @@ class SandboxPiRunner:
                     raise PiRpcError("Sandbox manager returned an invalid endpoint")
                 payload = {
                     "user_id": owner_id, "session_id": session_id, "message": message,
-                    "model": self.model, "session_file": session_file,
+                    "model": (environment or {}).get("PSKIT_MODEL_ID") or self.model,
+                    "session_file": session_file,
                     "environment": environment or {}, "allow_handled": allow_handled,
                     "system_prompt_suffix": system_prompt_suffix,
+                    "images": images or [],
                 }
                 if session_file and not session_file.startswith("/workspace/sessions/"):
                     legacy_path = Path(session_file)

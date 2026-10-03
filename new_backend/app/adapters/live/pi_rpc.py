@@ -77,6 +77,7 @@ class PiRpcRunner:
         environment: dict[str, str] | None = None,
         allow_handled: bool = False,
         system_prompt_suffix: str = "",
+        images: list[dict[str, str]] | None = None,
     ) -> dict[str, str]:
         """Run one Pi RPC prompt in an isolated session branch and relay events."""
         directory = (Path(self.session_dir) / session_id).resolve()
@@ -97,10 +98,10 @@ class PiRpcRunner:
             active_session_file = str(branch_file)
         child_env = {**os.environ, **(environment or {})}
         gateway_url = self.model_gateway_base_url or self.new_api_base_url
-        gateway_model = self.model_gateway_model or self.new_api_model
+        gateway_model = (environment or {}).get("PSKIT_MODEL_ID") or self.model_gateway_model or self.new_api_model
         provider_name = "model-gateway" if self.model_gateway_base_url else "new-api"
         key_env = "MODEL_GATEWAY_API_KEY"
-        config_dir = Path(self.session_dir).resolve() / ".pi-config"
+        config_dir = directory / ".pi-config"
         config_dir.mkdir(parents=True, exist_ok=True)
         retry_settings = {
             "retry": {
@@ -119,7 +120,9 @@ class PiRpcRunner:
                         "baseUrl": f"{gateway_url.rstrip('/').removesuffix('/v1')}/v1",
                         "api": "openai-completions",
                         "apiKey": f"${key_env}",
-                        "models": [{"id": gateway_model}],
+                        "models": [{"id": gateway_model, "input": ["text", "image"]
+                                    if child_env.get("PSKIT_MODEL_SUPPORTS_IMAGES") == "1"
+                                    else ["text"]}],
                     },
                 },
             }
@@ -196,7 +199,9 @@ class PiRpcRunner:
             current_file = state.get("sessionFile") or active_session_file
             if branch_file is not None and Path(current_file).resolve() != branch_file:
                 raise PiRpcError("Pi did not open the isolated session branch")
-            prompt_id = await write_command("prompt", message=message)
+            prompt_id = await write_command("prompt", message=message, **(
+                {"images": images} if images else {}
+            ))
             accepted, early_events = await read_response(prompt_id)
             if accepted.get("disposition") == "handled" and not allow_handled:
                 raise PiRpcError("Pi prompt was handled without an agent run")

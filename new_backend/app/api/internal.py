@@ -12,13 +12,16 @@ from starlette.responses import StreamingResponse
 from app.adapters.live.limited_mcp import McpCapacityExceeded
 from app.api.mcp_validation import validate_mcp_arguments
 from app.contracts.capabilities import (
-    Af3ComputeClaim, Af3FoldInput, Af3Job, ComputeWorkerResources, McpInvokeResult,
+    Af3ComputeClaim,
+    Af3FoldInput,
+    Af3Job,
+    ComputeWorkerResources,
+    McpInvokeResult,
 )
 from app.contracts.catalog import ArtifactRef
 from app.contracts.conversation import ApprovalRef, PlanSnapshot
 from app.domain.persistent_conversation import ComputeLeaseConflict, GpuReconciliationConflict
-from app.domain.quota import GpuQuotaExceeded
-from app.domain.quota import TokenQuotaExceeded
+from app.domain.quota import GpuQuotaExceeded, TokenQuotaExceeded
 from app.ports.providers import ProviderUnavailable
 
 router = APIRouter(prefix="/internal", tags=["internal"], include_in_schema=False)
@@ -131,22 +134,43 @@ async def proxy_model_call(
     if owner is None:
         raise HTTPException(status_code=404, detail="Run not found")
     raw = await request.body()
-    if not raw or len(raw) > 10_000_000:
+    if not raw or len(raw) > 16_000_000:
         raise HTTPException(status_code=413, detail="Model request is too large")
     try:
         payload = json.loads(raw)
     except (ValueError, UnicodeDecodeError) as exc:
         raise HTTPException(status_code=400, detail="Invalid model request") from exc
-    expected_model = settings.model_gateway_model or settings.new_api_model
+    expected_model = (store.run_context(run_id).get("model_id")
+                      or settings.model_gateway_model or settings.new_api_model)
     if not isinstance(payload, dict) or payload.get("model") != expected_model:
         raise HTTPException(status_code=400, detail="Model is not configured")
     field = "max_completion_tokens" if "max_completion_tokens" in payload else "max_tokens"
     requested = payload.get(field, 4096)
     if type(requested) is not int or requested < 1:
         raise HTTPException(status_code=400, detail="Invalid model output limit")
+    # Image data is base64 transport, not text tokens. Reserve a conservative
+    # image allowance while the provider's reported usage remains authoritative.
+    image_data_bytes: list[int] = []
+
+    def count_image_data(value: object) -> None:
+        if isinstance(value, dict):
+            image_url = value.get("image_url")
+            url = image_url.get("url") if isinstance(image_url, dict) else image_url
+            if isinstance(url, str) and url.startswith("data:image/") and ";base64," in url:
+                image_data_bytes.append(len(url.encode("utf-8")))
+            for nested in value.values():
+                count_image_data(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                count_image_data(nested)
+
+    count_image_data(payload.get("messages", []))
+    if len(image_data_bytes) > 2:
+        raise HTTPException(status_code=413, detail="Too many images")
+    prompt_bytes = max(1, len(raw) - sum(image_data_bytes) + 2048 * len(image_data_bytes))
     call_id = uuid.uuid4().hex
     try:
-        maximum = store.reserve_model_call(owner, run_id, call_id, len(raw), requested)
+        maximum = store.reserve_model_call(owner, run_id, call_id, prompt_bytes, requested)
     except TokenQuotaExceeded:
         return Response(
             content=json.dumps({"error": {"message": "PSKIT_TOKEN_QUOTA_EXCEEDED",

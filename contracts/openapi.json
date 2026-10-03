@@ -1385,7 +1385,7 @@
           "catalog"
         ],
         "summary": "Upload Streamed File",
-        "description": "Stream and validate a text or PDF upload against storage limits.",
+        "description": "Stream and validate a text, PDF, or image upload against storage limits.",
         "operationId": "upload_streamed_file_api_v1_files_content_put",
         "security": [
           {
@@ -1637,6 +1637,37 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/models": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "List Models",
+        "description": "Return gateway-visible model aliases with confirmed image support.",
+        "operationId": "list_models_api_v1_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ModelOption"
+                  },
+                  "type": "array",
+                  "title": "Response List Models Api V1 Models Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/g": {
@@ -4370,6 +4401,19 @@
             "minLength": 1,
             "title": "Content"
           },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
           "attachments": {
             "items": {
               "$ref": "#/components/schemas/ContextRef"
@@ -4397,6 +4441,27 @@
           "content"
         ],
         "title": "MessageRequest"
+      },
+      "ModelOption": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id"
+          },
+          "supports_images": {
+            "type": "boolean",
+            "title": "Supports Images",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "ModelOption",
+        "description": "Public metadata for one gateway-visible model alias."
       },
       "OtpVerifyRequest": {
         "properties": {
