@@ -1,5 +1,7 @@
 """Private PostgreSQL schema and migration contract."""
 
+from importlib.resources import files
+
 import psycopg
 import pytest
 from psycopg import sql
@@ -39,7 +41,7 @@ def test_private_schema_and_version(pg_schema: tuple[str, str]) -> None:
     migrate_postgres(dsn, schema=schema)
     database = PostgresDatabase(dsn, schema=schema)
     try:
-        database.check_schema_version(2)
+        database.check_schema_version(3)
         with database.connection() as connection:
             tables = {
                 row[0] for row in connection.execute(
@@ -54,13 +56,16 @@ def test_private_schema_and_version(pg_schema: tuple[str, str]) -> None:
             }
             assert connection.execute(
                 "SELECT version FROM schema_migrations ORDER BY version"
-            ).fetchall() == [(1,), (2,)]
+            ).fetchall() == [(1,), (2,), (3,)]
             assert connection.execute(
                 "SELECT is_identity FROM information_schema.columns "
                 "WHERE table_schema=%s AND table_name='agent_token_entries' AND column_name='id'",
                 (schema,),
             ).fetchone() == ("YES",)
-            for table in ("agent_messages", "agent_jobs", "catalog_files", "mcp_tool_calls"):
+            for table in (
+                "agent_messages", "agent_jobs", "catalog_files", "mcp_tool_calls",
+                "agent_model_call_guards",
+            ):
                 assert connection.execute(
                     "SELECT 1 FROM information_schema.columns "
                     "WHERE table_schema=%s AND table_name=%s AND column_name='ordinal'",
@@ -87,7 +92,7 @@ def test_private_schema_and_version(pg_schema: tuple[str, str]) -> None:
     with psycopg.connect(dsn) as connection:
         assert connection.execute(
             sql.SQL("SELECT count(*) FROM {}.schema_migrations").format(sql.Identifier(schema))
-        ).fetchone() == (2,)
+        ).fetchone() == (3,)
         assert connection.execute(
             sql.SQL("SELECT count(*) FROM {}.agent_jobs").format(sql.Identifier(schema))
         ).fetchone() == (1,)
@@ -144,3 +149,31 @@ def test_postgres_covers_every_live_sqlite_table_and_column(pg_schema: tuple[str
                 assert source_columns <= target_columns, (table, source_columns - target_columns)
     finally:
         sqlite_store.db.close()
+
+
+def test_quota_migration_upgrades_existing_version_two_schema(pg_schema: tuple[str, str]) -> None:
+    """Version three adds a stable model-call order without losing old guards."""
+    dsn, schema = pg_schema
+    with psycopg.connect(dsn) as connection:
+        connection.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
+        connection.execute(sql.SQL("SET LOCAL search_path TO {}").format(sql.Identifier(schema)))
+        connection.execute("CREATE TABLE schema_migrations (version integer PRIMARY KEY, applied_at text)")
+        for version, name in ((1, "001_core.sql"), (2, "002_components.sql")):
+            connection.execute(
+                files("app.db.postgres_migrations").joinpath(name).read_text(encoding="utf-8")
+            )
+            connection.execute(
+                "INSERT INTO schema_migrations (version) VALUES (%s)", (version,)
+            )
+        connection.execute(
+            "INSERT INTO agent_model_call_guards "
+            "(call_id,user_id,run_id,prompt_bytes,max_output_tokens,reserved_tokens,status,created_at) "
+            "VALUES ('old-call','alice','run-1',1,2,3,'active','now')"
+        )
+    migrate_postgres(dsn, schema=schema)
+    with psycopg.connect(dsn) as connection:
+        assert connection.execute(
+            sql.SQL("SELECT call_id,ordinal FROM {}.agent_model_call_guards").format(
+                sql.Identifier(schema)
+            )
+        ).fetchone() == ("old-call", 1)

@@ -1,6 +1,7 @@
 """Usage persistence methods for the conversation store."""
 
 from datetime import UTC, datetime, timedelta
+
 from app.contracts.models import GpuQuota, QuotaCounter, UsageEntry, UsageSnapshot
 from app.domain.quota import TokenQuotaExceeded
 
@@ -8,7 +9,7 @@ from .common import current_time as _now
 
 
 class UsageMixin:
-    """Account for monthly Tokens and daily AF3 GPU minutes in SQLite."""
+    """Account for monthly Tokens and daily AF3 GPU minutes durably."""
 
     def _append_token_entry(
         self, user_id: str, period: str, kind: str, amount: int, run_id: str | None,
@@ -142,9 +143,11 @@ class UsageMixin:
         """
         if limit < 0:
             raise ValueError("Token limit cannot be negative")
-        with self.db:
+        with self._immediate_transaction():
             self.db.execute(
-                "INSERT OR REPLACE INTO agent_token_limits VALUES (?,?)", (user_id, limit)
+                "INSERT INTO agent_token_limits (user_id,limit_value) VALUES (?,?) "
+                "ON CONFLICT(user_id) DO UPDATE SET limit_value=excluded.limit_value",
+                (user_id, limit),
             )
 
     def seed_token_limit(self, user_id: str, limit: int) -> None:
@@ -159,9 +162,11 @@ class UsageMixin:
         """
         if limit < 0:
             raise ValueError("Token limit cannot be negative")
-        with self.db:
+        with self._immediate_transaction():
             self.db.execute(
-                "INSERT OR IGNORE INTO agent_token_limits VALUES (?,?)", (user_id, limit)
+                "INSERT INTO agent_token_limits (user_id,limit_value) VALUES (?,?) "
+                "ON CONFLICT(user_id) DO NOTHING",
+                (user_id, limit),
             )
 
     def set_gpu_limit(self, user_id: str, limit: int) -> None:
@@ -176,9 +181,11 @@ class UsageMixin:
         """
         if limit < 0:
             raise ValueError("GPU limit cannot be negative")
-        with self.db:
+        with self._immediate_transaction():
             self.db.execute(
-                "INSERT OR REPLACE INTO agent_gpu_limits VALUES (?,?)", (user_id, limit)
+                "INSERT INTO agent_gpu_limits (user_id,limit_value) VALUES (?,?) "
+                "ON CONFLICT(user_id) DO UPDATE SET limit_value=excluded.limit_value",
+                (user_id, limit),
             )
 
     def charge_tokens(self, user_id: str, count: int) -> None:
@@ -278,9 +285,10 @@ class UsageMixin:
                 )
             else:
                 self.db.execute(
-                    "UPDATE agent_token_usage SET used=MAX(0,used+?) "
+                    "UPDATE agent_token_usage SET used=CASE WHEN used+? < 0 "
+                    "THEN 0 ELSE used+? END "
                     "WHERE user_id=? AND period=?",
-                    (delta, user_id, period),
+                    (delta, delta, user_id, period),
                 )
             self._append_token_entry(user_id, period, "adjustment", delta, run_id)
 
@@ -509,8 +517,9 @@ class UsageMixin:
             )
         else:
             self.db.execute(
-                "UPDATE agent_token_usage SET used=MAX(0,used+?) "
+                "UPDATE agent_token_usage SET used=CASE WHEN used+? < 0 "
+                "THEN 0 ELSE used+? END "
                 "WHERE user_id=? AND period=?",
-                (delta, user_id, period),
+                (delta, delta, user_id, period),
             )
         self._append_token_entry(user_id, period, "adjustment", delta, run_id)
