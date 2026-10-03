@@ -1,0 +1,29 @@
+# Final Aliyun overlay. React dist is served by host Nginx, not by `web`.
+name: pskit-agent-cloud
+
+services:
+  backend:
+    environment: !override
+      RESEARCH_AGENT_MODE: live
+      RESEARCH_AGENT_RUNTIME: pi
+      RESEARCH_AGENT_AF3_EXECUTOR: callback
+      RESEARCH_AGENT_MCP_EXECUTOR: disabled
+      RESEARCH_AGENT_ANONYMOUS_ENABLED: "false"
+      RESEARCH_AGENT_AUTH_COOKIE_SECURE: "true"
+      RESEARCH_AGENT_GUEST_DAILY_GPU_MINUTES: "0"
+      RESEARCH_AGENT_MEMBER_DAILY_GPU_MINUTES: "0"
+      RESEARCH_AGENT_PI_SESSION_DIR: /data/pi-sessions
+      RESEARCH_AGENT_INTERNAL_API_URL: http://127.0.0.1:8000
+      RESEARCH_AGENT_FRONTEND_URL: ${AGENT_PUBLIC_URL:-https://agent.bioailab.net}
+      RESEARCH_AGENT_PUBLIC_API_URL: ${AGENT_PUBLIC_URL:-https://agent.bioailab.net}
+      SUPABASE_URL: http://api-gw:8000
+      SUPABASE_PUBLIC_URL: ${AGENT_PUBLIC_URL:-https://agent.bioailab.net}
+      MODEL_GATEWAY_BASE_URL: http://gateway:4000/v1
+      MODEL_GATEWAY_KIND: litellm
+
+  web:
+    profiles: [legacy-web]
+
+volumes:
+  agent_data:
+    name: ${AGENT_PG_DATA_VOLUME:-pskit-agent-cloud-return-20261003_agent_data}

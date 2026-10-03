@@ -28,4 +28,31 @@ python deploy/agent/tests/smoke_local.py
 
 2026-10-02 本机验证：`smoke_local.py` 通过，普通对话记录 4 个事件，AF3 Run 记录 13 个事件；后端完整 pytest 为 385 passed，前端 135 passed，类型检查、lint 和构建通过。基础镜像固定为 Python `3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c`、Node `22.21.1-bookworm-slim@sha256:25b3eb23a00590b7499f2a2ce939322727fcce1b15fdd69754fcd09536a3ae2c`、Nginx `1.28.0-alpine@sha256:30f1c0d78e0ad60901648be663a710bdadf19e4c10ac6782c235200619158284`；Pi 使用 `new_backend/pi/package-lock.json` 锁定的 `0.87.1`。Python 依赖目前仍按 `pyproject.toml` 的版本范围安装，尚未使用完整锁文件。
 
-本地镜像和数据仅服务联调。云端部署须另行配置真实模型网关、SMTP、域名/TLS 和接收器连通性，并先决定是否让 Python/Pi 与 AF3 一起部署到 A6000。
+本地镜像和数据仅服务联调。云端单 PostgreSQL 切换参见下节；A6000 只保留 AF3 接收器与计算。
+
+## 阿里云单 PostgreSQL 启动入口
+
+[`stack.sh`](stack.sh) 管理现有三个 Compose 项目：Supabase、只含 gateway 的 LiteLLM、Python/Pi 与 AF3 回调代理。React 的 `dist` 由宿主机 Nginx 提供；`web` 容器不参加默认启动。LiteLLM 与 Python 使用 Supabase PostgreSQL 17 的不同逻辑数据库和受限账号。
+
+运行前在阿里云准备以下 **0600** 私有文件。`infra/litellm/.env.shared` 是新库的凭据，不能直接复制旧 `infra/litellm/.env`；`deploy/agent/cloud.backend.env` 的模型 key 必须是候选网关新生成的 key。
+
+| 文件 | 用途 |
+| --- | --- |
+| `infra/supabase/.env` | 现有 Supabase 实例配置 |
+| `infra/litellm/.env.shared` | 新库 LiteLLM 密码、master/salt、`LITELLM_BIND_IP=10.9.8.1`、`LITELLM_PUBLIC_PORT=4000` |
+| `deploy/agent/cloud.env` | 固定版后端镜像、回调代理配置及站点地址 |
+| `deploy/agent/cloud.backend.env` | PostgreSQL `pskit_app` DSN、新虚拟 key、Supabase 公钥、回调密钥 |
+| `deploy/agent/cloud.proxy.env` | 与后端一致的 AF3 回调密钥 |
+| `deploy/agent/.env.stack-admin` | `SHARED_POSTGRES_ADMIN_DSN`、`LITELLM_DB_PASSWORD`、`PSKIT_DB_PASSWORD`；仅供一次性创建角色与迁移 |
+
+管理 DSN 指向 Docker 网络内的 `db:5432/postgres`。若文件不在上述路径，可用同样权限的 `deploy/agent/.env.stack` 设置 `STACK_SUPABASE_ENV_FILE`、`STACK_LITELLM_ENV_FILE`、`STACK_BACKEND_ENV_FILE`、`STACK_CLOUD_ENV_FILE`、`STACK_PROXY_ENV_FILE` 和 `STACK_ADMIN_ENV_FILE`。该文件由 bash 加载，只允许受信任的运维人员编辑。所有私有文件与模型密钥均不提交到 Git。
+
+在完成 [`SINGLE_POSTGRES_CUTOVER.md`](SINGLE_POSTGRES_CUTOVER.md) 的备份、快照导入与候选模型验收后，再运行：
+
+```bash
+deploy/agent/stack.sh up
+deploy/agent/stack.sh status
+deploy/agent/stack.sh logs agent
+```
+
+`up` 依次等待 Supabase、创建/检查两个应用账号、等待 LiteLLM、执行一次性 `pskit` schema 迁移，最后启动并检查后端与回调代理。缺凭据、旧 LiteLLM PostgreSQL 16 仍运行或健康检查失败时，后端不会启动。`down` 按反序停止三个项目，保留所有卷；不应作为切换过程中冻结写入的替代命令。
