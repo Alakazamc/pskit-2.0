@@ -2,7 +2,19 @@
 
 import json
 from datetime import datetime, timedelta
-from app.contracts.conversation import ArtifactCreatedData, ArtifactCreatedEvent, RunFailedData, RunFailedEvent, RunRetryingData, RunRetryingEvent, TaskUpdatedData, TaskUpdatedEvent, UsageUpdatedData, UsageUpdatedEvent
+
+from app.contracts.conversation import (
+    ArtifactCreatedData,
+    ArtifactCreatedEvent,
+    RunFailedData,
+    RunFailedEvent,
+    RunRetryingData,
+    RunRetryingEvent,
+    TaskUpdatedData,
+    TaskUpdatedEvent,
+    UsageUpdatedData,
+    UsageUpdatedEvent,
+)
 
 from .common import current_time as _now
 

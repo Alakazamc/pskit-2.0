@@ -1,7 +1,11 @@
 """PostgreSQL connection pool for private Agent business state."""
 
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
+from threading import local
+from typing import Self
 
 import psycopg
 from psycopg import sql
@@ -65,3 +69,79 @@ class PostgresDatabase:
     def close(self) -> None:
         """Return all pool resources to PostgreSQL."""
         self.pool.close()
+
+
+@dataclass
+class QueryResult:
+    """A consumed result whose rows remain valid after pool check-in."""
+
+    rows: list[tuple]
+    rowcount: int
+
+    def fetchone(self) -> tuple | None:
+        """Return the first row, if present."""
+        return self.rows[0] if self.rows else None
+
+    def fetchall(self) -> list[tuple]:
+        """Return all rows from the completed query."""
+        return self.rows
+
+    def __iter__(self) -> Iterator[tuple]:
+        """Iterate over the completed query."""
+        return iter(self.rows)
+
+
+class PostgresStatements:
+    """Bridge existing repository statements to pooled PostgreSQL transactions.
+
+    The bridge is private to the repository port. Domain SQL is converted
+    explicitly during Tasks 2–6; it handles the shared parameter and ordering
+    syntax while those modules are migrated.
+    """
+
+    def __init__(self, database: PostgresDatabase) -> None:
+        """Keep transaction nesting local to the calling thread."""
+        self.database = database
+        self._local = local()
+
+    def __enter__(self) -> Self:
+        """Start a transaction or nested savepoint for repository methods."""
+        stack = getattr(self._local, "stack", None)
+        if stack is None:
+            stack = []
+            self._local.stack = stack
+        manager = self.database.transaction() if not stack else stack[-1][1].transaction()
+        entered = manager.__enter__()
+        connection = entered if not stack else stack[-1][1]
+        stack.append((manager, connection))
+        return self
+
+    def __exit__(self, error_type, error, traceback) -> None:
+        """Commit on success and roll back on an exception."""
+        manager, _ = self._local.stack.pop()
+        manager.__exit__(error_type, error, traceback)
+
+    def execute(self, statement: str, parameters: tuple = ()) -> QueryResult:
+        """Run one repository statement and detach its result from the pool."""
+        statement = re.sub(r"\browid\b", "ordinal", statement)
+        statement = statement.replace("json_extract(e.payload, '$.type')", "(e.payload::jsonb ->> 'type')")
+        statement = statement.replace("json_extract(payload, '$.type')", "(payload::jsonb ->> 'type')")
+        statement = statement.replace("?", "%s")
+        stack = getattr(self._local, "stack", ())
+        if stack:
+            return self._run(stack[-1][1], statement, parameters)
+        with self.database.connection() as connection:
+            return self._run(connection, statement, parameters)
+
+    @staticmethod
+    def _run(connection: psycopg.Connection, statement: str, parameters: tuple) -> QueryResult:
+        """Materialize rows before returning the connection to its pool."""
+        cursor = connection.execute(statement, parameters)
+        rows = cursor.fetchall() if cursor.description else []
+        return QueryResult(rows, cursor.rowcount)
+
+    def executemany(self, statement: str, parameters: list[tuple]) -> None:
+        """Execute several parameter sets in one transaction."""
+        with self:
+            for arguments in parameters:
+                self.execute(statement, arguments)

@@ -1,6 +1,7 @@
 """Workspace persistence methods for the conversation store."""
 
 import uuid
+
 from app.contracts.conversation import Project, ProjectSkillSettings, Session
 from app.domain.project_routes import new_project_id
 

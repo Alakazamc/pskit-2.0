@@ -3,12 +3,39 @@
 import json
 import uuid
 from datetime import datetime, timedelta
+
 from pydantic import TypeAdapter
-from app.contracts.conversation import ApprovalResolvedData, ApprovalResolvedEvent, ArtifactCreatedEvent, ArtifactPart, FilePart, Message, MessagePart, MessageRequest, PlanCreatedEvent, PlanSnapshot, PlanUpdatedEvent, RunCancelledData, RunCancelledEvent, RunCompletedData, RunCompletedEvent, RunEvent, RunRef, RunStatus, TextPart, ToolCallPart, ToolResultPart, ToolFinishedEvent, ToolStartedEvent
+
+from app.contracts.conversation import (
+    ApprovalResolvedData,
+    ApprovalResolvedEvent,
+    ArtifactCreatedEvent,
+    ArtifactPart,
+    FilePart,
+    Message,
+    MessagePart,
+    MessageRequest,
+    PlanCreatedEvent,
+    PlanSnapshot,
+    PlanUpdatedEvent,
+    RunCancelledData,
+    RunCancelledEvent,
+    RunCompletedData,
+    RunCompletedEvent,
+    RunEvent,
+    RunRef,
+    RunStatus,
+    TextPart,
+    ToolCallPart,
+    ToolFinishedEvent,
+    ToolResultPart,
+    ToolStartedEvent,
+)
 from app.domain.conversation import IdempotencyConflict
 from app.domain.quota import TokenQuotaExceeded
 
-from .common import MESSAGE_PARTS_ADAPTER, current_time as _now
+from .common import MESSAGE_PARTS_ADAPTER
+from .common import current_time as _now
 
 
 class RunsMixin:
@@ -633,7 +660,9 @@ class RunsMixin:
         """
         with self.db:
             self.db.execute(
-                "INSERT OR REPLACE INTO pi_sessions VALUES (?, ?, ?)",
+                "INSERT INTO pi_sessions (session_id,user_id,session_file) VALUES (?, ?, ?) "
+                "ON CONFLICT(session_id) DO UPDATE SET user_id=excluded.user_id, "
+                "session_file=excluded.session_file",
                 (session_id, user_id, session_file),
             )
 

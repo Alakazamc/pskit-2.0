@@ -3,26 +3,30 @@
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
+
 from app.contracts.capabilities import ComputeResourceRequirements
 from app.db.migrations import migrate_core_database
+from app.db.postgres import PostgresDatabase, PostgresStatements
 from app.domain.conversation import ConversationStore
 from app.domain.identity_policy import GuestAccountDeleting
 
-from .workspace import WorkspaceMixin
-from .runs import RunsMixin
 from .af3 import Af3Mixin
-from .usage import UsageMixin
 from .recovery import RecoveryMixin
+from .runs import RunsMixin
+from .usage import UsageMixin
+from .workspace import WorkspaceMixin
 
 
 class PersistentConversationStore(WorkspaceMixin, RunsMixin, Af3Mixin, UsageMixin, RecoveryMixin, ConversationStore):
-    """Share one SQLite connection across workspace, Run, AF3, and quota methods."""
+    """Persist workspace, Run, AF3, and quota state through one database handle."""
 
-    def __init__(self, path: str, *, af3_min_gpu_memory_mb: int = 0) -> None:
-        """Open the store, migrate its core schema, and enable WAL mode.
+    def __init__(
+        self, database: PostgresDatabase | str, *, af3_min_gpu_memory_mb: int = 0,
+    ) -> None:
+        """Open the PostgreSQL store or a temporary legacy SQLite store.
 
         Args:
-            path: SQLite database file location.
+            database: Shared PostgreSQL pool; string paths remain for offline legacy tests.
             af3_min_gpu_memory_mb: Minimum GPU memory requested by AF3 jobs.
 
         Raises:
@@ -32,6 +36,11 @@ class PersistentConversationStore(WorkspaceMixin, RunsMixin, Af3Mixin, UsageMixi
         self.af3_resources = ComputeResourceRequirements(
             min_gpu_memory_mb=af3_min_gpu_memory_mb,
         )
+        if isinstance(database, PostgresDatabase):
+            self.database = database
+            self.db = PostgresStatements(database)
+            return
+        path = database
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path, check_same_thread=False)
         schema = """
@@ -133,15 +142,22 @@ class PersistentConversationStore(WorkspaceMixin, RunsMixin, Af3Mixin, UsageMixi
 
     @contextmanager
     def _immediate_transaction(self):
-        """Hold a SQLite write lock while a caller makes a claim.
+        """Hold the database admission lock while a caller makes a claim.
 
         Yields:
             Control inside the transaction; it commits on success and rolls
             back on an exception.
         """
-        self.db.execute("BEGIN IMMEDIATE")
-        with self.db:
-            yield
+        if isinstance(self.db, PostgresStatements):
+            with self.db:
+                self.db.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended('pskit-run-admission', 0))"
+                )
+                yield
+        else:
+            self.db.execute("BEGIN IMMEDIATE")
+            with self.db:
+                yield
 
     def _require_not_deleting(self, user_id: str) -> None:
         """Reject a guest whose cleanup has started under the caller's write lock.
