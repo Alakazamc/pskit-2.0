@@ -40,7 +40,7 @@ python deploy/agent/tests/smoke_local.py
 | --- | --- |
 | `infra/supabase/.env` | 现有 Supabase 实例配置 |
 | `infra/litellm/.env.shared` | 新库 LiteLLM 密码、master/salt、`LITELLM_BIND_IP=10.9.8.1`、`LITELLM_PUBLIC_PORT=4000` |
-| `deploy/agent/cloud.env` | 固定版后端镜像、回调代理配置及站点地址 |
+| `deploy/agent/cloud.env` | 固定版后端镜像、回调代理配置、站点地址，以及一个全新的 `AGENT_PG_DATA_VOLUME` |
 | `deploy/agent/cloud.backend.env` | PostgreSQL `pskit_app` DSN、新虚拟 key、Supabase 公钥、回调密钥 |
 | `deploy/agent/cloud.proxy.env` | 与后端一致的 AF3 回调密钥 |
 | `deploy/agent/.env.stack-admin` | `SHARED_POSTGRES_ADMIN_DSN`、`LITELLM_DB_PASSWORD`、`PSKIT_DB_PASSWORD`；仅供一次性创建角色与迁移 |

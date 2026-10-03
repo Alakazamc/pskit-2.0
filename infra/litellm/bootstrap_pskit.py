@@ -13,13 +13,14 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path.cwd()
+ENV_FILE: Path | None = None
 BASE_URL = "http://127.0.0.1:4000"
 BUDGET_ID = "pskit-member-monthly"
 TEAM_ID = "pskit-lab"
 
 
 def _master_key() -> str:
-    for line in (ROOT / ".env").read_text().splitlines():
+    for line in (ENV_FILE or ROOT / ".env").read_text().splitlines():
         if line.startswith("LITELLM_MASTER_KEY="):
             return line.partition("=")[2]
     raise RuntimeError("LITELLM_MASTER_KEY is missing")
@@ -58,13 +59,19 @@ def _verify_existing_key(key: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    global BASE_URL
+    global BASE_URL, ENV_FILE
     parser = argparse.ArgumentParser(description="Bootstrap PSKit LiteLLM budgets and key")
     parser.add_argument("--base-url", help="Candidate gateway URL, such as http://10.9.8.1:4001")
+    parser.add_argument("--env-file", type=Path, help="Private environment of the target gateway")
     parser.add_argument("--key-file", type=Path, help="New 0600 backend virtual key file")
     arguments = parser.parse_args(argv)
+    ENV_FILE = arguments.env_file or ROOT / ".env"
+    if ENV_FILE.is_symlink() or not ENV_FILE.is_file():
+        raise ValueError("LiteLLM environment file is missing or unsafe")
+    if arguments.env_file and ENV_FILE.stat().st_mode & 0o077:
+        raise ValueError("LiteLLM environment file has unsafe permissions")
     bind_ip = next(
-        (line.partition("=")[2] for line in (ROOT / ".env").read_text().splitlines()
+        (line.partition("=")[2] for line in ENV_FILE.read_text().splitlines()
          if line.startswith("LITELLM_BIND_IP=")),
         "127.0.0.1",
     )

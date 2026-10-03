@@ -26,4 +26,4 @@ services:
 
 volumes:
   agent_data:
-    name: ${AGENT_PG_DATA_VOLUME:-pskit-agent-cloud-return-20261003_agent_data}
+    name: ${AGENT_PG_DATA_VOLUME:?Set a new empty PostgreSQL Agent data volume}

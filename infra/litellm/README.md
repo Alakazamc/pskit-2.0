@@ -15,6 +15,7 @@ cd infra/litellm
 docker compose --env-file /path/to/private/candidate.env \
   -f compose.shared-postgres.yaml -p pskit-agent-litellm-candidate up -d --wait
 python3 bootstrap_pskit.py --base-url http://10.9.8.1:4001 \
+  --env-file /path/to/private/candidate.env \
   --key-file /path/to/private/.pskit-candidate-virtual-key
 ```
 
