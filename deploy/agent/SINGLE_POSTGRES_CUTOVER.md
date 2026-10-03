@@ -63,6 +63,11 @@ docker compose --env-file infra/litellm/.env.shared \
 cd infra/litellm
 python3 bootstrap_pskit.py --base-url http://10.9.8.1:4001 \
   --env-file .env.shared --key-file .pskit-candidate-virtual-key
+cd ../..
+python3 deploy/agent/scripts/prepare_cloud_postgres_backend.py "$PWD"
+test "$(stat -c %a deploy/agent/cloud.backend.pg17.env)" = 600
+test "$(stat -c %a deploy/agent/cloud.env)" = 600
+test "$(stat -c %a deploy/agent/.env.stack)" = 600
 ```
 
 在 `http://10.9.8.1:4001/ui` 用**新** master key 重新添加提供商 API key 与模型部署，公开名称至少包含 `claude-opus-4-8`。用户已决定旧模型/API key 不迁移。确认团队 **10 美元/30 天**、单用户 **2 美元/30 天**预算；在候选网关以新 key 验证 `/v1/models`、一次真实模型调用、工具调用与流式响应，核对 Admin UI 用量。只记录状态、模型别名与用量，不记录 key 或聊天文本。先运行 `bootstrap_pskit.py` 第二次确认新虚拟 key 被该候选库验证；旧 key 对候选库应拒绝。
