@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import type { McpTool, ResearchApi } from "../../api/types";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { errorTranslationKey } from "../../i18n/errors";
+import { ToolAgentAction } from "./ToolAgentAction";
 
 type PropertySchema = { type?: string; description?: string };
 
@@ -71,6 +72,6 @@ export function GenericToolPage({ api, userId, name }: { api: ResearchApi; userI
         {schema.type === "boolean" ? <select aria-label={key} value={values[key] ?? ""} required={required.has(key)} onChange={(event) => setValues({ ...values, [key]: event.target.value })}><option value="">—</option><option value="true">true</option><option value="false">false</option></select>
           : <input aria-label={key} value={values[key] ?? ""} required={required.has(key)} type={schema.type === "integer" || schema.type === "number" ? "number" : "text"} step={schema.type === "integer" ? "1" : "any"} placeholder={schema.description} onChange={(event) => setValues({ ...values, [key]: event.target.value })} />}
       </label>)}<button className="mono-button primary" type="submit" disabled={busy}>{t("tools.run")} <ArrowRight size={16} /></button>{error && <p className="mono-form-error" role="alert">{error}</p>}</form>
-    </section><section className="mono-panel mono-result-panel"><div className="mono-panel-heading"><div><Database size={18} /><h2>{t("tools.result")}</h2></div></div>{result ? <details className="mono-raw-result" open><summary>{t("tools.rawResult")}</summary><pre>{JSON.stringify(result, null, 2)}</pre></details> : <p>{t("tools.noResult")}</p>}</section></div>}
+    </section><section className="mono-panel mono-result-panel"><div className="mono-panel-heading"><div><Database size={18} /><h2>{t("tools.result")}</h2></div></div>{result ? <><ToolAgentAction api={api} tool={tool.name} result={result} /><details className="mono-raw-result" open><summary>{t("tools.rawResult")}</summary><pre>{JSON.stringify(result, null, 2)}</pre></details></> : <p>{t("tools.noResult")}</p>}</section></div>}
   </div></div>;
 }

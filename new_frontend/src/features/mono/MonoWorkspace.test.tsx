@@ -747,6 +747,42 @@ it("uses a published MCP tool schema to invoke a newly listed tool", async () =>
   expect(invoked).toEqual([{ accession: "P12345" }]);
 }, 10_000);
 
+it("starts a metered Pi chat from a tool result", async () => {
+  loggedIn("/tools/run/fetch_uniprot");
+  const messages: unknown[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
+    if (path.endsWith("/g")) return json([{ id: "project-alice", name: "个人空间", description: "" }]);
+    if (path.endsWith("/c") && init?.method === "POST")
+      return json({ id: "session-from-tool", project_id: "project-alice", title: "fetch_uniprot" }, 201);
+    if (path.endsWith("/c")) return json([]);
+    if (path.endsWith("/mcp/tools")) return json([{ name: "fetch_uniprot", description: "Fetch", input_schema: {
+      type: "object", properties: { accession: { type: "string" } }, required: ["accession"],
+    } }]);
+    if (path.endsWith("/mcp/tools/fetch_uniprot/invoke"))
+      return json({ tool: "fetch_uniprot", status: "completed", run_id: "toolrun-1",
+        result: { accession: "P12345" } });
+    if (path.endsWith("/c/session-from-tool/messages") && init?.method === "POST") {
+      messages.push(JSON.parse(String(init.body)));
+      return json({ run_id: "run-from-tool" });
+    }
+    if (path.includes("/runs/run-from-tool/events")) return runEvents();
+    if (path.endsWith("/messages") || path.endsWith("/skills") || path.endsWith("/resources")
+      || path.endsWith("/tool-runs")) return json([]);
+    return json({ detail: "Not found" }, 404);
+  }));
+  render(<App />);
+  const actor = userEvent.setup();
+  await actor.type(await screen.findByRole("textbox", { name: "accession" }), "P12345");
+  await actor.click(screen.getByRole("button", { name: "运行工具" }));
+  await actor.click(await screen.findByRole("button", { name: "交给 Agent 分析" }));
+
+  await waitFor(() => expect(messages).toHaveLength(1));
+  expect(JSON.stringify(messages[0])).toContain("P12345");
+  expect(window.location.pathname).toBe("/session/session-from-tool");
+}, 10_000);
+
 it("does not expose a prediction page without a backing capability", async () => {
   loggedIn("/tools/inabe");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
