@@ -1,5 +1,5 @@
 import { Plane } from "lucide-react";
-import { type CSSProperties, useId } from "react";
+import { type CSSProperties, type ReactNode, useId } from "react";
 import type { MessageRequest } from "../../api/types";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import type { TranslationKey } from "../../i18n/translations";
@@ -12,10 +12,11 @@ export const effortKeys: Record<Effort, TranslationKey> = {
   xhigh: "composer.effortXhigh", max: "composer.effortMax",
 };
 
-export function ThinkingSlider({ levels, effort, onChange }: {
+export function ThinkingSlider({ levels, effort, onChange, levelControl }: {
   levels: Effort[];
   effort?: Effort;
   onChange: (effort: Effort | undefined) => void;
+  levelControl?: ReactNode;
 }) {
   const { t } = useLanguage();
   const hintId = useId();
@@ -29,7 +30,6 @@ export function ThinkingSlider({ levels, effort, onChange }: {
       <div className="composer-effort-lever" style={{ "--effort-position": position, "--effort-fraction": index / (steps.length - 1) } as CSSProperties}>
         <div className="composer-effort-face" aria-hidden="true">
           <span className="composer-effort-track"><span /></span>
-          <span className="composer-effort-value">{label(steps[index])}</span>
           <span className="composer-effort-grip"><Plane size={26} className="composer-plane-icon" fill="currentColor" strokeWidth={1.3} /></span>
         </div>
         <input type="range" min={0} max={steps.length - 1} step={1} value={index}
@@ -37,6 +37,7 @@ export function ThinkingSlider({ levels, effort, onChange }: {
           aria-valuetext={label(steps[index])}
           aria-describedby={hintId}
           onChange={(event) => onChange(steps[event.currentTarget.valueAsNumber])} />
+        <div className="composer-effort-label"><div className="composer-effort-value">{levelControl ?? <span aria-hidden="true">{label(steps[index])}</span>}</div></div>
       </div>
     </div>
     <p id={hintId} className="composer-effort-hint">{t("composer.thinkingDragHint")}</p>

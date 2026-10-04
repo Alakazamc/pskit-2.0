@@ -93,13 +93,12 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             settings_box = await panel.bounding_box()
             assert settings_box["width"] * settings_box["height"] <= 22000, settings_box
             assert settings_box["height"] <= 176, settings_box
+            assert await panel.get_by_text("模型" if zh else "Model", exact=True).count() == 0
             model_button = page.get_by_role("button", name=switch_model, exact=False)
-            model_box = await model_button.bounding_box()
-            slider_box = await page.get_by_role("slider", name=thinking).bounding_box()
-            assert model_box["height"] > model_box["width"] * 2, model_box
-            assert model_box["x"] + model_box["width"] <= slider_box["x"], (model_box, slider_box)
-            overlap = min(model_box["y"] + model_box["height"], slider_box["y"] + slider_box["height"]) - max(model_box["y"], slider_box["y"])
-            assert overlap >= slider_box["height"] * 0.9, (model_box, slider_box)
+            assert await model_button.inner_text() == default
+            level_box = await model_button.locator("span").bounding_box()
+            caret_box = await model_button.locator("svg").bounding_box()
+            assert caret_box["y"] >= level_box["y"] + level_box["height"], (level_box, caret_box)
             assert await page.get_by_role("searchbox").count() == 0
             await page.get_by_role("button", name=switch_model, exact=False).click()
             search = page.get_by_role("searchbox", name=search_name)

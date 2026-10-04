@@ -1,5 +1,5 @@
 import * as Popover from "@radix-ui/react-popover";
-import { Check, ChevronDown, Plane, Search } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Search } from "lucide-react";
 import { useState } from "react";
 import type { MessageRequest, ModelOption } from "../../api/types";
 import { useWorkspacePortalContainer } from "../../hooks/useWorkspacePortalContainer";
@@ -37,16 +37,24 @@ export function ModelPicker({ models, selected, effort, hasImages, selectionUnav
     Number(b === providerLabel(selected?.id ?? "")) - Number(a === providerLabel(selected?.id ?? "")) || a.localeCompare(b));
   const label = selected ? modelLabel(selected.id) : t("composer.selectModel");
   const effortLabel = t(activeEffort ? effortKeys[activeEffort] : "composer.effortDefault");
+  const modelControl = <Popover.Trigger asChild><button type="button" className="composer-effort-picker" aria-label={`${t("composer.switchModel")}: ${label}`} title={selected?.id}>
+    <span>{effortLabel}</span><ChevronUp size={14} aria-hidden="true" />
+  </button></Popover.Trigger>;
   return <Popover.Root open={open} onOpenChange={(next) => { setOpen(next); if (!next) { setModelsOpen(false); setQuery(""); } }}>
     <Popover.Trigger asChild><button type="button" className="composer-model-trigger" aria-label={`${t("composer.chooseModel")}: ${label} · ${effortLabel}`} title={selected?.id}>
       <span>{label}</span><span className="composer-model-effort">{effortLabel}</span><ChevronDown size={14} aria-hidden="true" />
     </button></Popover.Trigger>
     <Popover.Portal container={portalContainer}><Popover.Content className="composer-settings-popover" aria-label={t("composer.modelSettings")} side="top" sideOffset={9} align="end" collisionPadding={12}>
+      {selectionUnavailable && <p className="composer-model-empty" role="status">{t("composer.modelUnavailable")}</p>}
       <Popover.Root open={modelsOpen} onOpenChange={(next) => { setModelsOpen(next); if (!next) setQuery(""); }}>
-        <Popover.Trigger asChild><button type="button" className="composer-settings-model" aria-label={`${t("composer.switchModel")}: ${label}`} title={selected?.id}>
-          <Plane size={14} className="composer-plane-icon" fill="currentColor" strokeWidth={1.4} aria-hidden="true" /><span>{t("composer.model")}</span><ChevronDown size={12} aria-hidden="true" />
-        </button></Popover.Trigger>
-        <Popover.Portal container={portalContainer}><Popover.Content className="composer-model-popover" aria-label={t("composer.searchModels")} side="bottom" sideOffset={8} align="end" collisionPadding={12}>
+        <div className="composer-model-thinking">
+          {levels.length === 0 ? <>
+            <div className="composer-model-section-title">{t("composer.thinkingLevel")}</div>
+            <p>{t(models.length ? "composer.noThinkingLevels" : "composer.noModels")}</p>
+            <div className="composer-effort-unavailable">{modelControl}</div>
+          </> : <ThinkingSlider levels={levels} effort={activeEffort} onChange={onEffortChange} levelControl={modelControl} />}
+        </div>
+        <Popover.Portal container={portalContainer}><Popover.Content className="composer-model-popover" aria-label={t("composer.searchModels")} side="top" sideOffset={8} align="end" collisionPadding={12}>
           <div className="composer-model-search"><Search size={15} aria-hidden="true" /><input type="search" aria-label={t("composer.searchModels")} placeholder={t("composer.searchModels")} value={query} onChange={(event) => setQuery(event.target.value)} /></div>
           <div className="composer-model-list">
             {matches.length === 0 && <p className="composer-model-empty">{t(models.length ? "composer.noMatchingModels" : "composer.noModels")}</p>}
@@ -63,13 +71,6 @@ export function ModelPicker({ models, selected, effort, hasImages, selectionUnav
           </div>
         </Popover.Content></Popover.Portal>
       </Popover.Root>
-      {selectionUnavailable && <p className="composer-model-empty" role="status">{t("composer.modelUnavailable")}</p>}
-      <div className="composer-model-thinking">
-        {levels.length === 0 ? <>
-          <div className="composer-model-section-title">{t("composer.thinkingLevel")}</div>
-          <p>{t(models.length ? "composer.noThinkingLevels" : "composer.noModels")}</p>
-        </> : <ThinkingSlider levels={levels} effort={activeEffort} onChange={onEffortChange} />}
-      </div>
     </Popover.Content></Popover.Portal>
   </Popover.Root>;
 }
