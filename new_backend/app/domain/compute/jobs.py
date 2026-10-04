@@ -6,7 +6,7 @@ import uuid
 from jsonschema import Draft202012Validator
 from psycopg.types.json import Jsonb
 
-from app.contracts.compute import ComputeJob
+from app.contracts.compute import ComputeJob, ComputeJobSummary
 from app.domain.compute.catalog import ComputeCatalog
 from app.domain.compute.common import admission_lock, payload_hash, utcnow
 
@@ -108,6 +108,19 @@ class ComputeJobs:
         elif job.status == "running":
             connection.execute("UPDATE agent_jobs SET status='cancelling' WHERE id=%s", (job_id,))
         return self.get(user_id, job_id, connection=connection)
+
+    def history(self, user_id, capability_id=None, limit=30):
+        with self.database.connection() as connection:
+            rows = connection.execute(
+                "SELECT j.id,d.capability_json->>'id',d.capability_json->>'version',"
+                "d.arguments_json,j.status,j.progress,j.created_at "
+                "FROM agent_jobs j JOIN compute_job_data d ON d.job_id=j.id "
+                "WHERE j.user_id=%s AND (%s::text IS NULL OR d.capability_json->>'id'=%s) "
+                "ORDER BY j.created_at DESC,j.id DESC LIMIT %s",
+                (user_id, capability_id, capability_id, limit),
+            ).fetchall()
+        fields = ("id", "capability_id", "version", "arguments", "status", "progress", "created_at")
+        return [ComputeJobSummary(**dict(zip(fields, row))) for row in rows]
 
     def active_for_run(self, user_id, run_id):
         with self.database.connection() as connection:

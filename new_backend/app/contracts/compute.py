@@ -9,6 +9,7 @@ from app.contracts.catalog import ArtifactRef
 
 Count = Annotated[StrictInt, Field(ge=0)]
 Positive = Annotated[StrictInt, Field(gt=0)]
+ComputeJobStatus = Literal["queued", "running", "cancelling", "completed", "failed", "cancelled"]
 Metric = Literal["wall_ms", "cpu_core_ms", "gpu_device_ms", "peak_memory_bytes",
                  "peak_gpu_memory_bytes", "gpu_count"]
 
@@ -117,12 +118,24 @@ class ComputeJob(Contract):
     capability: CapabilityVersion
     arguments: dict[str, Any]
     budget: ComputeBudget
-    status: Literal["queued", "running", "cancelling", "completed", "failed", "cancelled"]
+    status: ComputeJobStatus
     accounting_status: Literal["reserved", "settled", "released", "pending_reconciliation"]
     progress: Count = 0
     run_id: str | None = None
     tool_call_id: str | None = None
     report: ExecutionReport | None = None
+
+
+class ComputeJobSummary(Contract):
+    """Owned history without potentially large sequence reports or worker details."""
+
+    id: str
+    capability_id: str
+    version: str
+    arguments: dict[str, Any]
+    status: ComputeJobStatus
+    progress: Count
+    created_at: datetime
 
 
 class WorkerIdentity(Contract):

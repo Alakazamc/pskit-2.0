@@ -878,6 +878,44 @@ export type ComputeJobRequest = {
 };
 
 /**
+ * ComputeJobSummary
+ *
+ * Owned history without potentially large sequence reports or worker details.
+ */
+export type ComputeJobSummary = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Capability Id
+     */
+    capability_id: string;
+    /**
+     * Version
+     */
+    version: string;
+    /**
+     * Arguments
+     */
+    arguments: {
+        [key: string]: unknown;
+    };
+    /**
+     * Status
+     */
+    status: 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled';
+    /**
+     * Progress
+     */
+    progress: number;
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
  * ComputeResourceRequirements
  */
 export type ComputeResourceRequirements = {
@@ -3090,6 +3128,42 @@ export type CapabilitiesApiV1ComputeCapabilitiesGetResponses = {
 };
 
 export type CapabilitiesApiV1ComputeCapabilitiesGetResponse = CapabilitiesApiV1ComputeCapabilitiesGetResponses[keyof CapabilitiesApiV1ComputeCapabilitiesGetResponses];
+
+export type HistoryApiV1ComputeJobsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Capability Id
+         */
+        capability_id?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/compute/jobs';
+};
+
+export type HistoryApiV1ComputeJobsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type HistoryApiV1ComputeJobsGetError = HistoryApiV1ComputeJobsGetErrors[keyof HistoryApiV1ComputeJobsGetErrors];
+
+export type HistoryApiV1ComputeJobsGetResponses = {
+    /**
+     * Response History Api V1 Compute Jobs Get
+     *
+     * Successful Response
+     */
+    200: Array<ComputeJobSummary>;
+};
+
+export type HistoryApiV1ComputeJobsGetResponse = HistoryApiV1ComputeJobsGetResponses[keyof HistoryApiV1ComputeJobsGetResponses];
 
 export type SubmitApiV1ComputeJobsPostData = {
     body: ComputeJobRequest;

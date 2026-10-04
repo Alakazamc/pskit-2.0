@@ -90,3 +90,44 @@ def test_legacy_af3_cannot_claim_or_simulate_generic_job(computation):
     old.advance_mock_jobs(0)
     old.expire_queued_compute_jobs(0)
     assert jobs.get("alice", job.id).status == "queued"
+
+
+def test_public_history_is_owned_filtered_bounded_and_survives_reopening(computation):
+    database, catalog, jobs = computation
+    catalog.register(ComputeServiceManifest(service_id="coral", model_version="v1", capabilities=[
+        CapabilityVersion(id="coral.generate_rna", version="1", visibility="published",
+                          input_schema={"type": "object"}),
+    ]))
+    app = FastAPI()
+    app.state.compute_jobs = jobs
+    app.include_router(router)
+    app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+        id="alice", email="alice@example.org", name="Alice",
+    )
+    client = TestClient(app)
+    payload = {"capability_id": "coral.generate_rna", "version": "1", "arguments": {"pdb_id": "1A9N"}}
+    first = client.post("/api/v1/compute/jobs", json=payload, headers={"Idempotency-Key": "first"}).json()
+    second = client.post("/api/v1/compute/jobs", json=payload, headers={"Idempotency-Key": "second"}).json()
+    client.post("/api/v1/compute/jobs", json={**payload, "capability_id": "lab.inspect", "arguments": {"sequence": "ACG"}},
+                headers={"Idempotency-Key": "other-tool"}).raise_for_status()
+    app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+        id="bob", email="bob@example.org", name="Bob",
+    )
+    client.post("/api/v1/compute/jobs", json=payload, headers={"Idempotency-Key": "bob"}).raise_for_status()
+    app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+        id="alice", email="alice@example.org", name="Alice",
+    )
+    # Reconstruct the service: history belongs to persistence, not a process cache.
+    app.state.compute_jobs = ComputeJobs(database)
+    response = client.get("/api/v1/compute/jobs", params={"capability_id": "coral.generate_rna", "limit": 1})
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()] == [second["id"]]
+    row = response.json()[0]
+    assert row["arguments"] == payload["arguments"]
+    assert row["capability_id"] == "coral.generate_rna"
+    assert row["created_at"] and row["status"] == "queued"
+    assert "report" not in row and "capability" not in row
+    assert [row["id"] for row in client.get("/api/v1/compute/jobs", params={"capability_id": "coral.generate_rna"}).json()] == [second["id"], first["id"]]
+    assert client.get("/api/v1/compute/jobs", params={"capability_id": "missing"}).json() == []
+    assert client.get("/api/v1/compute/jobs", params={"limit": 51}).status_code == 422
+    assert client.get("/api/v1/compute/jobs", params={"limit": 0}).status_code == 422

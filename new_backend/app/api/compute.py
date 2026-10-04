@@ -2,10 +2,16 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 
 from app.api.auth import CurrentUserDep
-from app.contracts.compute import CapabilityVersion, ComputeJob, ComputeJobRequest, ComputeUsage
+from app.contracts.compute import (
+    CapabilityVersion,
+    ComputeJob,
+    ComputeJobRequest,
+    ComputeJobSummary,
+    ComputeUsage,
+)
 
 router = APIRouter(prefix="/api/v1/compute", tags=["compute"])
 
@@ -41,6 +47,13 @@ async def submit(payload: ComputeJobRequest, user: CurrentUserDep, request: Requ
         return jobs.submit(user.id, payload, key)
     except (ValueError, LookupError) as exc:
         raise compute_error(exc) from exc
+
+
+@router.get("/jobs")
+async def history(user: CurrentUserDep, request: Request,
+                  capability_id: Annotated[str | None, Query(max_length=120)] = None,
+                  limit: Annotated[int, Query(ge=1, le=50)] = 30) -> list[ComputeJobSummary]:
+    return jobs_for(request).history(user.id, capability_id, limit)
 
 
 @router.get("/jobs/{job_id}")
