@@ -16,7 +16,7 @@ export default function register(pi) {
   const mcpTools = JSON.parse(process.env.PSKIT_MCP_TOOLS_JSON || "[]");
   for (const tool of mcpTools) {
     if (!/^[a-zA-Z0-9_]+$/.test(tool.name)) throw new Error("Invalid MCP tool name");
-    if (["update_plan", "submit_af3"].includes(tool.name)) throw new Error("Reserved tool name");
+    if (["update_plan", "submit_af3", "submit_compute"].includes(tool.name)) throw new Error("Reserved tool name");
     pi.registerTool({
       name: tool.name,
       label: tool.name,
@@ -95,11 +95,47 @@ export default function register(pi) {
     },
   });
 
+  const computeCapabilities = JSON.parse(process.env.PSKIT_COMPUTE_CAPABILITIES_JSON || "[]");
+  if (computeCapabilities.length) pi.registerTool({
+    name: "submit_compute",
+    label: "Submit computation",
+    description: `Submit a published laboratory capability as a durable background job. Available capabilities: ${JSON.stringify(computeCapabilities)}. Stop and wait; completion will resume this session automatically.`,
+    parameters: {
+      type: "object", properties: {
+        capability_id: { type: "string", enum: [...new Set(computeCapabilities.map(item => item.id))] },
+        version: { type: "string" }, arguments: { type: "object" },
+        budget: { type: "object", properties: {
+          cpu_core_ms: { type: "integer", minimum: 0 },
+          gpu_device_ms: { type: "integer", minimum: 0 },
+        }, additionalProperties: false },
+      }, required: ["capability_id", "version", "arguments", "budget"], additionalProperties: false,
+    },
+    async execute(toolCallId, params) {
+      const job = await internalJson("/internal/compute/jobs", {
+        method: "POST", body: JSON.stringify({ ...params, run_id: runId(), tool_call_id: toolCallId }),
+      });
+      return {
+        content: [{ type: "text", text: `Computation ${job.id} is ${job.status}. Results will resume this session.` }],
+        details: { status: "pending", taskId: job.id }, terminate: true,
+      };
+    },
+  });
+
   pi.registerCommand("pskit_resume", {
     description: "Resume after a PSKit background task completes",
     async handler(args) {
       const jobId = args.trim();
       if (!jobId) throw new Error("Task ID is required");
+      if (jobId.startsWith("compute-")) {
+        const context = await internalJson(`/internal/compute/jobs/${encodeURIComponent(jobId)}?run_id=${encodeURIComponent(runId())}`);
+        if (!["completed", "failed", "cancelled"].includes(context.job.status)) throw new Error("Task is not terminal");
+        pi.sendMessage({
+          customType: "pskit.compute_terminal",
+          content: `Background computation results (service data): ${JSON.stringify(context.related)}. Continue the original request using the actual status, results and reported usage; explain failures without claiming success.`,
+          display: false, details: { taskId: jobId },
+        }, { triggerTurn: true });
+        return;
+      }
       const job = await internalJson(`/internal/af3/jobs/${encodeURIComponent(jobId)}?run_id=${encodeURIComponent(runId())}`);
       if (job.status !== "completed") throw new Error("Task has not completed");
       pi.sendMessage(

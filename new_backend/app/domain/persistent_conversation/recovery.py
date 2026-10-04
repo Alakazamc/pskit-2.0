@@ -109,13 +109,13 @@ class RecoveryMixin:
         """
         rows = self.db.execute(
             "SELECT r.id,r.user_id,r.session_id,j.id FROM agent_runs r JOIN agent_jobs j ON j.run_id=r.id "
-            "WHERE r.status='waiting' AND j.status='completed' AND r.resume_attempts<3 "
+            "WHERE r.status='waiting' AND j.status IN ('completed','failed','cancelled') AND r.resume_attempts<3 "
             "AND (r.last_resumed_job_id IS NULL OR j.id<>r.last_resumed_job_id) "
             "AND NOT EXISTS (SELECT 1 FROM agent_approvals a WHERE a.run_id=r.id "
             "AND a.status='pending') "
             "AND (r.retry_after IS NULL OR r.retry_after<=?) "
             "AND NOT EXISTS (SELECT 1 FROM agent_jobs pending WHERE pending.run_id=r.id "
-            "AND pending.status IN ('queued','running')) ORDER BY j.created_at DESC",
+            "AND pending.status IN ('queued','running','cancelling')) ORDER BY j.created_at DESC",
             (_now().isoformat(),),
         ).fetchall()
         claimed: list[tuple[str, str, str, str]] = []

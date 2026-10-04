@@ -101,6 +101,16 @@ class ComputeJobs:
                                    "gpu_accounting_status='released' WHERE id=%s", (job_id,))
                 if self.ledger:
                     self.ledger.release(connection, job_id)
+                connection.execute("INSERT INTO compute_outbox (job_id,run_id) VALUES (%s,%s) "
+                                   "ON CONFLICT(job_id) DO NOTHING", (job_id, job.run_id))
             elif job.status == "running":
                 connection.execute("UPDATE agent_jobs SET status='cancelling' WHERE id=%s", (job_id,))
             return self.get(user_id, job_id, connection=connection)
+
+    def active_for_run(self, user_id, run_id):
+        with self.database.connection() as connection:
+            return [row[0] for row in connection.execute(
+                "SELECT j.id FROM agent_jobs j JOIN compute_job_data d ON d.job_id=j.id "
+                "WHERE j.user_id=%s AND j.run_id=%s AND j.status IN ('queued','running','cancelling')",
+                (user_id, run_id),
+            )]

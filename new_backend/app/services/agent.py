@@ -207,6 +207,11 @@ class AgentService:
                 tool.model_dump() for tool in self.mcp_tools if tool.name in allowed
             ]),
         }
+        compute = getattr(self, "compute_jobs", None)
+        member = capabilities is None or capabilities.identities.tier_for(user_id) == "member"
+        environment["PSKIT_COMPUTE_CAPABILITIES_JSON"] = json.dumps([
+            capability.model_dump(mode="json") for capability in compute.catalog.for_user(user_id)
+        ] if compute is not None and member else [])
         model_id = self.store.run_context(run_id).get("model_id")
         if model_id:
             environment["PSKIT_MODEL_ID"] = model_id
@@ -371,7 +376,7 @@ class AgentService:
                 )
 
     async def _resume(self, user_id: str, session_id: str, run_id: str, job_id: str) -> None:
-        """Wake a waiting Pi Run after an AF3 job completes.
+        """Wake the original Pi Run from a terminal background-task event.
 
         The resumed turn reserves Tokens and stops unsafe retries once a tool
         has started. Its result is committed to the original session.

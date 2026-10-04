@@ -59,7 +59,7 @@ async def get_run_status(
 async def cancel_run(
     run_id: str, user: CurrentUserDep, conversations: ConversationStoreDep, request: Request,
 ) -> RunStatus:
-    """Cancel an owned run and any associated active AF3 jobs."""
+    """Cancel an owned run and request cancellation of its background jobs."""
     status = conversations.run_status_for(user.id, run_id)
     if status is None:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -70,6 +70,10 @@ async def cancel_run(
         af3 = request.app.state.af3
         for job_id in af3.active_job_ids_for_run(user.id, run_id):
             af3.cancel(user.id, job_id)
+        compute = getattr(request.app.state, "compute_jobs", None)
+        if compute is not None:
+            for job_id in compute.active_for_run(user.id, run_id):
+                compute.cancel(user.id, job_id)
         status = conversations.cancel_run(user.id, run_id)
     return status
 

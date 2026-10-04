@@ -266,8 +266,8 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
     app.state.compute_jobs = None
     app.state.compute_leases = None
     if settings.compute_enabled:
-        if database is None:
-            raise ValueError("Generic compute requires live PostgreSQL mode")
+        if database is None or settings.agent_runtime != "pi":
+            raise ValueError("Generic compute requires live PostgreSQL and the persistent Pi runtime")
         import json
 
         from app.contracts.compute import ComputeServiceManifest
@@ -407,6 +407,8 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
     if app.state.compute_jobs is not None:
         from app.domain.compute.leases import ComputeLeases
         app.state.compute_leases = ComputeLeases(database, app.state.compute_jobs.ledger)
+    if app.state.agent_service is not None:
+        app.state.agent_service.compute_jobs = app.state.compute_jobs
     app.state.af3 = (
         DisabledAf3() if af3_executor == "disabled" else
         MockAf3(app.state.quotas, app.state.conversations)

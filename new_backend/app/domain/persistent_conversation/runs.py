@@ -504,7 +504,8 @@ class RunsMixin:
         """Build tool result parts for completed AF3 jobs in a Run."""
         rows = self.db.execute(
             "SELECT tool_call_id,id,status,actual_minutes,artifacts,simulation "
-            "FROM agent_jobs WHERE user_id=? AND run_id=? AND tool_call_id IS NOT NULL "
+            "FROM agent_jobs WHERE json_extract(resource_requirements_json, '$.capability')='af3' "
+            "AND user_id=? AND run_id=? AND tool_call_id IS NOT NULL "
             "AND status='completed' ORDER BY created_at,rowid",
             (user_id, run_id),
         ).fetchall()
@@ -513,6 +514,20 @@ class RunsMixin:
             result={"task_id": row[1], "status": row[2], "actual_gpu_minutes": row[3],
                     "artifacts": json.loads(row[4]), "simulation": bool(row[5])},
         ) for row in rows]
+
+    def _compute_tool_results_for_run(self, user_id: str, run_id: str) -> list[ToolResultPart]:
+        """Project generic terminal reports without calling them AlphaFold outputs."""
+        if getattr(self, "database", None) is None:
+            return []
+        rows = self.db.execute(
+            "SELECT j.tool_call_id,j.id,j.status,d.report_json FROM agent_jobs j "
+            "JOIN compute_job_data d ON d.job_id=j.id WHERE j.user_id=? AND j.run_id=? "
+            "AND j.status IN ('completed','failed','cancelled') ORDER BY j.ordinal",
+            (user_id, run_id),
+        ).fetchall()
+        return [ToolResultPart(tool_call_id=call_id, tool="submit_compute",
+                              result={"job_id": job_id, "status": status, "report": report})
+                for call_id, job_id, status, report in rows if call_id]
 
     def events_for(
         self, user_id: str, run_id: str, after: str | None, *, limit: int | None = None,
@@ -623,6 +638,7 @@ class RunsMixin:
                     TextPart(text=answer), *self._tool_parts_for_run(user_id, run_id),
                     *(tool_results or []),
                     *self._af3_tool_results_for_run(user_id, run_id),
+                    *self._compute_tool_results_for_run(user_id, run_id),
                     *self._artifact_parts_for_run(user_id, run_id),
                 ]
                 self.db.execute(
@@ -642,6 +658,9 @@ class RunsMixin:
                 "lease_expires_at=NULL WHERE id=?",
                 ("waiting" if waiting else "completed", session_file, resumed_job_id, run_id),
             )
+            if getattr(self, "database", None) is not None and resumed_job_id:
+                self.db.execute("UPDATE compute_outbox SET consumed_at=now() WHERE run_id=? "
+                                "AND consumed_at IS NULL", (run_id,))
             return True
 
     def session_file_for(self, user_id: str, session_id: str) -> str | None:

@@ -47,7 +47,7 @@ class Af3Mixin:
     def has_job_for_run(self, run_id: str) -> bool:
         """Return whether a Run has a queued or running AF3 job."""
         return self.db.execute(
-            "SELECT 1 FROM agent_jobs WHERE run_id=? AND status IN ('queued','running')",
+            "SELECT 1 FROM agent_jobs WHERE run_id=? AND status IN ('queued','running','cancelling')",
             (run_id,),
         ).fetchone() is not None
 

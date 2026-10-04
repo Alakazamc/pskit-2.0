@@ -217,3 +217,13 @@ class Reservation(Contract):
 class ReceiverOutcome(Contract):
     status: Literal["idle", "acknowledged", "pending", "unknown"]
     job_id: str | None = None
+
+
+class InternalComputeSubmit(ComputeJobRequest):
+    run_id: str
+    tool_call_id: str = Field(min_length=1, max_length=200)
+
+
+class ComputeResumeContext(Contract):
+    job: ComputeJob
+    related: list[ComputeJob]
