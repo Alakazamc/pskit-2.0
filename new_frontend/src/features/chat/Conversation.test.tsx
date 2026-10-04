@@ -20,6 +20,7 @@ afterEach(() => {
     else Reflect.deleteProperty(HTMLElement.prototype, name);
   }
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 it("collapses a long user message while keeping its file visible and the reading position stable", () => {
@@ -142,6 +143,43 @@ it("renders incomplete streamed Markdown and shows a spinner without a progress 
   ]);
   rerender(<LanguageProvider><Conversation messages={[]} run={second} /></LanguageProvider>);
   expect((await screen.findByText("部分内容")).closest("strong")).toBeInTheDocument();
+});
+
+it("starts observing reply height when an empty chat receives its first message", () => {
+  const observe = vi.fn();
+  vi.stubGlobal("ResizeObserver", class { observe = observe; disconnect = vi.fn(); });
+  const { container, rerender } = render(<Conversation messages={[]} run={emptyRun} />);
+  rerender(<Conversation messages={[]} run={{ ...emptyRun, status: "running", text: "First reply" }} />);
+  expect(observe).toHaveBeenCalledWith(container.querySelector(".message-list"));
+});
+
+it("follows streamed reply growth near the bottom and leaves manual reading position alone", () => {
+  let height = 500;
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get() { return this.classList?.contains("conversation-scroll") ? height : 0; } });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get() { return this.classList?.contains("conversation-scroll") ? 100 : 0; } });
+  const first = projectEvents(emptyRun, [{ id: "1", run_id: "run-scroll", type: "message.delta", data: { delta: "开始" } }]);
+  const { container, rerender } = render(<Conversation messages={[]} run={first} />);
+  const scroller = container.querySelector<HTMLElement>(".conversation-scroll")!;
+  expect(scroller.scrollTop).toBe(500);
+
+  height = 650;
+  rerender(<Conversation messages={[]} run={projectEvents(first, [{ id: "2", run_id: "run-scroll", type: "message.delta", data: { delta: "后续" } }])} />);
+  expect(scroller.scrollTop).toBe(650);
+
+  // Browser scroll anchoring can move down while streamed content grows.
+  // This must not be mistaken for the reader scrolling away from the bottom.
+  height = 1000;
+  scroller.scrollTop = 680;
+  fireEvent.scroll(scroller);
+  rerender(<Conversation messages={[]} run={{ ...emptyRun, status: "running", text: "A much longer streamed reply" }} />);
+  expect(scroller.scrollTop).toBe(1000);
+
+  fireEvent.wheel(scroller, { deltaY: -500 });
+  scroller.scrollTop = 100;
+  fireEvent.scroll(scroller);
+  height = 800;
+  rerender(<Conversation messages={[]} run={projectEvents(first, [{ id: "3", run_id: "run-scroll", type: "message.delta", data: { delta: "更多" } }])} />);
+  expect(scroller.scrollTop).toBe(100);
 });
 
 it("keeps the streamed reply visible until the saved reply replaces it", async () => {

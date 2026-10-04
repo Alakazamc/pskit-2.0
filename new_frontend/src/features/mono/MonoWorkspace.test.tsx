@@ -155,10 +155,52 @@ it("shows waiting inside the reply and cancels without a bar above the composer"
   const spinner = await screen.findByRole("status", { name: "正在生成回复" });
   expect(spinner.closest(".message-row.assistant")).toBeInTheDocument();
   expect(screen.queryByRole("region", { name: "当前运行" })).not.toBeInTheDocument();
-  await userEvent.setup().click(within(spinner.closest(".message-row.assistant") as HTMLElement).getByRole("button", { name: "取消运行" }));
+  expect(screen.queryByRole("button", { name: "发送消息" })).not.toBeInTheDocument();
+  await userEvent.setup().click(screen.getByRole("button", { name: "取消运行" }));
   await waitFor(() => expect(fetcher.mock.calls.some(([input, init]) =>
     String(input).endsWith("/runs/run-1") && init?.method === "DELETE",
   )).toBe(true));
+});
+
+it("shows stop for a reloaded active run before the first event arrives", async () => {
+  loggedIn("/session/session-1");
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
+    if (path.endsWith("/g")) return json([]);
+    if (path.endsWith("/c")) return json([{ id: "session-1", project_id: "project-alice", title: "Queued", status: "running", latest_run_id: "run-queued" }]);
+    if (path.includes("/runs/run-queued/events")) return runEvents();
+    return json([]);
+  }));
+  render(<App />);
+  expect(await screen.findByRole("button", { name: "取消运行" })).toBeEnabled();
+  expect(screen.queryByRole("button", { name: "发送消息" })).not.toBeInTheDocument();
+});
+
+it("switches the composer to stop after message submission while the reply is streaming", async () => {
+  loggedIn("/session/session-1");
+  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
+    if (path.endsWith("/g")) return json([{ id: "project-alice", name: "Personal", description: "" }]);
+    if (path.endsWith("/c")) return json([{ id: "session-1", project_id: "project-alice", title: "Research" }]);
+    if (path.endsWith("/c/session-1/messages") && init?.method === "POST") return json({ run_id: "run-live" });
+    if (path.includes("/runs/run-live/events")) return runEvents({
+      id: "1", run_id: "run-live", type: "message.delta", data: { delta: "正在分析" },
+    });
+    if (path.endsWith("/runs/run-live") && init?.method === "DELETE") return json({ run_id: "run-live", status: "cancelled" });
+    if (path.endsWith("/messages") || path.endsWith("/skills") || path.endsWith("/resources")) return json([]);
+    return json({ detail: "Not found" }, 404);
+  });
+  vi.stubGlobal("fetch", fetcher);
+  render(<App />);
+  const actor = userEvent.setup();
+  await actor.type(await screen.findByLabelText("消息内容"), "分析数据");
+  await actor.click(screen.getByRole("button", { name: "发送消息" }));
+  expect(await screen.findByText("正在分析")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "取消运行" })).toBeEnabled();
+  expect(screen.queryByRole("button", { name: "发送消息" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "当前运行" })).not.toBeInTheDocument();
 });
 
 it("shows a quota rejection on approval and keeps the decision available", async () => {

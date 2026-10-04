@@ -17,7 +17,6 @@ import { personalSessionPath, projectPath, projectSessionPath, sessionPath } fro
 import { MyRuns, PdbWorkspace, ToolDirectory } from "./ToolPages";
 import { ArtifactsPage } from "./ArtifactsPage";
 import { UsageSettings } from "./UsageSettings";
-import { RunControls } from "./RunControls";
 import { GenericToolPage } from "./GenericToolPage";
 import { SearchDialog } from "./SearchDialog";
 import { SessionRenameDialog } from "./SessionRenameDialog";
@@ -147,6 +146,10 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
     void queryClient.invalidateQueries({ queryKey: ["usage-entries", user.id] });
   }, [activeProjectId, activeSessionId, personalProjectId, queryClient, user.id]);
   const run = useRunEvents(api, visibleRunId, onRunCompleted);
+  const runActive = (run.status === "running" || run.status === "waiting") ||
+    (run.status === "idle" && !!visibleRunId && (
+      (currentRun?.sessionId === activeSessionId && currentRun.runId === visibleRunId) ||
+      currentSession?.status === "running" || currentSession?.status === "waiting"));
   const cancelRun = async () => {
     if (!visibleRunId) return;
     await api.cancelRun(visibleRunId);
@@ -230,7 +233,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
       if (activeSessionId && !currentSession) return sessionListPending || sessionLookup.isPending || !!sessionLookup.data
         ? <div className="mono-loading-page" role="status">{t("mono.openingChat")}</div>
         : <div className="mono-page-scroll"><div className="mono-empty-panel"><h2>{t("mono.pageNotFound")}</h2><Link to="/">{t("mono.backNewChat")}</Link></div></div>;
-      return <div className="mono-chat-layout">{activeSessionId ? <Conversation messages={messages.data ?? []} run={run} runId={visibleRunId} onCancel={visibleRunId ? cancelRun : undefined} /> : <div className="mono-empty-chat"><h1>{t("mono.emptyChatTitle")}</h1><p>{t("mono.emptyChatDescription")}</p></div>}{sendError && <div className="mono-error" role="alert">{sendError}{showUpgradePrompt && <Link to="/settings">{t("guest.upgradeToContinue")}</Link>}</div>}{activeSessionId && visibleRunId && <RunControls key={visibleRunId} run={run} onCancel={cancelRun} onApproval={decideApproval} />}{defaultSkills.length > 0 && <div className="mono-default-skills">{t("mono.defaultSkills")}{defaultSkills.map((skill) => <span className="mono-chip" key={skill.id}>✦ {skill.name}</span>)}</div>}<Composer onSend={send} onUpload={upload} skills={skills.data ?? []} projectSkillIds={projectSkillSettings.data?.skill_ids ?? []} resources={resources.data ?? []} models={models.data ?? []} disabled={sending} /></div>;
+      return <div className="mono-chat-layout">{activeSessionId ? <Conversation messages={messages.data ?? []} run={run} runId={visibleRunId} onCancel={visibleRunId ? cancelRun : undefined} onApproval={decideApproval} /> : <div className="mono-empty-chat"><h1>{t("mono.emptyChatTitle")}</h1><p>{t("mono.emptyChatDescription")}</p></div>}{sendError && <div className="mono-error" role="alert">{sendError}{showUpgradePrompt && <Link to="/settings">{t("guest.upgradeToContinue")}</Link>}</div>}{defaultSkills.length > 0 && <div className="mono-default-skills">{t("mono.defaultSkills")}{defaultSkills.map((skill) => <span className="mono-chip" key={skill.id}>✦ {skill.name}</span>)}</div>}<Composer onSend={send} onUpload={upload} onStop={visibleRunId ? cancelRun : undefined} runActive={runActive} skills={skills.data ?? []} projectSkillIds={projectSkillSettings.data?.skill_ids ?? []} resources={resources.data ?? []} models={models.data ?? []} disabled={sending} /></div>;
     }
     if (pathname === "/g") return <ProjectIndex projects={visibleProjects} />;
     if (pathname === "/artifacts") return <ArtifactsPage api={api} userId={user.id} />;

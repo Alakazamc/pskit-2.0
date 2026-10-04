@@ -86,7 +86,8 @@
 .mono-app .composer-surface{max-width:750px;border:1px solid var(--mono-border);border-radius:24px;background:var(--mono-surface);box-shadow:0 2px 14px #00000008}
 .mono-app .composer-surface:focus-within{border-color:var(--mono-soft)}
 .mono-app.dark .composer-surface{background:#2b2b2b;box-shadow:none}
-.mono-app .composer-input-area textarea{color:var(--mono-text);min-height:70px;padding:18px 16px 6px;font-size:14px}
+.mono-app .composer-input-area{padding-block-start:18px}
+.mono-app .composer-input-area textarea{color:var(--mono-text);min-height:52px;padding:0 16px 6px;font-size:14px}
 .mono-app .composer-input-area textarea:focus-visible{outline:none}
 .mono-app .composer-input-area textarea::placeholder{color:var(--mono-soft)}
 .mono-app .composer-toolbar{padding:0 12px 11px}

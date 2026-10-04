@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from "react";
-import { Bot, Check, ChevronDown, ChevronUp, Circle, FlaskConical, LoaderCircle, Square } from "lucide-react";
+import { Bot, Check, ChevronDown, ChevronUp, Circle, FlaskConical, LoaderCircle } from "lucide-react";
 import type { Message } from "../../api/types";
 import type { RunView } from "./events";
 import { MessageParts } from "./MessageParts";
@@ -7,28 +7,8 @@ import { LazyMarkdownContent } from "./LazyMarkdownContent";
 import { ReplyCopyButton } from "./ReplyCopyButton";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { localizedRunError } from "./runErrors";
-import { errorTranslationKey } from "../../i18n/errors";
-
-function StopRunButton({ onCancel }: { onCancel: () => Promise<void> }) {
-  const { t } = useLanguage();
-  const [busy, setBusy] = useState(false);
-  const [requested, setRequested] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const stop = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await onCancel();
-      setRequested(true);
-    } catch (caught) {
-      const key = errorTranslationKey(caught);
-      setError(key ? t(key) : t("workspace.cancelFailed"));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return <><button type="button" className="message-stop-button" aria-label={t("agent.cancel")} title={t("agent.cancel")} disabled={busy || requested} onClick={() => void stop()}><Square size={14} fill="currentColor" aria-hidden="true" /></button>{error && <span className="message-stop-error" role="alert">{error}</span>}</>;
-}
+import { RunControls } from "../mono/RunControls";
+import { useChatAutoscroll } from "./useChatAutoscroll";
 
 function UserMessage({ message }: { message: Message }) {
   const { t } = useLanguage();
@@ -81,8 +61,12 @@ function UserMessage({ message }: { message: Message }) {
   </article>;
 }
 
-export function Conversation({ messages, run, runId, onCancel }: { messages: Message[]; run: RunView; runId?: string | null; onCancel?: () => Promise<void> }) {
+export function Conversation({ messages, run, runId, onCancel, onApproval }: { messages: Message[]; run: RunView; runId?: string | null; onCancel?: () => Promise<void>; onApproval?: (approvalId: string, decision: "approved" | "rejected") => Promise<void> }) {
   const { t } = useLanguage();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  useChatAutoscroll(scrollRef, listRef, `${messages.length}:${run.text.length}:${run.status}:${run.tools.length}`, runId,
+    messages.length > 0 || run.status !== "idle");
   const runError = localizedRunError(run, t);
   const runActive = (run.status === "running" || run.status === "waiting") && !run.approval;
   const lastUserIndex = messages.reduce((last, message, index) => message.role === "user" ? index : last, -1);
@@ -92,13 +76,13 @@ export function Conversation({ messages, run, runId, onCancel }: { messages: Mes
     && (!runStartedAt || Date.parse(message.created_at) >= Date.parse(runStartedAt)));
   const showRunReply = run.status !== "idle" && (run.status !== "completed"
     || (run.text.length > 0 && !savedReplyAvailable));
-  return <div className="conversation-scroll">
+  return <div className="conversation-scroll" ref={scrollRef}>
     {messages.length === 0 && run.status === "idle" ? <div className="empty-chat">
       <div className="empty-icon"><FlaskConical size={28} /></div>
       <span className="eyebrow">{t("workspace.eyebrow")}</span>
       <h2>{t("conversation.emptyTitle")}</h2>
       <p>{t("conversation.emptyDescription")}</p>
-    </div> : <div className="message-list">
+    </div> : <div className="message-list" ref={listRef}>
       {run.plan.length > 0 && <section className="conversation-plan" aria-label={t("agent.plan")}>
         <h3>{t("agent.plan")}</h3>
         <ol>{run.plan.map((step) => <li key={step.id}>
@@ -112,7 +96,7 @@ export function Conversation({ messages, run, runId, onCancel }: { messages: Mes
         {message.role === "assistant" && <div className="assistant-avatar"><Bot size={17} /></div>}
         <div className="message-body">{message.role === "assistant" && <span className="message-author">Research Agent</span>}<MessageParts parts={message.parts} markdown={message.role === "assistant"} />{message.role === "assistant" && <div className="message-actions"><ReplyCopyButton text={message.parts.filter((part) => part.type === "text").map((part) => part.text).join("\n\n")} /></div>}</div>
       </article>)}
-      {showRunReply && <article className="message-row assistant"><div className="assistant-avatar"><Bot size={17} /></div><div className="message-body"><span className="message-author">Research Agent</span>{runError ? <p className="message-text">{runError}</p> : run.text && <LazyMarkdownContent text={run.text} streaming={runActive} />}{run.tools.filter((tool) => tool.status === "running").map((tool) => <div className="task-pill" key={tool.id}><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {tool.name}</div>)}{run.jobId && !["failed", "cancelled"].includes(run.status) && <div className="task-pill"><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {run.jobLabel || t("conversation.backgroundTask")}{Number.isFinite(run.progress) && ` · ${Math.round(run.progress)}%`}</div>}<div className="message-actions"><ReplyCopyButton text={runError ?? run.text} />{runActive && <span className="message-generating" role="status" aria-label={t("conversation.generating")}><LoaderCircle className="message-spinner" size={16} aria-hidden="true" /></span>}{runActive && onCancel && <StopRunButton key={runId ?? "active"} onCancel={onCancel} />}</div></div></article>}
+      {showRunReply && <article className="message-row assistant"><div className="assistant-avatar"><Bot size={17} /></div><div className="message-body"><span className="message-author">Research Agent</span>{runError ? <p className="message-text">{runError}</p> : run.text && <LazyMarkdownContent text={run.text} streaming={runActive} />}{run.tools.filter((tool) => tool.status === "running").map((tool) => <div className="task-pill" key={tool.id}><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {tool.name}</div>)}{run.jobId && !["failed", "cancelled"].includes(run.status) && <div className="task-pill"><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {run.jobLabel || t("conversation.backgroundTask")}{Number.isFinite(run.progress) && ` · ${Math.round(run.progress)}%`}</div>}{run.approval && onCancel && onApproval && <RunControls key={runId ?? "approval"} run={run} onCancel={onCancel} onApproval={onApproval} />}<div className="message-actions"><ReplyCopyButton text={runError ?? run.text} />{runActive && <span className="message-generating" role="status" aria-label={t("conversation.generating")}><LoaderCircle className="message-spinner" size={16} aria-hidden="true" /></span>}</div></div></article>}
     </div>}
   </div>;
 }
