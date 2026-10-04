@@ -1,5 +1,5 @@
-# Optional overlay after the existing local/cloud/staging Compose files.
-# The manager alone controls Docker; each user sandbox is created on the app network.
+# Backend reaches user bridges through the authenticated manager proxy.
+# User containers join only `sandbox`; the gateway exposes selected Run-scoped paths.
 services:
   backend:
     environment:
@@ -12,30 +12,23 @@ services:
         condition: service_healthy
 
   sandbox-manager:
-    image: ${AGENT_SANDBOX_IMAGE:?Set the fixed backend image for sandboxes}
+    image: ${AGENT_SANDBOX_IMAGE:?Set an immutable sandbox image digest}
     user: "0:0"
-    command:
-      - python
-      - -m
-      - uvicorn
-      - app.sandbox_manager:create_app
-      - --factory
-      - --host
-      - 0.0.0.0
-      - --port
-      - "8090"
+    command: [python, -m, uvicorn, "app.sandbox_manager:create_app", --factory, --host, "0.0.0.0", --port, "8090"]
     environment:
       PSKIT_SANDBOX_MANAGER_TOKEN: ${AGENT_SANDBOX_MANAGER_TOKEN:?Set a private manager token}
       PSKIT_SANDBOX_BRIDGE_SECRET: ${AGENT_SANDBOX_BRIDGE_SECRET:?Set a private bridge secret}
-      PSKIT_SANDBOX_IMAGE: ${AGENT_SANDBOX_IMAGE:?Set the fixed backend image for sandboxes}
-      PSKIT_SANDBOX_NETWORK: ${AGENT_SANDBOX_NETWORK:?Set the private Compose app network name}
-      PSKIT_SANDBOX_NAMESPACE: ${AGENT_SANDBOX_NAMESPACE:?Set a unique environment namespace}
+      PSKIT_SANDBOX_IMAGE: ${AGENT_SANDBOX_IMAGE:?Set an immutable sandbox image digest}
+      PSKIT_SANDBOX_NETWORK: ${AGENT_SANDBOX_NETWORK:?Set a dedicated sandbox network name}
+      PSKIT_SANDBOX_NAMESPACE: ${AGENT_SANDBOX_NAMESPACE:?Set a unique namespace}
+      PSKIT_SANDBOX_POSTGRES_DSN: ${AGENT_SANDBOX_POSTGRES_DSN:?Set the private manager PostgreSQL DSN}
+      PSKIT_SANDBOX_POSTGRES_SCHEMA: ${AGENT_SANDBOX_POSTGRES_SCHEMA:-pskit}
+      PSKIT_SANDBOX_GATEWAY_URL: http://sandbox-gateway:8080
     volumes:
       - type: bind
         source: /var/run/docker.sock
         target: /var/run/docker.sock
-    networks:
-      - app
+    networks: [app, sandbox, supabase]
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -46,3 +39,22 @@ services:
       retries: 12
       start_period: 10s
     restart: unless-stopped
+
+  sandbox-gateway:
+    image: ${AGENT_SANDBOX_GATEWAY_IMAGE:?Set a pinned nginx image digest}
+    user: "10001:10001"
+    entrypoint: [nginx]
+    command: [-c, /etc/nginx/sandbox-gateway.conf, -g, "daemon off;"]
+    volumes:
+      - ./sandbox-gateway.conf:/etc/nginx/sandbox-gateway.conf:ro
+    networks: [app, sandbox]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+networks:
+  sandbox:
+    name: ${AGENT_SANDBOX_NETWORK:?Set a dedicated sandbox network name}
+    internal: true

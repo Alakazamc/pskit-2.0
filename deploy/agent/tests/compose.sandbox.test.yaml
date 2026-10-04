@@ -1,0 +1,61 @@
+name: ${AGENT_COMPOSE_PROJECT:?An isolated test project is required}
+services:
+  database:
+    image: ${SANDBOX_TEST_DATABASE_IMAGE:?Set a resolved immutable local PostgreSQL image ID}
+    environment:
+      POSTGRES_USER: sandbox_test
+      POSTGRES_DB: sandbox_test
+      POSTGRES_PASSWORD: ${SANDBOX_TEST_DATABASE_PASSWORD:?}
+    tmpfs: ["/var/lib/postgresql/data:rw,size=256m"]
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U sandbox_test -d sandbox_test"]
+      interval: 1s
+      retries: 30
+  backend:
+    image: ${AGENT_SANDBOX_IMAGE:?}
+    command: [python, /tests/sandbox_model_gateway.py]
+    volumes: ["./sandbox_model_gateway.py:/tests/sandbox_model_gateway.py:ro"]
+    networks: [app]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  sandbox-gateway:
+    image: ${AGENT_SANDBOX_GATEWAY_IMAGE:?}
+    user: "10001:10001"
+    entrypoint: [nginx]
+    command: [-c, /etc/nginx/sandbox-gateway.conf, -g, "daemon off;"]
+    volumes: ["../sandbox-gateway.conf:/etc/nginx/sandbox-gateway.conf:ro"]
+    networks: [app, sandbox]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  sandbox-manager:
+    image: ${AGENT_SANDBOX_IMAGE:?}
+    user: "0:0"
+    command: [python, -m, uvicorn, "app.sandbox_manager:create_app", --factory, --host, "0.0.0.0", --port, "8090"]
+    environment:
+      PSKIT_SANDBOX_MANAGER_TOKEN: ${AGENT_SANDBOX_MANAGER_TOKEN:?}
+      PSKIT_SANDBOX_BRIDGE_SECRET: ${AGENT_SANDBOX_BRIDGE_SECRET:?}
+      PSKIT_SANDBOX_IMAGE: ${AGENT_SANDBOX_IMAGE:?}
+      PSKIT_SANDBOX_NETWORK: ${AGENT_SANDBOX_NETWORK:?}
+      PSKIT_SANDBOX_NAMESPACE: ${AGENT_SANDBOX_NAMESPACE:?}
+      PSKIT_SANDBOX_POSTGRES_DSN: ${AGENT_SANDBOX_POSTGRES_DSN:?}
+      PSKIT_SANDBOX_POSTGRES_SCHEMA: sandbox_test
+      PSKIT_SANDBOX_GATEWAY_URL: http://sandbox-gateway:8080
+      PSKIT_SANDBOX_IDLE_SECONDS: "1"
+    volumes: [/var/run/docker.sock:/var/run/docker.sock]
+    networks: [app, sandbox, database]
+    ports: ["127.0.0.1:${SANDBOX_TEST_MANAGER_PORT:-18890}:8090"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+networks:
+  app:
+    internal: true
+  database:
+    internal: true
+  sandbox:
+    name: ${AGENT_SANDBOX_NETWORK:?}
+    internal: true

@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - 容器归属采用每用户独立，同一用户多个会话复用；会话拥有独立 cwd、transcript 与 Pi RPC 进程。
-- 当前工作区由主代理逐项执行；沿用用户既有工作区和执行方式选择。不另建 worktree，不自行开启并行实施。
+- 沿用当前工作区。2026-10-04 用户授权 A、管理后端与管理前端并行实施：先确定 API 合约，按文件划分职责，主代理整合共享配置、迁移、生成类型及最终验收；不另建 worktree。
 - 复用现有 Docker manager；OpenSandbox 保持 provider 替换边界，不同时启动第二套容器调度器。
 - 镜像和 Pi 版本固定；保持 `mcp>=1.26,<2`，本轮不以协议升级为前提。
 - GPU 服务独立于用户 CPU 沙箱；Pi 只获得 Run 范围权限，不持提供商或管理密钥。
@@ -59,12 +59,12 @@
 
 ## 总体验收与交付
 
-- [ ] A、B、C 各任务 red/green 记录和 commit 已完成。
-- [ ] 本地 PostgreSQL 测试实际运行；若 `TEST_POSTGRES_DSN` 未设置导致 skip，不作为通过。
-- [ ] 后端相关测试、ruff；前端相关测试、typecheck、lint、build；结果逐项记录。
-- [ ] 隔离 Compose 场景完成用户沙箱复用、文件往返、CPU 任务、ACK 重放、Pi 唤醒与管理权限验收。
-- [ ] 发布前审查源码、版本化 migration、配额账本兼容、服务端 secret 边界及回退说明。
-- [ ] 文档明确实际已验证范围、CPU/GPU 硬限制能力、尚待真实模型接口的信息。
+- [x] A、B、C 各任务 red/green 记录和 commit 已完成；A/C 后端 `06c1685`、前端 `37a01ff`，部署与交付记录随收尾批次提交。
+- [x] 本地 PostgreSQL 测试实际运行；若 `TEST_POSTGRES_DSN` 未设置导致 skip，不作为通过。
+- [x] 后端相关测试、ruff；前端相关测试、typecheck、lint、build；结果逐项记录。
+- [x] 本地隔离验收：Compose 完成用户沙箱复用、文件往返与恢复；CPU 任务、ACK 重放、Pi 唤醒及管理权限通过真实 HTTP/PostgreSQL 边界验证，范围分别记录。
+- [x] 发布前审查源码、版本化 migration、配额账本兼容、服务端 secret 边界及回退说明。
+- [x] 文档明确实际已验证范围、CPU/GPU 硬限制能力、尚待真实模型接口的信息。
 
 2026-10-04 用户已提供统一返回协议并要求“修改计划，然后直接开始实现”；据此直接执行 B，沿用既有 TDD 边界、当前工作区、原生逐项执行和分批 commit 授权，不增加重复审批。
 
@@ -73,7 +73,11 @@
 
 - [x] B：服务目录、持久 Job、薄 SDK、HTTP/MCP adapter、用量与配额、可靠回执重放、Pi 自动唤醒。
 - [x] B 验证：全后端 503 项通过，无 PostgreSQL skip；ruff、前端 typecheck/lint/build、SDK wheel 构建通过。
-- [ ] A/C：继续各自计划，不以 B 完成代表沙箱完善或管理台完成。
+- [x] A/C：沙箱 A-1～A-5、管理后端 C-1～C-4 与管理前端 C-5～C-6 已实现并完成本地隔离验收。
 - [ ] 真实模型/GPU 联调与生产发布。
 
 具体接入方法见 [COMPUTE_SERVICES.md](/home/jhli/pskit-2.0/new_backend/COMPUTE_SERVICES.md)，证据与范围裁定见 [交付记录](/home/jhli/pskit-2.0/docs/research/2026-10-04-compute-sdk-delivery.md)。旧 AF3 物理调度与通用 UUID 锁尚未合并，切换同一设备前须排空；预算追加接口未开放。
+
+## 2026-10-05 A/C 验证汇总
+
+完整后端603项、前端193项、部署115项、管理HTTP/PG验收56项通过；PostgreSQL无skip。真实Docker项目oct04j验收通过，Chromium完成双语/双主题/双宽度56页检查。Ruff逐改动文件对比无新增问题，旧测试存量问题另记。完整结果、审查修复、原始失败记录与部署边界见 [A/C交付记录](../../research/2026-10-04-sandbox-admin-delivery.md)。本轮未部署到远程Staging或生产，真实GPU验收仍独立进行。

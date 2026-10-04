@@ -1,49 +1,75 @@
-# 用户沙箱与 Pi RPC
+# 用户 CPU 沙箱与 Pi RPC
 
-`compose.sandbox.yaml` 是可选叠加层。Python API 仍负责身份、会话、Token/GPU 配额、Run、MCP 和 AF3；Pi RPC 进程在用户专属容器内启动。工具集页面的“交给 Agent 分析”通过普通会话消息接口创建 Run，因此也使用相同的配额和审计链路。直接运行 MCP 工具仍由原来的 Python 能力接口处理。
+`compose.sandbox.yaml` 为现有部署添加一个 Docker provider。Python 控制面继续验证 Supabase 身份、当前模型/工具授权、Run 与配额；用户容器运行 Pi 和已注册的受限工具。Pi 0.87.1 的内置 shell、读写、外部 Skills 仍关闭。
 
-## 布局与生命周期
+## 存储与执行
 
-- 每个用户一个 `pskit-sbx-<namespace>-<hash>` 容器和一个同名 `-workspace` Docker 卷；会话目录是卷内 `/workspace/sessions/<session_id>/`。Pi 在该目录作为当前工作目录运行，会话 transcript 在成功后由 Python 记录路径。
-- API 只持有沙箱管理器的私有令牌；只有管理器挂载 Docker socket。沙箱没有 Docker socket、宿主端口或特权能力，使用 UID 10001、只读根文件系统、1 GiB 内存、1 CPU、256 PIDs，只接入 Compose 的私有 `app` 网络。管理器只提供创建/唤醒与空闲停止接口。
-- 30 分钟没有新 Pi 请求的容器会停止；卷不删除，下一次请求复用。管理器重启时会重新发现本环境的运行容器。首次从旧后端切换时，已有 Pi transcript 在下一轮按会话导入沙箱，成功后数据库中的路径更新。
-- 当前 Pi 仍关闭内置 shell、读写和外部 Skills 工具。已上传文件由 Python 作为受限上下文传给 Pi；文件正文尚未镜像到沙箱目录。不能把“有目录”理解为已经开放任意代码执行或已实现文件双向同步。
+每个 owner 有一个 `pskit-sbx-<namespace>-<hash>` 容器及独立 `-workspace` 卷。多个会话共享 owner 卷，但每个会话有独立工作目录、transcript 和 Pi 子进程；同会话串行，不同会话遵守后端的全局/用户并发上限。
 
-## 启用
+```text
+/workspace/
+├── shared/
+└── sessions/<session_id>/
+    ├── files/                         本轮验证所有权的上传文件
+    ├── artifacts/<attempt_id>/        本次执行输出
+    ├── attempts/<attempt_id>/          临时执行目录
+    └── .pi/                           独立持久 transcript 与 Pi 配置
+```
 
-先构建或载入与后端**相同代码版本**的固定标签镜像。标签不可复用；生产和 Staging 使用不同 namespace、Compose 网络、数据卷和管理令牌。管理器必须在对应 Docker 主机上运行，不能把 Docker socket 暴露给 Web 或公开网络。
+活动 lease、owner、镜像、runtime、revision、排空/替换操作存于现有私有 PostgreSQL schema；先在受信任的数据库网络中使用迁移角色调用 `app.db.postgres_migrations.migrate_postgres(dsn, schema=...)` 升级到当前 schema（现为6），再启动 manager。现有 `stack.sh up` 对默认 schema 使用同一迁移入口；`agent_data_migrate.py` 用于 import/export，不提供原地升级子命令。manager 的线上 factory 必须获得私有 DSN；内存/SQLite activity 替身只在测试中显式注入。
 
-在部署目录的 `.env`（权限 `0600`）设置：
+开始 Pi 前 acquire，执行时 renew，仅在 Pi subprocess wait 完成后 release。1800 秒空闲窗口从最后确认完成开始；lease 到期代表 unknown，不证明执行退出。manager 重启后先询问 bridge；bridge 失联或没有对应终态证据时保留未知状态。取消 API 返回 cancelling，只有确认进程退出后为 cancelled。
+
+停止、删除容器和删除卷是不同操作。manager 的 idle sweep 只停止；镜像替换先排空、拒绝新 attempt，活动结束后持久化 claim/revision 并移除旧容器（`v=false`）。新运行实例挂同一个卷。失败操作可重试；禁止删卷解决 owner/image 冲突。metrics 的 CPU core ms 与 RAM 是整个 owner 容器的监控数据，不作为每会话计费重复累加。
+
+## 文件与产物
+
+API 接收 file ID 和 session ID，由后端验证所有权、大小和目录；上传名不决定 Docker 路径。原始字节以 SHA256 验证，通过 `O_NOFOLLOW` 的目录/文件 handle 写入临时文件，再原子发布，冲突或损坏不会覆盖已有文件。只同步该会话获授权的 file ID，不遍历整个用户卷。
+
+产物只导出 `sessions/<session_id>/artifacts/<attempt_id>/`，拒绝 traversal、绝对路径、symlink、目录与超限输出。单文件上限20 MiB、一次导出上限100 MiB/100个文件。输出注册到现有 artifact blob 存储，重传同 owner/session/attempt/name/digest 不重复注册；注册与上传共享实际存储额度的准入锁。现有 `/api/v1/artifacts` 的列表、预览和下载按所有权读取这些产物。
+
+新增 `/api/v1/sandbox/sessions/{session_id}/files` 只接收最多10个 file ID。自动 Agent 执行会同步已绑定在 Run 上的附件，在本轮完成后收集输出并发出 `artifact.created`。模型图片继续使用原图片通路，每轮最多10个总附件。
+
+## 私有网络与凭证
+
+用户容器只接入独立 **internal** sandbox 网络，UID/GID10001、只读根、1 CPU、1 GiB RAM、256 PIDs、无 Docker socket/宿主端口，移除 capabilities 并禁止提权。资源参数由服务器配置提供，浏览器不能传 Docker 参数。
+
+backend 保持原有应用/数据库网络，通过 manager 的认证 bridge proxy 访问 `/v1/pi` 与 `/v1/workspace`。manager 是唯一持有 Docker socket 的基础设施组件。`sandbox-gateway` 连接 app+sandbox，只代理 model、已注册 MCP、Run plan、AF3 与通用 Job 的指定 internal 路径；管理员、worker callback、数据库与其他路径返回403。Python 每次调用仍验证当前 Run token 和用户授权。
+
+server-owned `PYTHONPATH=/app` 使 bridge 从镜像应用路径加载代码及 Pi assets；它不进入 Pi 子进程。Pi 子进程仅继承 PATH/LANG/LC_ALL/TZ，再接收后端绑定的 Run ID、工具 token、模型选项和 workspace 目录。模型 key 必须为 `<run_id>.<tool_token>`；bridge/manager/global provider/Supabase/数据库 secret 不进入 Pi 环境。
+
+gateway 模型请求上限64 MiB；manager bridge body 上限128 MiB，以容纳旧 transcript32 MiB导入与10张最大4 MiB图片的 base64 JSON。环境 allowlist 不等同于不同 UID 或内核隔离；任意 shell/Python 开放仍需单独验收隔离运行时。
+
+## 启用与回退
+
+使用同一代码版本的固定镜像 digest，生产/Staging 必须各自使用 namespace、sandbox 网络、数据库 schema 与私有密钥。以下变量保存在权限0600的服务器 `.env`；不进入前端构建：
 
 ```dotenv
-AGENT_SANDBOX_IMAGE=pskit-agent-backend:your-immutable-release-tag
-AGENT_SANDBOX_NETWORK=pskit-agent-cloud_app
-AGENT_SANDBOX_NAMESPACE=cloud
-AGENT_SANDBOX_MANAGER_TOKEN=<独立随机密钥，至少 16 字符>
-AGENT_SANDBOX_BRIDGE_SECRET=<另一枚独立随机密钥，至少 16 字符>
+AGENT_SANDBOX_IMAGE=registry/pskit-agent@sha256:<固定64位digest>
+AGENT_SANDBOX_GATEWAY_IMAGE=nginx@sha256:<经验证的固定digest>
+AGENT_SANDBOX_NETWORK=pskit-agent-staging_sandbox
+AGENT_SANDBOX_NAMESPACE=staging
+AGENT_SANDBOX_MANAGER_TOKEN=<独立随机密钥，至少16字符>
+AGENT_SANDBOX_BRIDGE_SECRET=<另一独立随机密钥，至少16字符>
+AGENT_SANDBOX_POSTGRES_DSN=<后端同一私有数据库与schema的服务器DSN>
+AGENT_SANDBOX_POSTGRES_SCHEMA=pskit
 ```
 
-`AGENT_SANDBOX_IMAGE` 必须对应当前 `AGENT_BACKEND_IMAGE` 的内容。`AGENT_SANDBOX_NETWORK` 应以 `docker network ls` 核对实际 Compose `app` 网络名称；Staging 通常是 `pskit-agent-staging_app`。不要将管理令牌或 bridge secret 放入前端构建变量。模型别名从 LiteLLM 动态读取；如果 LiteLLM 未返回 `supports_vision`，可在后端环境设置 `MODEL_GATEWAY_IMAGE_MODELS_JSON=["模型别名"]`，仅为已验证支持图片的别名开启图片上传。
+叠加 `compose.sandbox.yaml` 后执行 `docker compose ... config --quiet`；确认 backend 不在 sandbox 网络，manager/gateway 没有公开 ports，数据库网络只由受信任组件连接。迁移和 Staging 验收完成后，按照部署流程启用 overlay。本次实现没有修改生产部署。
 
-生产 Compose 在原有四个文件后叠加沙箱文件；第一次切换前先执行配置检查，确认 `sandbox-manager` 没有 `ports`，且只有它挂载 Docker socket：
+旧后端 transcript 在下一轮按会话导入 `.pi/`，成功后更新数据库记录。回退到本地 Pi 时，先排空并停止新 Run；通过受信任运维访问保留卷，导出每个会话数据库指向的 transcript，把路径映射到后端 Pi session 目录并核对所有权及内容，再切换 `pi_execution=local`。保留未迁移会话的 sandbox provider 直到迁移完成。禁止 `down -v`。
+
+## 隔离 Docker 验收
+
+`scripts/sandbox_smoke.py` 拒绝生产项目和用户 ID，只接受新的 `pskit-sandbox-test-*` 项目及 `sandbox-test-*` 用户/会话。它启动私有临时 PostgreSQL、gateway、manager 与本地模型 stub，运行真实 Pi；HTTP 从测试 backend 的 app 网络发起，兼容 Docker daemon 不在 WSL localhost 的情况。用户卷保留，退出时仅清理测试容器/网络。
 
 ```bash
-docker compose --env-file .env \
-  -f compose.yaml -f compose.cloud.yaml -f compose.postgres.yaml -f compose.sandbox.yaml \
-  config --quiet
-docker compose --env-file .env \
-  -f compose.yaml -f compose.cloud.yaml -f compose.postgres.yaml -f compose.sandbox.yaml \
-  up -d sandbox-manager backend
+new_backend/.venv/bin/python deploy/agent/scripts/sandbox_smoke.py \
+  --project pskit-sandbox-test-example \
+  --image sha256:<本次完整应用镜像ID> \
+  --gateway-image nginx@sha256:<固定digest>
 ```
 
-Staging 在它原有的 Compose 文件组合末尾叠加同一个 `compose.sandbox.yaml`，使用独立的 Staging 变量。先在 Staging 用一名测试用户发送消息，确认管理器仅生成一个容器、第二个会话创建另一目录、重启容器后 transcript 保留，再切生产。后端 `GET /health/ready` 仍负责数据库就绪；沙箱容器按需创建，不要求每名用户预热。
+测试覆盖两用户三会话、文件字节往返、活动超过测试空闲窗口、实际网络/DNS/出口拒绝、排空保卷、停止和 transcript 恢复。独立项目 `pskit-sandbox-test-oct04j` 验收 exit0；沙箱范围45项、真实 PostgreSQL4项通过；最终全后端603项通过，无PostgreSQL skip。模型是本地替身；没有付费推理，也不代表已在生产启用。完整结果及失败记录见 [验收记录](../../docs/research/2026-10-04-user-sandbox-implementation-validation.md)。
 
-回退时从 Compose 命令中移除 `compose.sandbox.yaml` 并重建 backend，恢复本地 Pi 模式。**新产生的沙箱 transcript 路径无法由旧模式直接读取**；回退前应暂停新 Run，导出/转换这些 transcript，或保留沙箱服务直到在沙箱内完成未结束的会话。不要运行 `down -v`，否则会删除工作区数据。
-
-Docker socket 使管理器具有宿主 Docker 控制权，因此它是受信任的基础设施组件。用户沙箱只拥有私有应用网络和自身工作卷；如果未来开放 shell、代码执行或不可信 Skill，需要单独审查网络出口、文件同步和更强的容器隔离。
-
-## 通用计算 SDK（独立于用户 CPU 沙箱）
-
-科研模型可保留自己的模型环境，用函数/HTTP/MCP executor 返回统一的 Completed/Pending/Failed + UsageReport。用户 Pi 只获得 Run 工具 token，经 Python 的 `/internal/compute/jobs` 提交持久任务；worker 接收器持有服务专属密钥，GPU 模型不必放在每用户沙箱中。
-
-详见 [模型接入与计量协议](../../new_backend/COMPUTE_SERVICES.md)。默认关闭，启用前显式升级 PostgreSQL v4，配置已批准 manifest 与 CPU 日额度。新旧 GPU receiver 同设备并行互斥尚需统一设备调度，生产切换前先排空旧任务。此 B 阶段实现不代表 A 阶段沙箱文件同步或 C 阶段管理台已经完成。
+科研模型的 Completed/Pending/Failed、用量与额度协议独立于 CPU sandbox，见 [COMPUTE_SERVICES.md](../../new_backend/COMPUTE_SERVICES.md)。
