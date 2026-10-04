@@ -8,6 +8,12 @@
 - Use subdued exhaust colors inspired by real fighter jet photography: smoky blue at lower levels, gray violet in the middle, pale amber at the top. Keep each level distinct, with a narrow off-white core, translucent edges, a fading tip, and restrained glow; increase length and brightness with strength. Default and off have no flame. Key colors by the actual level so models with fewer levels retain the same colors. Preserve text labels and the compact panel dimensions.
 - Verify rendered input focus and lever behavior in both themes at desktop and mobile widths; CSS declarations alone do not establish that the focus frame is gone.
 
+## Conversation drafts
+
+- Scope composer state by authenticated user ID and conversation ID. Persist unsent text, model, thinking strength and ready context IDs in versioned browser localStorage; restore them before displaying a different conversation. Keep personal and project new-chat drafts separate, then move a new-chat draft into its created session.
+- On accepted sends, clear the submitted content while preserving model preferences and any newer typing. Retain rejected submissions. Bind asynchronous uploads and send completion to their originating draft; reset transient controls on conversation changes.
+- Cache only the necessary draft fields. Keep file contents, temporary blob URLs and credentials out of draft storage, and keep preference persistence entirely in the browser. Verify switching, refresh, account isolation and late completions through the UI; unavailable storage must leave the current composer usable.
+
 ## Page headings
 
 - Use one clear page title. Keep page-level descriptions only when they add information needed to act; do not repeat the navigation label or describe obvious page functions. Preserve user-written project descriptions and tool-specific guidance.
