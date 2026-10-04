@@ -190,7 +190,7 @@ def test_failed_import_keeps_active_schema(
         ).fetchone() == (0,)
         assert connection.execute(
             sql.SQL("SELECT COUNT(*) FROM {}.schema_migrations").format(sql.Identifier(target))
-        ).fetchone() == (3,)
+        ).fetchone() == (4,)
 
 
 def test_pi_copy_into_existing_empty_volume(tmp_path: Path) -> None:
@@ -215,3 +215,23 @@ def test_import_requires_a_verified_snapshot_manifest(
         agent_data_migrate.import_sqlite_snapshot(
             plain, dsn, staging_schema=f"{target}_stage", target_schema=target,
         )
+
+
+def test_sqlite_export_refuses_to_drop_compute_catalog(pg_schema, tmp_path):
+    """Legacy rollback format cannot silently omit PostgreSQL-only compute state."""
+    from app.contracts.compute import CapabilityVersion, ComputeServiceManifest
+    from app.db.postgres import PostgresDatabase
+    from app.domain.compute.catalog import ComputeCatalog
+
+    dsn, schema = pg_schema
+    migrate_postgres(dsn, schema=schema)
+    database = PostgresDatabase(dsn, schema=schema)
+    try:
+        ComputeCatalog(database).register(ComputeServiceManifest(service_id="lab", model_version="v1",
+            capabilities=[CapabilityVersion(id="lab.inspect", version="1", input_schema={"type": "object"})]))
+        destination = tmp_path/"rollback.sqlite3"
+        with pytest.raises(ValueError, match="Compute state requires a PostgreSQL backup"):
+            agent_data_migrate.export_sqlite_snapshot(dsn, destination, schema=schema)
+        assert not destination.exists()
+    finally:
+        database.close()

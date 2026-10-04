@@ -41,7 +41,7 @@ def test_private_schema_and_version(pg_schema: tuple[str, str]) -> None:
     migrate_postgres(dsn, schema=schema)
     database = PostgresDatabase(dsn, schema=schema)
     try:
-        database.check_schema_version(3)
+        database.check_schema_version(4)
         with database.connection() as connection:
             tables = {
                 row[0] for row in connection.execute(
@@ -56,7 +56,7 @@ def test_private_schema_and_version(pg_schema: tuple[str, str]) -> None:
             }
             assert connection.execute(
                 "SELECT version FROM schema_migrations ORDER BY version"
-            ).fetchall() == [(1,), (2,), (3,)]
+            ).fetchall() == [(1,), (2,), (3,), (4,)]
             assert connection.execute(
                 "SELECT is_identity FROM information_schema.columns "
                 "WHERE table_schema=%s AND table_name='agent_token_entries' AND column_name='id'",
@@ -92,7 +92,7 @@ def test_private_schema_and_version(pg_schema: tuple[str, str]) -> None:
     with psycopg.connect(dsn) as connection:
         assert connection.execute(
             sql.SQL("SELECT count(*) FROM {}.schema_migrations").format(sql.Identifier(schema))
-        ).fetchone() == (3,)
+        ).fetchone() == (4,)
         assert connection.execute(
             sql.SQL("SELECT count(*) FROM {}.agent_jobs").format(sql.Identifier(schema))
         ).fetchone() == (1,)

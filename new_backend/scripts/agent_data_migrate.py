@@ -45,6 +45,11 @@ _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 _PI_ROOT = Path("/data/pi-sessions")
 _SQLITE_METADATA = {"sqlite_sequence", "sqlite_stat1", "sqlite_stat4"}
 _MIGRATION_ONLY = {"schema_migrations"}
+_POSTGRES_COMPUTE = {
+    "compute_capability_versions", "compute_job_data", "compute_reservations",
+    "compute_usage_reports", "compute_usage_daily", "compute_cpu_limits",
+    "compute_device_leases", "compute_result_receipts", "compute_outbox",
+}
 
 
 @dataclass(frozen=True)
@@ -243,7 +248,7 @@ def _copy_rows(
             "SELECT name FROM sqlite_master WHERE type='table'"
         )
     } - _SQLITE_METADATA
-    new_tables = _table_names(destination, staging_schema) - _MIGRATION_ONLY
+    new_tables = _table_names(destination, staging_schema) - _MIGRATION_ONLY - _POSTGRES_COMPUTE
     if old_tables != new_tables:
         raise ValueError("SQLite and PostgreSQL table sets differ")
     counts: dict[str, int] = {}
@@ -424,7 +429,13 @@ def export_sqlite_snapshot(
                     "SELECT name FROM sqlite_master WHERE type='table'"
                 )
             } - _SQLITE_METADATA
-            new_tables = _table_names(source, schema) - _MIGRATION_ONLY
+            for table in _POSTGRES_COMPUTE:
+                exists = source.execute(sql.SQL("SELECT 1 FROM {}.{} LIMIT 1").format(
+                    sql.Identifier(schema), sql.Identifier(table),
+                )).fetchone()
+                if exists:
+                    raise ValueError("Compute state requires a PostgreSQL backup; SQLite export would lose data")
+            new_tables = _table_names(source, schema) - _MIGRATION_ONLY - _POSTGRES_COMPUTE
             if old_tables != new_tables:
                 raise ValueError("PostgreSQL and SQLite table sets differ")
             for table in old_tables:
