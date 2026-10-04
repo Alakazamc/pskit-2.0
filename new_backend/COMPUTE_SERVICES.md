@@ -44,6 +44,8 @@ UsageReport 的六个数值字段可为 null：`wall_ms / cpu_core_ms / gpu_devi
 
 ## 3. 服务注册与配置
 
+非零 CPU/GPU 最大预算必须同时声明对应 required_usage；远程 GPU 即使不申请本地设备 UUID，也必须提供 GPU 用量。请求纳入计账的 CPU/GPU 时须预占正预算，未知必需用量不能结算。
+
 先使用管理员数据库连接显式运行 `app.db.postgres_migrations.migrate_postgres` 升级至 v4（004_compute.sql）。启动只验证版本，不静默迁移。应用 role 的新表/序列权限按现有 shared-Postgres provisioning 授予，不授予用户/模型数据库权限。
 
 在后端专用 env 文件（0600）配置：
@@ -98,10 +100,14 @@ python scripts/compute_receiver.py \
 - 额度预占限制准入，soft 服务实际超过预算仍如实入账，不截断报告。deadline/lease/取消请求不是远程 CUDA 已停止的证据。
 - grant stop_at 固定，心跳不延长。到期通知 cooperative cancellation；硬限制只允许声明 independently stoppable + confirmed_stop 的真实 executor，本轮没有实现通用 supervisor。
 - running 取消先 cancelling；终态报告必须显式 stopped=true 才释放余量和设备锁。失联/未知仍保留锁与预占，不自动重跑。
+- scheduler 扫描通用 lease：过期标记 pending_reconciliation，绝对 deadline 到期再发取消意图；原 attempt/fencing 仍保留，迟到的合法完成报告可以结算。所有日期未结算的旧 AF3 hold 同样阻止新准入。
 - 旧 AF3 receiver/API 保留原启动环境和分钟计量，来源 legacy_wall；旧任务和新任务共享用户预算，但不互相当成同一种 wire model。
 - **通用 GPU UUID 锁尚未覆盖旧 AF3 receiver 的物理设备锁。** 同一 GPU 接新通用 executor 前需排空旧 executor，或将它适配到同一通用 claim/receipt 流程，不能并行部署后宣称跨旧新 receiver 硬件互斥。
 - Pi 已支持 submit_compute → terminate → 后台终态 → 原会话自定义事件继续。事件不是用户自然语言消息；独立工具页 Job 不创建聊天。若用户主动要求 LLM 分析，用已有“交给 Agent 分析”/消息接口创建 Run，走受控模型代理和 Token 账本。
+- 旧直接 MCP invoke 保持原 completed 合约；长任务三态使用 McpAdapter → receiver → submit_compute，提供原外部 job_id 的查询和取消接口。
 - 本轮产物为 ArtifactRef；SDK 不自动上传任意服务器路径。旧 AF3 blob 下载链路保持，通用模型产物存储上传适配需要具体服务对接。
+- 追加预算的公开 API 尚未开放；内部 extend helper 启用前需补最大预算检查与 Job/grant 快照一致性。
+- 旧 SQLite 迁移工具仅允许导入旧系统数据到新增计算表为空的 PostgreSQL；存在任何计算目录、用量或作业记录时，SQLite 回退导出会拒绝，必须使用 PostgreSQL 备份，避免丢数据。
 
 ## 7. 可复现验收
 

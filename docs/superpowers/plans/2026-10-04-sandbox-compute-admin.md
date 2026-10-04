@@ -27,7 +27,7 @@
 - 前端保持中英双语、主题适配，遵守 [AGENTS.md](/home/jhli/pskit-2.0/new_frontend/AGENTS.md)。
 - 本计划先在本地/隔离 Staging 验收；生产发布采用现有部署 skill 和发布记录，不把测试记录迁入生产。
 - `.venv/bin/python` 命令从 `new_backend/` 执行，`npm` 命令从 `new_frontend/` 执行；仓库相对路径统一从项目根目录解析。
-- 代码当前 PostgreSQL schema v3；本次 B 阶段使用下一版 004_compute.sql，后续 A/C 按实际实施顺序分配版本，不为计划编号创建空迁移。迁移显式顺序执行，启动不静默改生产 schema；应用回退必须使用能识别新 schema/Job 的兼容镜像，不能直接重启严格只接受 schema v3 的旧镜像。
+- 实施基线 PostgreSQL schema 为 v3；本次 B 已新增下一版 004_compute.sql（v4），后续 A/C 按实际实施顺序分配版本，不为计划编号创建空迁移。迁移显式顺序执行，启动不静默改生产 schema；应用回退必须使用能识别新 schema/Job 的兼容镜像，不能直接重启严格只接受 schema v3 的旧镜像。
 - 旧 `docs/adr/0001-final-stack.md` 对 Vue/LangGraph/Celery 的选择属于旧系统；本轮依据用户已指定的新版 React/Pi/单 PostgreSQL 架构，不恢复旧技术栈。
 
 ## Review Focus
@@ -67,3 +67,13 @@
 - [ ] 文档明确实际已验证范围、CPU/GPU 硬限制能力、尚待真实模型接口的信息。
 
 2026-10-04 用户已提供统一返回协议并要求“修改计划，然后直接开始实现”；据此直接执行 B，沿用既有 TDD 边界、当前工作区、原生逐项执行和分批 commit 授权，不增加重复审批。
+
+
+## 2026-10-04 交付进度
+
+- [x] B：服务目录、持久 Job、薄 SDK、HTTP/MCP adapter、用量与配额、可靠回执重放、Pi 自动唤醒。
+- [x] B 验证：全后端 503 项通过，无 PostgreSQL skip；ruff、前端 typecheck/lint/build、SDK wheel 构建通过。
+- [ ] A/C：继续各自计划，不以 B 完成代表沙箱完善或管理台完成。
+- [ ] 真实模型/GPU 联调与生产发布。
+
+具体接入方法见 [COMPUTE_SERVICES.md](/home/jhli/pskit-2.0/new_backend/COMPUTE_SERVICES.md)，证据与范围裁定见 [交付记录](/home/jhli/pskit-2.0/docs/research/2026-10-04-compute-sdk-delivery.md)。旧 AF3 物理调度与通用 UUID 锁尚未合并，切换同一设备前须排空；预算追加接口未开放。
