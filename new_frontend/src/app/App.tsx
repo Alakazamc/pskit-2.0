@@ -4,6 +4,7 @@ import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useParams } 
 import { createApi, isDemoAuth } from "../api/client";
 import type { AuthSessionResponse, UserIdentity } from "../api/types";
 import { LoginPage } from "../features/auth/LoginPage";
+import { AdminShell } from "../features/admin/AdminShell";
 import { MonoWorkspace } from "../features/mono/MonoWorkspace";
 import { personalSessionPath, projectIdFromRouteKey, projectPath } from "../features/mono/sessionPaths";
 import { LanguageProvider, useLanguage } from "../i18n/LanguageProvider";
@@ -75,6 +76,7 @@ function AppContent() {
   return <QueryClientProvider client={query}><BrowserRouter><Routes>
     <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage api={api} onLogin={(identity, token) => { api.setAccessToken(token); setUser(identity); }} />} />
     <Route path="/auth/callback" element={<AuthCallbackStatus user={user} />} />
+    <Route path="/admin/:section?" element={user ? <AdminShell api={api} user={user} onUnauthorized={() => { api.setAccessToken(null); window.localStorage.removeItem("research_access_token"); query.clear(); setUser(null); }} /> : <Navigate to="/login" replace />} />
     <Route path="/c/:sessionId" element={<LegacyPersonalChatRedirect />} />
     <Route path="/g/:projectKey/*" element={<LegacyProjectRedirect />} />
     <Route path="/*" element={user ? <MonoWorkspace api={api} user={user} onSession={applySession} onLogout={() => {

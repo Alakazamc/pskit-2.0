@@ -1,5 +1,6 @@
 import type { ResearchApi, RunEvent } from "./types";
 import { projectRouteKey } from "./routeKeys";
+import { createAdminApi } from "./admin";
 
 type Options = { baseUrl?: string; token: () => string | null; fetcher?: typeof fetch; onUnauthorized?: () => Promise<string | null> };
 
@@ -45,6 +46,7 @@ export function createHttpApi({ baseUrl = "/api/v1", token, fetcher = fetch, onU
     if (!response.ok) throw new ApiError(response.status, response.statusText);
   };
   return {
+    ...createAdminApi(request),
     startAnonymous: (captchaToken) => post("/auth/anonymous", { captcha_token: captchaToken ?? null }),
     beginGuestEmailUpgrade: (email) => post("/auth/upgrade/email", { email }),
     verifyGuestEmailUpgrade: (email, code) => post("/auth/upgrade/email/verify", { email, token: code }),

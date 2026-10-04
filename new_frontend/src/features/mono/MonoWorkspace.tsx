@@ -23,6 +23,7 @@ import { SessionRenameDialog } from "./SessionRenameDialog";
 import { StructureViewerPage } from "./StructureViewerPage";
 import { GuestUpgrade } from "../auth/GuestUpgrade";
 import { ProjectIconGlyph } from "./ProjectIcon";
+import { AdminEntry } from "../admin/AdminEntry";
 
 type Theme = "dark" | "light";
 
@@ -265,7 +266,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
     if (pathname === "/tools/pdb") return <PdbWorkspace api={api} userId={user.id} />;
     if (pathname === "/tools/structure") return <StructureViewerPage theme={theme} />;
     if (pathname === "/skills") return <div className="mono-page-scroll"><div className="mono-page-content"><div className="mono-card-grid">{(skills.data ?? []).map((skill) => <div className="mono-card" key={skill.id}><Sparkles size={21} /><h2>{skill.name}</h2><p>{skill.description}</p><span>{t("mono.globalSkill", { version: skill.version ?? 1 })}</span></div>)}</div>{skills.data?.length === 0 && <div className="mono-empty-panel"><Sparkles size={24} /><h2>{t("mono.noSkills")}</h2><p>{t("mono.noSkillsDescription")}</p></div>}</div></div>;
-    if (pathname === "/settings") return <div className="mono-page-scroll"><div className="mono-page-content"><section className="mono-panel mono-settings-panel"><h2>{t("mono.appearance")}</h2><div className="mono-segmented"><button className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")}>{t("mono.light")}</button><button className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}>{t("mono.dark")}</button></div></section><section className="mono-panel mono-settings-panel"><h2>{t("mono.language")}</h2><LanguageSwitch /></section><UsageSettings api={api} userId={user.id} isGuest={user.is_anonymous} />{user.is_anonymous && onSession && <GuestUpgrade api={api} onSession={onSession} />}<section className="mono-panel mono-settings-panel"><h2>{t("mono.account")}</h2><p>{user.name} · {user.email}</p><button className="mono-button" onClick={onLogout}>{t("mono.signOut")}</button></section></div></div>;
+    if (pathname === "/settings") return <div className="mono-page-scroll"><div className="mono-page-content"><section className="mono-panel mono-settings-panel"><h2>{t("mono.appearance")}</h2><div className="mono-segmented"><button className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")}>{t("mono.light")}</button><button className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}>{t("mono.dark")}</button></div></section><section className="mono-panel mono-settings-panel"><h2>{t("mono.language")}</h2><LanguageSwitch /></section><UsageSettings api={api} userId={user.id} isGuest={user.is_anonymous} />{user.is_anonymous && onSession && <GuestUpgrade api={api} onSession={onSession} />}<section className="mono-panel mono-settings-panel"><h2>{t("mono.account")}</h2><p>{user.name} · {user.email}</p><AdminEntry api={api} userId={user.id} /><button className="mono-button" onClick={onLogout}>{t("mono.signOut")}</button></section></div></div>;
     return <div className="mono-page-scroll"><div className="mono-empty-panel"><Link to="/">{t("mono.backNewChat")}</Link></div></div>;
   };
   return <div className={`mono-app ${theme}`} data-theme={theme}>

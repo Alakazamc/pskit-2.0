@@ -18,5 +18,6 @@ import "./styles/monochrome.css";
 import "./styles/markdown.css";
 import "./styles/mono-pages.css";
 import "./styles/scrollbars.css";
+import "./styles/admin.css";
 
 createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);

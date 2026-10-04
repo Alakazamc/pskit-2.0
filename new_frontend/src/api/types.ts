@@ -1,5 +1,6 @@
 import type * as Api from "./generated/types.gen";
 import type * as Events from "./generated-events";
+import type { AdminApi } from "./admin";
 
 export type UserIdentity = Api.UserIdentity;
 
@@ -51,7 +52,7 @@ export type ToolRun = Api.ToolRun & { project_id: string | null };
 export type Af3Job = Api.Af3Job;
 export type Af3JobRequest = Api.Af3JobRequest;
 
-export interface ResearchApi {
+export interface ResearchApi extends AdminApi {
   startAnonymous(captchaToken?: string): Promise<AuthSessionResponse>;
   beginGuestEmailUpgrade(email: string): Promise<Api.EmailUpgradeStartResponse>;
   verifyGuestEmailUpgrade(email: string, code: string): Promise<AuthSessionResponse>;

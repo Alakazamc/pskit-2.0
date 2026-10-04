@@ -5,6 +5,300 @@ export type ClientOptions = {
 };
 
 /**
+ * AdminJob
+ */
+export type AdminJob = {
+    /**
+     * Job Id
+     */
+    job_id: string;
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Service Id
+     */
+    service_id?: string | null;
+    /**
+     * Capability Id
+     */
+    capability_id?: string | null;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Accounting Status
+     */
+    accounting_status: string;
+    /**
+     * Progress
+     */
+    progress: number;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Cancellation State
+     */
+    cancellation_state: 'none' | 'requested' | 'confirmed';
+};
+
+/**
+ * AdminMe
+ */
+export type AdminMe = {
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Roles
+     */
+    roles: Array<string>;
+    /**
+     * Permissions
+     */
+    permissions: Array<string>;
+    /**
+     * Service Ids
+     */
+    service_ids: Array<string>;
+};
+
+/**
+ * AdminModel
+ */
+export type AdminModel = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Revision
+     */
+    revision?: number;
+    /**
+     * State
+     */
+    state?: 'draft' | 'published' | 'retired';
+    /**
+     * Gateway Available
+     */
+    gateway_available: boolean;
+    gateway: ModelOption;
+    draft?: ModelDraft | null;
+    published?: ModelDraft | null;
+};
+
+/**
+ * AdminOperation
+ */
+export type AdminOperation = {
+    /**
+     * Operation Id
+     */
+    operation_id: string;
+    /**
+     * Resource Id
+     */
+    resource_id: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * State
+     */
+    state: 'requested' | 'confirmed' | 'failed';
+    /**
+     * Revision
+     */
+    revision: number;
+};
+
+/**
+ * AdminPage[AdminJob]
+ */
+export type AdminPageAdminJob = {
+    /**
+     * Items
+     */
+    items: Array<AdminJob>;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
+};
+
+/**
+ * AdminPage[AdminModel]
+ */
+export type AdminPageAdminModel = {
+    /**
+     * Items
+     */
+    items: Array<AdminModel>;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
+};
+
+/**
+ * AdminPage[AdminService]
+ */
+export type AdminPageAdminService = {
+    /**
+     * Items
+     */
+    items: Array<AdminService>;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
+};
+
+/**
+ * AdminPage[AdminUser]
+ */
+export type AdminPageAdminUser = {
+    /**
+     * Items
+     */
+    items: Array<AdminUser>;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
+};
+
+/**
+ * AdminPage[AuditEvent]
+ */
+export type AdminPageAuditEvent = {
+    /**
+     * Items
+     */
+    items: Array<AuditEvent>;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
+};
+
+/**
+ * AdminPage[SandboxSummary]
+ */
+export type AdminPageSandboxSummary = {
+    /**
+     * Items
+     */
+    items: Array<SandboxSummary>;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
+};
+
+/**
+ * AdminService
+ */
+export type AdminService = {
+    /**
+     * Service Id
+     */
+    service_id: string;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * State
+     */
+    state: 'draft' | 'validated' | 'published' | 'retired';
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Owner User Id
+     */
+    owner_user_id: string;
+    /**
+     * Transport
+     */
+    transport: 'http' | 'mcp' | 'worker_pull';
+    /**
+     * Endpoint Ref
+     */
+    endpoint_ref: string;
+    /**
+     * Credential Ref
+     */
+    credential_ref?: string | null;
+    /**
+     * Model Version
+     */
+    model_version: string;
+    /**
+     * Capabilities
+     */
+    capabilities: Array<CapabilityVersion>;
+    /**
+     * Published Revision
+     */
+    published_revision?: number | null;
+    /**
+     * Schema Digest
+     */
+    schema_digest?: string | null;
+};
+
+/**
+ * AdminUser
+ */
+export type AdminUser = {
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Tier
+     */
+    tier: string;
+    /**
+     * Token Monthly Limit
+     */
+    token_monthly_limit: number;
+    /**
+     * Gpu Daily Minutes
+     */
+    gpu_daily_minutes: number;
+    /**
+     * Cpu Daily Core Ms
+     */
+    cpu_daily_core_ms: number;
+    /**
+     * Concurrency Limit
+     */
+    concurrency_limit: number;
+    /**
+     * Storage Limit Bytes
+     */
+    storage_limit_bytes: number | null;
+    tokens: ResourceCounter;
+    gpu: ResourceCounter;
+    cpu: ResourceCounter;
+};
+
+/**
  * Af3FoldInput
  */
 export type Af3FoldInput = {
@@ -257,6 +551,52 @@ export type ArtifactRef = {
 };
 
 /**
+ * AuditEvent
+ */
+export type AuditEvent = {
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Actor User Id
+     */
+    actor_user_id: string;
+    /**
+     * Action
+     */
+    action: string;
+    /**
+     * Resource Id
+     */
+    resource_id: string;
+    /**
+     * Reason
+     */
+    reason: string;
+    /**
+     * Request Id
+     */
+    request_id: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Before
+     */
+    before: {
+        [key: string]: unknown;
+    };
+    /**
+     * After
+     */
+    after: {
+        [key: string]: unknown;
+    };
+};
+
+/**
  * AuthSessionResponse
  */
 export type AuthSessionResponse = {
@@ -269,6 +609,73 @@ export type AuthSessionResponse = {
      */
     expires_in: number;
     user: UserIdentity;
+};
+
+/**
+ * CapabilityVersion
+ */
+export type CapabilityVersion = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Version
+     */
+    version: string;
+    /**
+     * Input Schema
+     */
+    input_schema: {
+        [key: string]: unknown;
+    };
+    /**
+     * Output Schema
+     */
+    output_schema?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Required Usage
+     */
+    required_usage?: Array<'wall_ms' | 'cpu_core_ms' | 'gpu_device_ms' | 'peak_memory_bytes' | 'peak_gpu_memory_bytes' | 'gpu_count'>;
+    /**
+     * Accepted Sources
+     */
+    accepted_sources?: Array<'service_reported' | 'measured' | 'estimated' | 'unknown'>;
+    /**
+     * Visibility
+     */
+    visibility?: 'draft' | 'published';
+    /**
+     * Allowed Users
+     */
+    allowed_users?: Array<string> | null;
+    /**
+     * Gpu Count
+     */
+    gpu_count?: number;
+    max_budget?: ComputeBudget;
+    /**
+     * Concurrency
+     */
+    concurrency?: number;
+    /**
+     * Max Execution Seconds
+     */
+    max_execution_seconds?: number;
+    /**
+     * Cancellation
+     */
+    cancellation?: 'none' | 'cooperative' | 'confirmed_stop';
+    /**
+     * Limit Mode
+     */
+    limit_mode?: 'soft' | 'hard';
+    /**
+     * Exclusive Process
+     */
+    exclusive_process?: boolean;
 };
 
 /**
@@ -312,6 +719,165 @@ export type CitationPart = {
 };
 
 /**
+ * Completed
+ */
+export type Completed = {
+    /**
+     * Status
+     */
+    status?: 'completed';
+    /**
+     * Result
+     */
+    result: {
+        [key: string]: unknown;
+    };
+    usage: UsageReport;
+    /**
+     * Artifacts
+     */
+    artifacts?: Array<ArtifactRef>;
+    /**
+     * Job Id
+     */
+    job_id?: string | null;
+};
+
+/**
+ * ComputeBudget
+ */
+export type ComputeBudget = {
+    /**
+     * Cpu Core Ms
+     */
+    cpu_core_ms?: number;
+    /**
+     * Gpu Device Ms
+     */
+    gpu_device_ms?: number;
+};
+
+/**
+ * ComputeClaimRequest
+ */
+export type ComputeClaimRequest = {
+    /**
+     * Service Id
+     */
+    service_id: string;
+    /**
+     * Worker Id
+     */
+    worker_id: string;
+    resources?: WorkerResources;
+};
+
+/**
+ * ComputeHeartbeatRequest
+ */
+export type ComputeHeartbeatRequest = {
+    /**
+     * Worker Id
+     */
+    worker_id: string;
+    /**
+     * Attempt
+     */
+    attempt: number;
+    /**
+     * Fencing Token
+     */
+    fencing_token: string;
+    /**
+     * Seq
+     */
+    seq: number;
+    /**
+     * Progress
+     */
+    progress?: number;
+    usage?: UsageReport | null;
+    window?: UsageWindow | null;
+};
+
+/**
+ * ComputeJob
+ */
+export type ComputeJob = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Service Id
+     */
+    service_id: string;
+    capability: CapabilityVersion;
+    /**
+     * Arguments
+     */
+    arguments: {
+        [key: string]: unknown;
+    };
+    budget: ComputeBudget;
+    /**
+     * Status
+     */
+    status: 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled';
+    /**
+     * Accounting Status
+     */
+    accounting_status: 'reserved' | 'settled' | 'released' | 'pending_reconciliation';
+    /**
+     * Progress
+     */
+    progress?: number;
+    /**
+     * Run Id
+     */
+    run_id?: string | null;
+    /**
+     * Tool Call Id
+     */
+    tool_call_id?: string | null;
+    /**
+     * Report
+     */
+    report?: ({
+        status: 'completed';
+    } & Completed) | ({
+        status: 'pending';
+    } & Pending) | ({
+        status: 'failed';
+    } & Failed) | null;
+};
+
+/**
+ * ComputeJobRequest
+ */
+export type ComputeJobRequest = {
+    /**
+     * Capability Id
+     */
+    capability_id: string;
+    /**
+     * Version
+     */
+    version: string;
+    /**
+     * Arguments
+     */
+    arguments: {
+        [key: string]: unknown;
+    };
+    budget?: ComputeBudget;
+};
+
+/**
  * ComputeResourceRequirements
  */
 export type ComputeResourceRequirements = {
@@ -327,6 +893,118 @@ export type ComputeResourceRequirements = {
      * Min Gpu Memory Mb
      */
     min_gpu_memory_mb?: number;
+};
+
+/**
+ * ComputeResultRequest
+ */
+export type ComputeResultRequest = {
+    /**
+     * Worker Id
+     */
+    worker_id: string;
+    /**
+     * Attempt
+     */
+    attempt: number;
+    /**
+     * Fencing Token
+     */
+    fencing_token: string;
+    /**
+     * Seq
+     */
+    seq: number;
+    /**
+     * Report
+     */
+    report: ({
+        status: 'completed';
+    } & Completed) | ({
+        status: 'pending';
+    } & Pending) | ({
+        status: 'failed';
+    } & Failed);
+    window?: UsageWindow | null;
+    /**
+     * Stopped
+     */
+    stopped: boolean;
+};
+
+/**
+ * ComputeResumeContext
+ */
+export type ComputeResumeContext = {
+    job: ComputeJob;
+    /**
+     * Related
+     */
+    related: Array<ComputeJob>;
+};
+
+/**
+ * ComputeUsage
+ */
+export type ComputeUsage = {
+    /**
+     * Day
+     */
+    day: string;
+    cpu: ResourceCounter;
+    gpu: ResourceCounter;
+    /**
+     * Sources
+     */
+    sources: Array<string>;
+    /**
+     * Allocation Policy
+     */
+    allocation_policy?: string;
+};
+
+/**
+ * ConfigRelease
+ */
+export type ConfigRelease = {
+    /**
+     * Release Id
+     */
+    release_id: string;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * State
+     */
+    state: 'draft' | 'published';
+    /**
+     * Services
+     */
+    services: Array<ReleaseServiceVersion>;
+    /**
+     * Impact
+     */
+    impact: Array<string>;
+};
+
+/**
+ * ConfigReleaseRequest
+ */
+export type ConfigReleaseRequest = {
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
+    /**
+     * Reason
+     */
+    reason: string;
+    /**
+     * Services
+     */
+    services: Array<ReleaseServiceVersion>;
 };
 
 /**
@@ -469,6 +1147,75 @@ export type ErrorPart = {
 };
 
 /**
+ * ExecutionError
+ */
+export type ExecutionError = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Message
+     */
+    message: string;
+};
+
+/**
+ * ExecutionGrant
+ */
+export type ExecutionGrant = {
+    job: ComputeJob;
+    /**
+     * Worker Id
+     */
+    worker_id: string;
+    /**
+     * Attempt
+     */
+    attempt: number;
+    /**
+     * Fencing Token
+     */
+    fencing_token: string;
+    /**
+     * Stop At
+     */
+    stop_at: string;
+    /**
+     * Lease Expires At
+     */
+    lease_expires_at: string;
+    /**
+     * Gpu Uuids
+     */
+    gpu_uuids?: Array<string>;
+    /**
+     * Recovered
+     */
+    recovered?: boolean;
+};
+
+/**
+ * Failed
+ */
+export type Failed = {
+    /**
+     * Status
+     */
+    status?: 'failed';
+    error: ExecutionError;
+    usage: UsageReport;
+    /**
+     * Artifacts
+     */
+    artifacts?: Array<ArtifactRef>;
+    /**
+     * Job Id
+     */
+    job_id?: string | null;
+};
+
+/**
  * FilePart
  */
 export type FilePart = {
@@ -585,6 +1332,24 @@ export type GpuReconciliationRequest = {
 };
 
 /**
+ * GrantUpdate
+ */
+export type GrantUpdate = {
+    /**
+     * Stop At
+     */
+    stop_at: string;
+    /**
+     * Lease Expires At
+     */
+    lease_expires_at: string;
+    /**
+     * Cancel Requested
+     */
+    cancel_requested: boolean;
+};
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -592,6 +1357,99 @@ export type HttpValidationError = {
      * Detail
      */
     detail?: Array<ValidationError>;
+};
+
+/**
+ * InternalComputeSubmit
+ */
+export type InternalComputeSubmit = {
+    /**
+     * Capability Id
+     */
+    capability_id: string;
+    /**
+     * Version
+     */
+    version: string;
+    /**
+     * Arguments
+     */
+    arguments: {
+        [key: string]: unknown;
+    };
+    budget?: ComputeBudget;
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Tool Call Id
+     */
+    tool_call_id: string;
+};
+
+/**
+ * LegacyAf3ReconcileRequest
+ */
+export type LegacyAf3ReconcileRequest = {
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
+    /**
+     * Reason
+     */
+    reason: string;
+    /**
+     * Actual Gpu Minutes
+     */
+    actual_gpu_minutes: number;
+    /**
+     * Stopped
+     */
+    stopped: true;
+    /**
+     * Evidence
+     */
+    evidence: string;
+    /**
+     * Source
+     */
+    source?: 'legacy_wall';
+};
+
+/**
+ * LimitsUpdate
+ */
+export type LimitsUpdate = {
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
+    /**
+     * Reason
+     */
+    reason: string;
+    /**
+     * Token Monthly Limit
+     */
+    token_monthly_limit: number;
+    /**
+     * Gpu Daily Minutes
+     */
+    gpu_daily_minutes: number;
+    /**
+     * Cpu Daily Core Ms
+     */
+    cpu_daily_core_ms?: number;
+    /**
+     * Concurrency Limit
+     */
+    concurrency_limit?: number;
+    /**
+     * Storage Limit Bytes
+     */
+    storage_limit_bytes?: number;
 };
 
 /**
@@ -695,6 +1553,44 @@ export type MessageRequest = {
 };
 
 /**
+ * ModelDraft
+ */
+export type ModelDraft = {
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
+    /**
+     * Reason
+     */
+    reason: string;
+    /**
+     * Allowed User Ids
+     */
+    allowed_user_ids?: Array<string>;
+    /**
+     * Allowed Group Ids
+     */
+    allowed_group_ids?: Array<string>;
+    /**
+     * Purposes
+     */
+    purposes?: Array<'chat' | 'analysis'>;
+    /**
+     * Supports Images
+     */
+    supports_images?: boolean;
+    /**
+     * Reasoning Levels
+     */
+    reasoning_levels?: Array<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>;
+    /**
+     * Default For Purposes
+     */
+    default_for_purposes?: Array<'chat' | 'analysis'>;
+};
+
+/**
  * ModelOption
  *
  * Public metadata for one gateway-visible model alias.
@@ -740,6 +1636,30 @@ export type PasswordUpdateRequest = {
      * Password
      */
     password: string;
+};
+
+/**
+ * Pending
+ */
+export type Pending = {
+    /**
+     * Status
+     */
+    status?: 'pending';
+    /**
+     * Job Id
+     */
+    job_id: string;
+};
+
+/**
+ * PrepareFiles
+ */
+export type PrepareFiles = {
+    /**
+     * File Ids
+     */
+    file_ids: Array<string>;
 };
 
 /**
@@ -869,6 +1789,33 @@ export type QuotaCounter = {
 };
 
 /**
+ * ReconcileRequest
+ */
+export type ReconcileRequest = {
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
+    /**
+     * Reason
+     */
+    reason: string;
+    usage: UsageReport;
+    /**
+     * Terminal Status
+     */
+    terminal_status: 'completed' | 'failed' | 'cancelled';
+    /**
+     * Stopped
+     */
+    stopped: true;
+    /**
+     * Evidence
+     */
+    evidence: string;
+};
+
+/**
  * RecoveryResponse
  */
 export type RecoveryResponse = {
@@ -898,6 +1845,64 @@ export type RegisterSkillRequest = {
      * Instructions
      */
     instructions: string;
+    /**
+     * Expected Revision
+     */
+    expected_revision?: number | null;
+    /**
+     * Reason
+     */
+    reason?: string | null;
+};
+
+/**
+ * ReleaseServiceVersion
+ */
+export type ReleaseServiceVersion = {
+    /**
+     * Service Id
+     */
+    service_id: string;
+    /**
+     * Revision
+     */
+    revision: number;
+};
+
+/**
+ * ResourceCounter
+ */
+export type ResourceCounter = {
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Used
+     */
+    used: number;
+    /**
+     * Reserved
+     */
+    reserved: number;
+    /**
+     * Remaining
+     */
+    remaining: number;
+};
+
+/**
+ * RevisionRequest
+ */
+export type RevisionRequest = {
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
+    /**
+     * Reason
+     */
+    reason: string;
 };
 
 /**
@@ -922,6 +1927,148 @@ export type RunStatus = {
      * Status
      */
     status: 'queued' | 'running' | 'waiting' | 'resume_queued' | 'completed' | 'failed' | 'cancelled';
+};
+
+/**
+ * SandboxSummary
+ */
+export type SandboxSummary = {
+    /**
+     * Owner Id
+     */
+    owner_id: string;
+    /**
+     * Instance Id
+     */
+    instance_id: string;
+    /**
+     * Volume Id
+     */
+    volume_id: string;
+    /**
+     * Image Digest
+     */
+    image_digest: string;
+    /**
+     * State
+     */
+    state: 'ready' | 'draining' | 'replacing' | 'error';
+    /**
+     * Runtime State
+     */
+    runtime_state: 'running' | 'stopped' | 'unknown' | 'stopping';
+    /**
+     * Active Sessions
+     */
+    active_sessions?: Array<string>;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Last Completed At
+     */
+    last_completed_at: number;
+};
+
+/**
+ * ServiceCheck
+ */
+export type ServiceCheck = {
+    /**
+     * Service Id
+     */
+    service_id: string;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Status
+     */
+    status: 'passed' | 'failed';
+    /**
+     * Checked At
+     */
+    checked_at: string;
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Schema Digest
+     */
+    schema_digest?: string | null;
+    /**
+     * Discovered Capabilities
+     */
+    discovered_capabilities?: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+/**
+ * ServiceCheckRequest
+ */
+export type ServiceCheckRequest = {
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
+    /**
+     * Reason
+     */
+    reason: string;
+    /**
+     * Kind
+     */
+    kind?: 'connectivity' | 'schema';
+};
+
+/**
+ * ServiceDraft
+ */
+export type ServiceDraft = {
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
+    /**
+     * Reason
+     */
+    reason: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Owner User Id
+     */
+    owner_user_id: string;
+    /**
+     * Transport
+     */
+    transport: 'http' | 'mcp' | 'worker_pull';
+    /**
+     * Endpoint Ref
+     */
+    endpoint_ref: string;
+    /**
+     * Credential Ref
+     */
+    credential_ref?: string | null;
+    /**
+     * Model Version
+     */
+    model_version: string;
+    /**
+     * Capabilities
+     */
+    capabilities: Array<CapabilityVersion>;
 };
 
 /**
@@ -1182,12 +2329,90 @@ export type UsageEntry = {
 };
 
 /**
+ * UsageReceipt
+ */
+export type UsageReceipt = {
+    /**
+     * Receipt Id
+     */
+    receipt_id: string;
+    /**
+     * Job Id
+     */
+    job_id: string;
+    /**
+     * Accepted Seq
+     */
+    accepted_seq: number;
+    /**
+     * Payload Hash
+     */
+    payload_hash: string;
+    /**
+     * Status
+     */
+    status: 'completed' | 'failed' | 'cancelled' | 'pending';
+    /**
+     * Committed
+     */
+    committed?: true;
+};
+
+/**
+ * UsageReport
+ */
+export type UsageReport = {
+    /**
+     * Wall Ms
+     */
+    wall_ms?: number | null;
+    /**
+     * Cpu Core Ms
+     */
+    cpu_core_ms?: number | null;
+    /**
+     * Gpu Device Ms
+     */
+    gpu_device_ms?: number | null;
+    /**
+     * Peak Memory Bytes
+     */
+    peak_memory_bytes?: number | null;
+    /**
+     * Peak Gpu Memory Bytes
+     */
+    peak_gpu_memory_bytes?: number | null;
+    /**
+     * Gpu Count
+     */
+    gpu_count?: number | null;
+    /**
+     * Source
+     */
+    source: 'service_reported' | 'measured' | 'estimated' | 'unknown';
+};
+
+/**
  * UsageSnapshot
  */
 export type UsageSnapshot = {
     tokens: QuotaCounter;
     gpu: GpuQuota;
     storage?: StorageQuota | null;
+};
+
+/**
+ * UsageWindow
+ */
+export type UsageWindow = {
+    /**
+     * Start
+     */
+    start: string;
+    /**
+     * End
+     */
+    end: string;
 };
 
 /**
@@ -1234,6 +2459,14 @@ export type UserSkillGrantsRequest = {
      * Skill Ids
      */
     skill_ids: Array<string>;
+    /**
+     * Expected Revision
+     */
+    expected_revision?: number | null;
+    /**
+     * Reason
+     */
+    reason?: string | null;
 };
 
 /**
@@ -1262,6 +2495,42 @@ export type ValidationError = {
     ctx?: {
         [key: string]: unknown;
     };
+};
+
+/**
+ * WorkerResources
+ */
+export type WorkerResources = {
+    /**
+     * Gpu Uuids
+     */
+    gpu_uuids?: Array<string>;
+};
+
+/**
+ * WorkspaceFileRef
+ */
+export type WorkspaceFileRef = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Relative Path
+     */
+    relative_path: string;
+    /**
+     * Sha256
+     */
+    sha256: string;
+    /**
+     * Size
+     */
+    size: number;
 };
 
 export type DemoLoginApiV1AuthDemoPostData = {
@@ -1640,6 +2909,131 @@ export type GetUsageEntriesApiV1UsageEntriesGetResponses = {
 };
 
 export type GetUsageEntriesApiV1UsageEntriesGetResponse = GetUsageEntriesApiV1UsageEntriesGetResponses[keyof GetUsageEntriesApiV1UsageEntriesGetResponses];
+
+export type CapabilitiesApiV1ComputeCapabilitiesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/compute/capabilities';
+};
+
+export type CapabilitiesApiV1ComputeCapabilitiesGetResponses = {
+    /**
+     * Response Capabilities Api V1 Compute Capabilities Get
+     *
+     * Successful Response
+     */
+    200: Array<CapabilityVersion>;
+};
+
+export type CapabilitiesApiV1ComputeCapabilitiesGetResponse = CapabilitiesApiV1ComputeCapabilitiesGetResponses[keyof CapabilitiesApiV1ComputeCapabilitiesGetResponses];
+
+export type SubmitApiV1ComputeJobsPostData = {
+    body: ComputeJobRequest;
+    headers: {
+        /**
+         * Idempotency-Key
+         */
+        'Idempotency-Key': string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/compute/jobs';
+};
+
+export type SubmitApiV1ComputeJobsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SubmitApiV1ComputeJobsPostError = SubmitApiV1ComputeJobsPostErrors[keyof SubmitApiV1ComputeJobsPostErrors];
+
+export type SubmitApiV1ComputeJobsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ComputeJob;
+};
+
+export type SubmitApiV1ComputeJobsPostResponse = SubmitApiV1ComputeJobsPostResponses[keyof SubmitApiV1ComputeJobsPostResponses];
+
+export type GetApiV1ComputeJobsJobIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/compute/jobs/{job_id}';
+};
+
+export type GetApiV1ComputeJobsJobIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetApiV1ComputeJobsJobIdGetError = GetApiV1ComputeJobsJobIdGetErrors[keyof GetApiV1ComputeJobsJobIdGetErrors];
+
+export type GetApiV1ComputeJobsJobIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ComputeJob;
+};
+
+export type GetApiV1ComputeJobsJobIdGetResponse = GetApiV1ComputeJobsJobIdGetResponses[keyof GetApiV1ComputeJobsJobIdGetResponses];
+
+export type CancelApiV1ComputeJobsJobIdCancelPostData = {
+    body?: never;
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/compute/jobs/{job_id}/cancel';
+};
+
+export type CancelApiV1ComputeJobsJobIdCancelPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CancelApiV1ComputeJobsJobIdCancelPostError = CancelApiV1ComputeJobsJobIdCancelPostErrors[keyof CancelApiV1ComputeJobsJobIdCancelPostErrors];
+
+export type CancelApiV1ComputeJobsJobIdCancelPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ComputeJob;
+};
+
+export type CancelApiV1ComputeJobsJobIdCancelPostResponse = CancelApiV1ComputeJobsJobIdCancelPostResponses[keyof CancelApiV1ComputeJobsJobIdCancelPostResponses];
+
+export type UsageApiV1ComputeUsageGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/compute/usage';
+};
+
+export type UsageApiV1ComputeUsageGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ComputeUsage;
+};
+
+export type UsageApiV1ComputeUsageGetResponse = UsageApiV1ComputeUsageGetResponses[keyof UsageApiV1ComputeUsageGetResponses];
 
 export type DecideApprovalApiV1RunsRunIdApprovalsApprovalIdPostData = {
     body: ApprovalDecisionRequest;
@@ -2905,6 +4299,191 @@ export type SendMessageApiV1cSessionIdMessagesPostResponses = {
 
 export type SendMessageApiV1cSessionIdMessagesPostResponse = SendMessageApiV1cSessionIdMessagesPostResponses[keyof SendMessageApiV1cSessionIdMessagesPostResponses];
 
+export type ClaimInternalComputeJobsClaimPostData = {
+    body: ComputeClaimRequest;
+    headers?: {
+        /**
+         * X-Compute-Key
+         */
+        'X-Compute-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/internal/compute/jobs/claim';
+};
+
+export type ClaimInternalComputeJobsClaimPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClaimInternalComputeJobsClaimPostError = ClaimInternalComputeJobsClaimPostErrors[keyof ClaimInternalComputeJobsClaimPostErrors];
+
+export type ClaimInternalComputeJobsClaimPostResponses = {
+    /**
+     * Response Claim Internal Compute Jobs Claim Post
+     *
+     * Successful Response
+     */
+    200: ExecutionGrant | null;
+};
+
+export type ClaimInternalComputeJobsClaimPostResponse = ClaimInternalComputeJobsClaimPostResponses[keyof ClaimInternalComputeJobsClaimPostResponses];
+
+export type HeartbeatInternalComputeJobsJobIdHeartbeatPostData = {
+    body: ComputeHeartbeatRequest;
+    headers: {
+        /**
+         * X-Compute-Service
+         */
+        'X-Compute-Service': string;
+        /**
+         * X-Compute-Key
+         */
+        'X-Compute-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/internal/compute/jobs/{job_id}/heartbeat';
+};
+
+export type HeartbeatInternalComputeJobsJobIdHeartbeatPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type HeartbeatInternalComputeJobsJobIdHeartbeatPostError = HeartbeatInternalComputeJobsJobIdHeartbeatPostErrors[keyof HeartbeatInternalComputeJobsJobIdHeartbeatPostErrors];
+
+export type HeartbeatInternalComputeJobsJobIdHeartbeatPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: GrantUpdate;
+};
+
+export type HeartbeatInternalComputeJobsJobIdHeartbeatPostResponse = HeartbeatInternalComputeJobsJobIdHeartbeatPostResponses[keyof HeartbeatInternalComputeJobsJobIdHeartbeatPostResponses];
+
+export type ResultInternalComputeJobsJobIdResultPostData = {
+    body: ComputeResultRequest;
+    headers: {
+        /**
+         * X-Compute-Service
+         */
+        'X-Compute-Service': string;
+        /**
+         * X-Compute-Key
+         */
+        'X-Compute-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/internal/compute/jobs/{job_id}/result';
+};
+
+export type ResultInternalComputeJobsJobIdResultPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ResultInternalComputeJobsJobIdResultPostError = ResultInternalComputeJobsJobIdResultPostErrors[keyof ResultInternalComputeJobsJobIdResultPostErrors];
+
+export type ResultInternalComputeJobsJobIdResultPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: UsageReceipt;
+};
+
+export type ResultInternalComputeJobsJobIdResultPostResponse = ResultInternalComputeJobsJobIdResultPostResponses[keyof ResultInternalComputeJobsJobIdResultPostResponses];
+
+export type SubmitAgentJobInternalComputeJobsPostData = {
+    body: InternalComputeSubmit;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/internal/compute/jobs';
+};
+
+export type SubmitAgentJobInternalComputeJobsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SubmitAgentJobInternalComputeJobsPostError = SubmitAgentJobInternalComputeJobsPostErrors[keyof SubmitAgentJobInternalComputeJobsPostErrors];
+
+export type SubmitAgentJobInternalComputeJobsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ComputeJob;
+};
+
+export type SubmitAgentJobInternalComputeJobsPostResponse = SubmitAgentJobInternalComputeJobsPostResponses[keyof SubmitAgentJobInternalComputeJobsPostResponses];
+
+export type GetAgentResultInternalComputeJobsJobIdGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query: {
+        /**
+         * Run Id
+         */
+        run_id: string;
+    };
+    url: '/internal/compute/jobs/{job_id}';
+};
+
+export type GetAgentResultInternalComputeJobsJobIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAgentResultInternalComputeJobsJobIdGetError = GetAgentResultInternalComputeJobsJobIdGetErrors[keyof GetAgentResultInternalComputeJobsJobIdGetErrors];
+
+export type GetAgentResultInternalComputeJobsJobIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ComputeResumeContext;
+};
+
+export type GetAgentResultInternalComputeJobsJobIdGetResponse = GetAgentResultInternalComputeJobsJobIdGetResponses[keyof GetAgentResultInternalComputeJobsJobIdGetResponses];
+
 export type DependencyStatusApiV1AdminDependenciesGetData = {
     body?: never;
     headers?: {
@@ -3050,8 +4629,41 @@ export type RegisterSkillVersionApiV1AdminSkillsSkillIdVersionsVersionPutRespons
 
 export type RegisterSkillVersionApiV1AdminSkillsSkillIdVersionsVersionPutResponse = RegisterSkillVersionApiV1AdminSkillsSkillIdVersionsVersionPutResponses[keyof RegisterSkillVersionApiV1AdminSkillsSkillIdVersionsVersionPutResponses];
 
+export type UserLimitsApiV1AdminUsersUserIdLimitsGetData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/users/{user_id}/limits';
+};
+
+export type UserLimitsApiV1AdminUsersUserIdLimitsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UserLimitsApiV1AdminUsersUserIdLimitsGetError = UserLimitsApiV1AdminUsersUserIdLimitsGetErrors[keyof UserLimitsApiV1AdminUsersUserIdLimitsGetErrors];
+
+export type UserLimitsApiV1AdminUsersUserIdLimitsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminUser;
+};
+
+export type UserLimitsApiV1AdminUsersUserIdLimitsGetResponse = UserLimitsApiV1AdminUsersUserIdLimitsGetResponses[keyof UserLimitsApiV1AdminUsersUserIdLimitsGetResponses];
+
 export type SetUserLimitsApiV1AdminUsersUserIdLimitsPutData = {
-    body: UserLimitsRequest;
+    /**
+     * Payload
+     */
+    body: LimitsUpdate | UserLimitsRequest;
     headers?: {
         /**
          * X-Admin-Key
@@ -3079,9 +4691,11 @@ export type SetUserLimitsApiV1AdminUsersUserIdLimitsPutError = SetUserLimitsApiV
 
 export type SetUserLimitsApiV1AdminUsersUserIdLimitsPutResponses = {
     /**
+     * Response Set User Limits Api V1 Admin Users  User Id  Limits Put
+     *
      * Successful Response
      */
-    200: UsageSnapshot;
+    200: AdminUser | UsageSnapshot;
 };
 
 export type SetUserLimitsApiV1AdminUsersUserIdLimitsPutResponse = SetUserLimitsApiV1AdminUsersUserIdLimitsPutResponses[keyof SetUserLimitsApiV1AdminUsersUserIdLimitsPutResponses];
@@ -3121,6 +4735,723 @@ export type SetUserSkillGrantsApiV1AdminUsersUserIdSkillsPutResponses = {
 };
 
 export type SetUserSkillGrantsApiV1AdminUsersUserIdSkillsPutResponse = SetUserSkillGrantsApiV1AdminUsersUserIdSkillsPutResponses[keyof SetUserSkillGrantsApiV1AdminUsersUserIdSkillsPutResponses];
+
+export type AdminMeApiV1AdminMeGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/me';
+};
+
+export type AdminMeApiV1AdminMeGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminMe;
+};
+
+export type AdminMeApiV1AdminMeGetResponse = AdminMeApiV1AdminMeGetResponses[keyof AdminMeApiV1AdminMeGetResponses];
+
+export type ListAliasesApiV1AdminLlmAliasesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/llm-aliases';
+};
+
+export type ListAliasesApiV1AdminLlmAliasesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListAliasesApiV1AdminLlmAliasesGetError = ListAliasesApiV1AdminLlmAliasesGetErrors[keyof ListAliasesApiV1AdminLlmAliasesGetErrors];
+
+export type ListAliasesApiV1AdminLlmAliasesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPageAdminModel;
+};
+
+export type ListAliasesApiV1AdminLlmAliasesGetResponse = ListAliasesApiV1AdminLlmAliasesGetResponses[keyof ListAliasesApiV1AdminLlmAliasesGetResponses];
+
+export type SaveAliasApiV1AdminLlmAliasesAliasDraftPutData = {
+    body: ModelDraft;
+    path: {
+        /**
+         * Alias
+         */
+        alias: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/llm-aliases/{alias}/draft';
+};
+
+export type SaveAliasApiV1AdminLlmAliasesAliasDraftPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SaveAliasApiV1AdminLlmAliasesAliasDraftPutError = SaveAliasApiV1AdminLlmAliasesAliasDraftPutErrors[keyof SaveAliasApiV1AdminLlmAliasesAliasDraftPutErrors];
+
+export type SaveAliasApiV1AdminLlmAliasesAliasDraftPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminModel;
+};
+
+export type SaveAliasApiV1AdminLlmAliasesAliasDraftPutResponse = SaveAliasApiV1AdminLlmAliasesAliasDraftPutResponses[keyof SaveAliasApiV1AdminLlmAliasesAliasDraftPutResponses];
+
+export type PublishAliasApiV1AdminLlmAliasesAliasPublishPostData = {
+    body: RevisionRequest;
+    path: {
+        /**
+         * Alias
+         */
+        alias: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/llm-aliases/{alias}/publish';
+};
+
+export type PublishAliasApiV1AdminLlmAliasesAliasPublishPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PublishAliasApiV1AdminLlmAliasesAliasPublishPostError = PublishAliasApiV1AdminLlmAliasesAliasPublishPostErrors[keyof PublishAliasApiV1AdminLlmAliasesAliasPublishPostErrors];
+
+export type PublishAliasApiV1AdminLlmAliasesAliasPublishPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminModel;
+};
+
+export type PublishAliasApiV1AdminLlmAliasesAliasPublishPostResponse = PublishAliasApiV1AdminLlmAliasesAliasPublishPostResponses[keyof PublishAliasApiV1AdminLlmAliasesAliasPublishPostResponses];
+
+export type RetireAliasApiV1AdminLlmAliasesAliasRetirePostData = {
+    body: RevisionRequest;
+    path: {
+        /**
+         * Alias
+         */
+        alias: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/llm-aliases/{alias}/retire';
+};
+
+export type RetireAliasApiV1AdminLlmAliasesAliasRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetireAliasApiV1AdminLlmAliasesAliasRetirePostError = RetireAliasApiV1AdminLlmAliasesAliasRetirePostErrors[keyof RetireAliasApiV1AdminLlmAliasesAliasRetirePostErrors];
+
+export type RetireAliasApiV1AdminLlmAliasesAliasRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminModel;
+};
+
+export type RetireAliasApiV1AdminLlmAliasesAliasRetirePostResponse = RetireAliasApiV1AdminLlmAliasesAliasRetirePostResponses[keyof RetireAliasApiV1AdminLlmAliasesAliasRetirePostResponses];
+
+export type ListServicesApiV1AdminServicesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/services';
+};
+
+export type ListServicesApiV1AdminServicesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListServicesApiV1AdminServicesGetError = ListServicesApiV1AdminServicesGetErrors[keyof ListServicesApiV1AdminServicesGetErrors];
+
+export type ListServicesApiV1AdminServicesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPageAdminService;
+};
+
+export type ListServicesApiV1AdminServicesGetResponse = ListServicesApiV1AdminServicesGetResponses[keyof ListServicesApiV1AdminServicesGetResponses];
+
+export type SaveServiceApiV1AdminServicesServiceIdDraftPutData = {
+    body: ServiceDraft;
+    path: {
+        /**
+         * Service Id
+         */
+        service_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/services/{service_id}/draft';
+};
+
+export type SaveServiceApiV1AdminServicesServiceIdDraftPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SaveServiceApiV1AdminServicesServiceIdDraftPutError = SaveServiceApiV1AdminServicesServiceIdDraftPutErrors[keyof SaveServiceApiV1AdminServicesServiceIdDraftPutErrors];
+
+export type SaveServiceApiV1AdminServicesServiceIdDraftPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminService;
+};
+
+export type SaveServiceApiV1AdminServicesServiceIdDraftPutResponse = SaveServiceApiV1AdminServicesServiceIdDraftPutResponses[keyof SaveServiceApiV1AdminServicesServiceIdDraftPutResponses];
+
+export type SaveCapabilityApiV1AdminCapabilitiesCapabilityIdDraftPutData = {
+    body: ServiceDraft;
+    path: {
+        /**
+         * Capability Id
+         */
+        capability_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/capabilities/{capability_id}/draft';
+};
+
+export type SaveCapabilityApiV1AdminCapabilitiesCapabilityIdDraftPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SaveCapabilityApiV1AdminCapabilitiesCapabilityIdDraftPutError = SaveCapabilityApiV1AdminCapabilitiesCapabilityIdDraftPutErrors[keyof SaveCapabilityApiV1AdminCapabilitiesCapabilityIdDraftPutErrors];
+
+export type SaveCapabilityApiV1AdminCapabilitiesCapabilityIdDraftPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminService;
+};
+
+export type SaveCapabilityApiV1AdminCapabilitiesCapabilityIdDraftPutResponse = SaveCapabilityApiV1AdminCapabilitiesCapabilityIdDraftPutResponses[keyof SaveCapabilityApiV1AdminCapabilitiesCapabilityIdDraftPutResponses];
+
+export type DiscoverServiceApiV1AdminServicesServiceIdDiscoveryPostData = {
+    body: RevisionRequest;
+    path: {
+        /**
+         * Service Id
+         */
+        service_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/services/{service_id}/discovery';
+};
+
+export type DiscoverServiceApiV1AdminServicesServiceIdDiscoveryPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DiscoverServiceApiV1AdminServicesServiceIdDiscoveryPostError = DiscoverServiceApiV1AdminServicesServiceIdDiscoveryPostErrors[keyof DiscoverServiceApiV1AdminServicesServiceIdDiscoveryPostErrors];
+
+export type DiscoverServiceApiV1AdminServicesServiceIdDiscoveryPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ServiceCheck;
+};
+
+export type DiscoverServiceApiV1AdminServicesServiceIdDiscoveryPostResponse = DiscoverServiceApiV1AdminServicesServiceIdDiscoveryPostResponses[keyof DiscoverServiceApiV1AdminServicesServiceIdDiscoveryPostResponses];
+
+export type CheckServiceApiV1AdminServicesServiceIdChecksPostData = {
+    body: ServiceCheckRequest;
+    path: {
+        /**
+         * Service Id
+         */
+        service_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/services/{service_id}/checks';
+};
+
+export type CheckServiceApiV1AdminServicesServiceIdChecksPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CheckServiceApiV1AdminServicesServiceIdChecksPostError = CheckServiceApiV1AdminServicesServiceIdChecksPostErrors[keyof CheckServiceApiV1AdminServicesServiceIdChecksPostErrors];
+
+export type CheckServiceApiV1AdminServicesServiceIdChecksPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ServiceCheck;
+};
+
+export type CheckServiceApiV1AdminServicesServiceIdChecksPostResponse = CheckServiceApiV1AdminServicesServiceIdChecksPostResponses[keyof CheckServiceApiV1AdminServicesServiceIdChecksPostResponses];
+
+export type CreateReleaseApiV1AdminConfigReleasesPostData = {
+    body: ConfigReleaseRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/config-releases';
+};
+
+export type CreateReleaseApiV1AdminConfigReleasesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateReleaseApiV1AdminConfigReleasesPostError = CreateReleaseApiV1AdminConfigReleasesPostErrors[keyof CreateReleaseApiV1AdminConfigReleasesPostErrors];
+
+export type CreateReleaseApiV1AdminConfigReleasesPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConfigRelease;
+};
+
+export type CreateReleaseApiV1AdminConfigReleasesPostResponse = CreateReleaseApiV1AdminConfigReleasesPostResponses[keyof CreateReleaseApiV1AdminConfigReleasesPostResponses];
+
+export type PublishReleaseApiV1AdminConfigReleasesReleaseIdPublishPostData = {
+    body: RevisionRequest;
+    path: {
+        /**
+         * Release Id
+         */
+        release_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/config-releases/{release_id}/publish';
+};
+
+export type PublishReleaseApiV1AdminConfigReleasesReleaseIdPublishPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PublishReleaseApiV1AdminConfigReleasesReleaseIdPublishPostError = PublishReleaseApiV1AdminConfigReleasesReleaseIdPublishPostErrors[keyof PublishReleaseApiV1AdminConfigReleasesReleaseIdPublishPostErrors];
+
+export type PublishReleaseApiV1AdminConfigReleasesReleaseIdPublishPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConfigRelease;
+};
+
+export type PublishReleaseApiV1AdminConfigReleasesReleaseIdPublishPostResponse = PublishReleaseApiV1AdminConfigReleasesReleaseIdPublishPostResponses[keyof PublishReleaseApiV1AdminConfigReleasesReleaseIdPublishPostResponses];
+
+export type ListUsersApiV1AdminUsersGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/users';
+};
+
+export type ListUsersApiV1AdminUsersGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListUsersApiV1AdminUsersGetError = ListUsersApiV1AdminUsersGetErrors[keyof ListUsersApiV1AdminUsersGetErrors];
+
+export type ListUsersApiV1AdminUsersGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPageAdminUser;
+};
+
+export type ListUsersApiV1AdminUsersGetResponse = ListUsersApiV1AdminUsersGetResponses[keyof ListUsersApiV1AdminUsersGetResponses];
+
+export type ListJobsApiV1AdminJobsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/jobs';
+};
+
+export type ListJobsApiV1AdminJobsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListJobsApiV1AdminJobsGetError = ListJobsApiV1AdminJobsGetErrors[keyof ListJobsApiV1AdminJobsGetErrors];
+
+export type ListJobsApiV1AdminJobsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPageAdminJob;
+};
+
+export type ListJobsApiV1AdminJobsGetResponse = ListJobsApiV1AdminJobsGetResponses[keyof ListJobsApiV1AdminJobsGetResponses];
+
+export type CancelJobApiV1AdminJobsJobIdCancelPostData = {
+    body: RevisionRequest;
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/jobs/{job_id}/cancel';
+};
+
+export type CancelJobApiV1AdminJobsJobIdCancelPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CancelJobApiV1AdminJobsJobIdCancelPostError = CancelJobApiV1AdminJobsJobIdCancelPostErrors[keyof CancelJobApiV1AdminJobsJobIdCancelPostErrors];
+
+export type CancelJobApiV1AdminJobsJobIdCancelPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminOperation;
+};
+
+export type CancelJobApiV1AdminJobsJobIdCancelPostResponse = CancelJobApiV1AdminJobsJobIdCancelPostResponses[keyof CancelJobApiV1AdminJobsJobIdCancelPostResponses];
+
+export type ReconciliationJobsApiV1AdminUsageReconciliationGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/usage/reconciliation';
+};
+
+export type ReconciliationJobsApiV1AdminUsageReconciliationGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReconciliationJobsApiV1AdminUsageReconciliationGetError = ReconciliationJobsApiV1AdminUsageReconciliationGetErrors[keyof ReconciliationJobsApiV1AdminUsageReconciliationGetErrors];
+
+export type ReconciliationJobsApiV1AdminUsageReconciliationGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPageAdminJob;
+};
+
+export type ReconciliationJobsApiV1AdminUsageReconciliationGetResponse = ReconciliationJobsApiV1AdminUsageReconciliationGetResponses[keyof ReconciliationJobsApiV1AdminUsageReconciliationGetResponses];
+
+export type ReconcileJobApiV1AdminComputeJobsJobIdReconcilePostData = {
+    body: ReconcileRequest;
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/compute/jobs/{job_id}/reconcile';
+};
+
+export type ReconcileJobApiV1AdminComputeJobsJobIdReconcilePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReconcileJobApiV1AdminComputeJobsJobIdReconcilePostError = ReconcileJobApiV1AdminComputeJobsJobIdReconcilePostErrors[keyof ReconcileJobApiV1AdminComputeJobsJobIdReconcilePostErrors];
+
+export type ReconcileJobApiV1AdminComputeJobsJobIdReconcilePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminJob;
+};
+
+export type ReconcileJobApiV1AdminComputeJobsJobIdReconcilePostResponse = ReconcileJobApiV1AdminComputeJobsJobIdReconcilePostResponses[keyof ReconcileJobApiV1AdminComputeJobsJobIdReconcilePostResponses];
+
+export type ReconcileLegacyAf3JobApiV1AdminAf3JobsJobIdReconcilePostData = {
+    body: LegacyAf3ReconcileRequest;
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/af3/jobs/{job_id}/reconcile';
+};
+
+export type ReconcileLegacyAf3JobApiV1AdminAf3JobsJobIdReconcilePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReconcileLegacyAf3JobApiV1AdminAf3JobsJobIdReconcilePostError = ReconcileLegacyAf3JobApiV1AdminAf3JobsJobIdReconcilePostErrors[keyof ReconcileLegacyAf3JobApiV1AdminAf3JobsJobIdReconcilePostErrors];
+
+export type ReconcileLegacyAf3JobApiV1AdminAf3JobsJobIdReconcilePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminJob;
+};
+
+export type ReconcileLegacyAf3JobApiV1AdminAf3JobsJobIdReconcilePostResponse = ReconcileLegacyAf3JobApiV1AdminAf3JobsJobIdReconcilePostResponses[keyof ReconcileLegacyAf3JobApiV1AdminAf3JobsJobIdReconcilePostResponses];
+
+export type ListSandboxesApiV1AdminSandboxesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/sandboxes';
+};
+
+export type ListSandboxesApiV1AdminSandboxesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSandboxesApiV1AdminSandboxesGetError = ListSandboxesApiV1AdminSandboxesGetErrors[keyof ListSandboxesApiV1AdminSandboxesGetErrors];
+
+export type ListSandboxesApiV1AdminSandboxesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPageSandboxSummary;
+};
+
+export type ListSandboxesApiV1AdminSandboxesGetResponse = ListSandboxesApiV1AdminSandboxesGetResponses[keyof ListSandboxesApiV1AdminSandboxesGetResponses];
+
+export type DrainSandboxApiV1AdminSandboxesOwnerIdDrainPostData = {
+    body: RevisionRequest;
+    path: {
+        /**
+         * Owner Id
+         */
+        owner_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/sandboxes/{owner_id}/drain';
+};
+
+export type DrainSandboxApiV1AdminSandboxesOwnerIdDrainPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DrainSandboxApiV1AdminSandboxesOwnerIdDrainPostError = DrainSandboxApiV1AdminSandboxesOwnerIdDrainPostErrors[keyof DrainSandboxApiV1AdminSandboxesOwnerIdDrainPostErrors];
+
+export type DrainSandboxApiV1AdminSandboxesOwnerIdDrainPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminOperation;
+};
+
+export type DrainSandboxApiV1AdminSandboxesOwnerIdDrainPostResponse = DrainSandboxApiV1AdminSandboxesOwnerIdDrainPostResponses[keyof DrainSandboxApiV1AdminSandboxesOwnerIdDrainPostResponses];
+
+export type AuditEventsApiV1AdminAuditEventsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+    };
+    url: '/api/v1/admin/audit-events';
+};
+
+export type AuditEventsApiV1AdminAuditEventsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AuditEventsApiV1AdminAuditEventsGetError = AuditEventsApiV1AdminAuditEventsGetErrors[keyof AuditEventsApiV1AdminAuditEventsGetErrors];
+
+export type AuditEventsApiV1AdminAuditEventsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminPageAuditEvent;
+};
+
+export type AuditEventsApiV1AdminAuditEventsGetResponse = AuditEventsApiV1AdminAuditEventsGetResponses[keyof AuditEventsApiV1AdminAuditEventsGetResponses];
+
+export type PrepareApiV1SandboxSessionsSessionIdFilesPostData = {
+    body: PrepareFiles;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: string;
+    };
+    query?: never;
+    url: '/api/v1/sandbox/sessions/{session_id}/files';
+};
+
+export type PrepareApiV1SandboxSessionsSessionIdFilesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PrepareApiV1SandboxSessionsSessionIdFilesPostError = PrepareApiV1SandboxSessionsSessionIdFilesPostErrors[keyof PrepareApiV1SandboxSessionsSessionIdFilesPostErrors];
+
+export type PrepareApiV1SandboxSessionsSessionIdFilesPostResponses = {
+    /**
+     * Response Prepare Api V1 Sandbox Sessions  Session Id  Files Post
+     *
+     * Successful Response
+     */
+    200: Array<WorkspaceFileRef>;
+};
+
+export type PrepareApiV1SandboxSessionsSessionIdFilesPostResponse = PrepareApiV1SandboxSessionsSessionIdFilesPostResponses[keyof PrepareApiV1SandboxSessionsSessionIdFilesPostResponses];
+
+export type ArtifactsApiV1SandboxArtifactsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/sandbox/artifacts';
+};
+
+export type ArtifactsApiV1SandboxArtifactsGetResponses = {
+    /**
+     * Response Artifacts Api V1 Sandbox Artifacts Get
+     *
+     * Successful Response
+     */
+    200: Array<ArtifactRef>;
+};
+
+export type ArtifactsApiV1SandboxArtifactsGetResponse = ArtifactsApiV1SandboxArtifactsGetResponses[keyof ArtifactsApiV1SandboxArtifactsGetResponses];
+
+export type DownloadApiV1SandboxArtifactsArtifactIdDownloadGetData = {
+    body?: never;
+    path: {
+        /**
+         * Artifact Id
+         */
+        artifact_id: string;
+    };
+    query?: never;
+    url: '/api/v1/sandbox/artifacts/{artifact_id}/download';
+};
+
+export type DownloadApiV1SandboxArtifactsArtifactIdDownloadGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DownloadApiV1SandboxArtifactsArtifactIdDownloadGetError = DownloadApiV1SandboxArtifactsArtifactIdDownloadGetErrors[keyof DownloadApiV1SandboxArtifactsArtifactIdDownloadGetErrors];
+
+export type DownloadApiV1SandboxArtifactsArtifactIdDownloadGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type LiveHealthLiveGetData = {
     body?: never;

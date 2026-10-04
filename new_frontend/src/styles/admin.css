@@ -1,0 +1,60 @@
+.admin-app { min-height: 0; }
+.admin-sidebar { flex: 0 0 218px; padding: 24px 18px; display: flex; flex-direction: column; gap: 24px; background: var(--mono-sidebar); border-right: 1px solid var(--mono-border); overflow: auto; }
+.admin-sidebar a { color: var(--mono-muted); text-decoration: none; border-radius: 8px; padding: 10px 12px; }
+.admin-sidebar .admin-brand { color: var(--mono-text); font-size: 21px; font-weight: 600; padding: 0; }
+.admin-brand span { display: block; font-size: 12px; color: var(--mono-muted); margin-top: 5px; }
+.admin-sidebar nav { display: flex; flex-direction: column; gap: 4px; }
+.admin-sidebar a[aria-current="page"] { background: var(--mono-selected); color: var(--mono-text); }
+.admin-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.admin-header { flex: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 22px 32px; border-bottom: 1px solid var(--mono-border); }
+.admin-header h1 { margin: 0; font-size: 22px; font-weight: 600; }
+.admin-preferences { display: flex; align-items: center; gap: 10px; }
+.admin-content { padding: 28px 32px; overflow: auto; flex: 1; min-height: 0; }
+.admin-app button { color: var(--mono-text); background: var(--mono-subtle); border: 1px solid var(--mono-border); border-radius: 7px; padding: 8px 12px; cursor: pointer; }
+.admin-app button:disabled { opacity: .45; cursor: default; }
+.admin-access { margin: auto; padding: 24px; }
+.admin-access a { color: var(--mono-text); }
+.admin-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr); gap: 24px; align-items: start; }
+.admin-split:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+.admin-list, .admin-editor { min-width: 0; border: 1px solid var(--mono-border); border-radius: 12px; background: var(--mono-bg); padding: 18px; }
+.admin-editor h2 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
+.admin-meta, .admin-hint, .admin-empty { color: var(--mono-muted); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.admin-form, .admin-form fieldset { display: flex; flex-direction: column; gap: 16px; }
+.admin-form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.admin-form label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.admin-app .admin-form input:not([type=checkbox]), .admin-app .admin-form select, .admin-app .admin-form textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--mono-border); border-radius: 7px; padding: 10px 12px; background: var(--mono-subtle); color: var(--mono-text); font: inherit; box-shadow: none; }
+.admin-app .admin-form label:focus-within { background: var(--mono-selected); border-radius: 7px; }
+.admin-app .admin-form input:focus, .admin-app .admin-form select:focus, .admin-app .admin-form textarea:focus { outline: none; border-color: var(--mono-border); box-shadow: none; }
+.admin-app .admin-form :disabled { opacity: .65; }
+.admin-form textarea { resize: vertical; min-height: 76px; }
+.admin-form .admin-json { font-family: ui-monospace, monospace; min-height: 240px; font-size: 12px; }
+.admin-checkboxes { display: flex; flex-wrap: wrap; gap: 12px; }
+.admin-form .admin-check, .admin-checkboxes label { flex-direction: row; align-items: center; gap: 8px; }
+.admin-app input[type=checkbox] { accent-color: var(--mono-text); width: 16px; height: 16px; }
+.admin-actions, .admin-page-actions, .admin-list-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-list-tools { justify-content: flex-end; margin-bottom: 12px; }
+.admin-page-actions { margin-bottom: 18px; }
+.admin-table-scroll { overflow: auto; max-width: 100%; }
+.admin-app table { border-collapse: collapse; text-align: left; width: 100%; font-size: 13px; }
+.admin-app th, .admin-app td { border-bottom: 1px solid var(--mono-border); padding: 12px 10px; vertical-align: top; overflow-wrap: anywhere; }
+.admin-app thead th { color: var(--mono-muted); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.admin-app th small { display: block; font-weight: 400; color: var(--mono-muted); padding-top: 5px; }
+.admin-state { display: inline-block; background: var(--mono-subtle); border: 1px solid var(--mono-border); border-radius: 5px; padding: 3px 6px; white-space: nowrap; font-size: 12px; }
+.admin-error { color: var(--mono-text); border-left: 3px solid var(--mono-muted); padding-left: 12px; line-height: 1.7; }
+.admin-more { margin-top: 16px; }
+.admin-counters { display: grid; gap: 10px; margin: 18px 0; }
+.admin-counter { background: var(--mono-subtle); padding: 12px; border-radius: 7px; }
+.admin-counter h3 { margin: 0 0 10px; font-size: 13px; font-weight: 500; }
+.admin-counter dl { margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.admin-counter dt { font-size: 11px; color: var(--mono-muted); }
+.admin-counter dd { margin: 6px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+.admin-detail { display: grid; grid-template-columns: minmax(80px, 1fr) minmax(0, 2fr); gap: 12px; font-size: 13px; line-height: 1.6; }
+.admin-detail dt { color: var(--mono-muted); }
+.admin-detail dd { margin: 0; overflow-wrap: anywhere; }
+.admin-detail ul { margin: 0; padding-left: 20px; }
+.admin-release, .admin-check-result { border-top: 1px solid var(--mono-border); padding-top: 16px; }
+.admin-app pre { max-width: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.admin-app td details[open] { min-width: 280px; }
+.admin-app a:focus-visible, .admin-app button:focus-visible, .admin-app summary:focus-visible, .admin-table-scroll:focus-visible { outline: 2px solid var(--mono-muted); outline-offset: 3px; }
+@media (max-width: 1050px) { .admin-split { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 720px) { .admin-app { flex-direction: column; } .admin-sidebar { flex: none; padding: 12px 16px; border-right: 0; border-bottom: 1px solid var(--mono-border); gap: 12px; } .admin-sidebar nav { flex-direction: row; overflow: auto; } .admin-sidebar nav a { white-space: nowrap; } .admin-sidebar .admin-brand { font-size: 17px; } .admin-brand span { display: inline; margin-left: 10px; } .admin-sidebar > a:last-child { padding: 0; font-size: 12px; } .admin-header { padding: 16px; flex-wrap: wrap; } .admin-header h1 { font-size: 20px; } .admin-content { padding: 20px 16px; } }
