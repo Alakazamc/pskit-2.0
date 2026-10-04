@@ -8,7 +8,7 @@ def test_rejected_af3_approval_cancels_run_without_creating_a_chat_message(tmp_p
     store = PersistentConversationStore(str(tmp_path / "agent.sqlite3"))
     user_id = "alice"
     project_id = store.project_for(user_id).id
-    session_id = store.sessions_for(user_id, project_id)[0].id
+    session_id = store.create_session(user_id, project_id, "AF3 approval").id
     run_id = store.send_message(user_id, session_id, MessageRequest(content="Run AF3")).run_id
     assert store.claim_initial_run(run_id, "worker-a")
     approval = store.request_af3_approval(user_id, run_id, "call-1", 40)
@@ -33,7 +33,7 @@ def test_cancelling_a_run_resolves_its_pending_approval(tmp_path):
     store = PersistentConversationStore(str(tmp_path / "agent.sqlite3"))
     user_id = "alice"
     project_id = store.project_for(user_id).id
-    session_id = store.sessions_for(user_id, project_id)[0].id
+    session_id = store.create_session(user_id, project_id, "AF3 cancellation").id
     run_id = store.send_message(user_id, session_id, MessageRequest(content="Run AF3")).run_id
     assert store.claim_initial_run(run_id, "worker-a")
     approval = store.request_af3_approval(user_id, run_id, "call-1", 40)

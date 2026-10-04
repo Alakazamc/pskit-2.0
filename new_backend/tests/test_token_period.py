@@ -8,7 +8,7 @@ from app.domain.persistent_conversation import PersistentConversationStore
 def test_run_token_adjustment_stays_in_reservation_month_after_midnight(monkeypatch, tmp_path):
     store = PersistentConversationStore(str(tmp_path / "agent.sqlite3"))
     user_id = "alice"
-    session_id = store.sessions_for(user_id, store.project_for(user_id).id)[0].id
+    session_id = store.create_session(user_id, store.project_for(user_id).id, "Token settlement").id
     monkeypatch.setattr(persistence, "_now", lambda: datetime(2026, 9, 30, 23, 59, tzinfo=UTC))
     accepted = store.accept_message(
         user_id, session_id, MessageRequest(content="Analyze"), store,
@@ -35,7 +35,7 @@ def test_run_token_adjustment_stays_in_reservation_month_after_midnight(monkeypa
 def test_background_resume_uses_current_month_quota_and_own_settlement_period(monkeypatch, tmp_path):
     store = PersistentConversationStore(str(tmp_path / "agent.sqlite3"))
     user_id = "alice"
-    session_id = store.sessions_for(user_id, store.project_for(user_id).id)[0].id
+    session_id = store.create_session(user_id, store.project_for(user_id).id, "Resume settlement").id
     monkeypatch.setattr(persistence, "_now", lambda: datetime(2026, 9, 30, 23, 59, tzinfo=UTC))
     accepted = store.accept_message(
         user_id, session_id, MessageRequest(content="Analyze"), store,

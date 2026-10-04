@@ -100,7 +100,7 @@ async def test_policy_revocation_applies_to_next_model_call(tmp_path):
             )
             store = app.state.conversations
             project = store.project_for(uid)
-            session = store.sessions_for(uid, project.id)[0]
+            session = store.create_session(uid, project.id, "Model policy")
             run = store.accept_message(
                 uid,
                 session.id,
@@ -236,7 +236,7 @@ async def test_managed_proxy_does_not_widen_published_image_capability(tmp_path)
             )
             store = app.state.conversations
             project = store.project_for(uid)
-            session = store.sessions_for(uid, project.id)[0]
+            session = store.create_session(uid, project.id, "Text model policy")
             run = store.accept_message(
                 uid,
                 session.id,
@@ -326,7 +326,7 @@ async def test_model_proxy_accepts_ten_images_and_rejects_eleven(tmp_path):
             ).status_code == 200
             store = app.state.conversations
             project = store.project_for(uid)
-            session = store.sessions_for(uid, project.id)[0]
+            session = store.create_session(uid, project.id, "Image model policy")
             run = store.accept_message(
                 uid,
                 session.id,

@@ -22,7 +22,7 @@ async def test_sse_replays_large_history_in_bounded_batches_without_losing_curso
     token, user = app.state.demo_store.issue_token("alice@example.org")
     user_id = user.id
     project_id = store.project_for(user_id).id
-    session_id = store.sessions_for(user_id, project_id)[0].id
+    session_id = store.create_session(user_id, project_id, "Event batches").id
     run_id = store.send_message(user_id, session_id, MessageRequest(content="test")).run_id
     for index in range(300):
         store.append_event(user_id, run_id,
@@ -54,7 +54,7 @@ async def test_sse_does_not_fetch_next_batch_while_client_send_is_blocked(tmp_pa
                      pi_runner=object())
     token, user = app.state.demo_store.issue_token("alice@example.org")
     store = app.state.conversations
-    session_id = store.sessions_for(user.id, store.project_for(user.id).id)[0].id
+    session_id = store.create_session(user.id, store.project_for(user.id).id, "Backpressure").id
     run_id = store.send_message(user.id, session_id, MessageRequest(content="test")).run_id
     for index in range(300):
         store.append_event(user.id, run_id,

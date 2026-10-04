@@ -5,6 +5,58 @@ from app.config import Settings
 from app.main import create_app
 
 
+@pytest.mark.parametrize("runtime", ["mock", "pi"])
+@pytest.mark.asyncio
+async def test_new_user_has_no_automatic_personal_chat(runtime, tmp_path):
+    settings = Settings(agent_runtime=runtime, agent_db_path=str(tmp_path / "agent.sqlite3"))
+    app = create_app(settings, pi_runner=object())
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        login = (await client.post("/api/v1/auth/demo", json={"email": "fresh@example.org"})).json()
+        headers = {"Authorization": f"Bearer {login['access_token']}"}
+        for _ in range(2):
+            response = await client.get("/api/v1/c", headers=headers)
+            assert response.status_code == 200
+            assert response.json() == []
+        legacy_id = f"session-{login['user']['id']}"
+        assert (await client.get(f"/api/v1/c/{legacy_id}", headers=headers)).status_code == 404
+        await client.get(f"/api/v1/c/{legacy_id}/messages", headers=headers)
+        assert (await client.get("/api/v1/c", headers=headers)).json() == []
+        created = await client.post("/api/v1/c", headers=headers, json={"title": "新的科研任务"})
+        assert created.status_code == 201
+        assert (await client.get("/api/v1/c", headers=headers)).json() == [created.json()]
+    if runtime == "pi":
+        restarted = create_app(settings, pi_runner=object())
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=restarted), base_url="http://test") as client:
+            login = (await client.post("/api/v1/auth/demo", json={"email": "fresh@example.org"})).json()
+            headers = {"Authorization": f"Bearer {login['access_token']}"}
+            assert (await client.get("/api/v1/c", headers=headers)).json() == [created.json()]
+
+
+@pytest.mark.parametrize("runtime", ["mock", "pi"])
+@pytest.mark.asyncio
+async def test_legacy_personal_chat_with_messages_still_appears(runtime, tmp_path):
+    settings = Settings(agent_runtime=runtime, agent_db_path=str(tmp_path / "agent.sqlite3"))
+    app = create_app(settings, pi_runner=object())
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        login = (await client.post("/api/v1/auth/demo", json={"email": "existing@example.org"})).json()
+        headers = {"Authorization": f"Bearer {login['access_token']}"}
+        legacy_id = f"session-{login['user']['id']}"
+        sent = await client.post(f"/api/v1/c/{legacy_id}/messages", headers=headers,
+                                 json={"content": "保留我的旧记录"})
+        assert sent.status_code == 200
+        sessions = (await client.get("/api/v1/c", headers=headers)).json()
+        assert len(sessions) == 1
+        assert sessions[0]["id"] == legacy_id
+        assert sessions[0]["latest_run_id"] == sent.json()["run_id"]
+        assert (await client.get(f"/api/v1/c/{legacy_id}", headers=headers)).status_code == 200
+    if runtime == "pi":
+        restarted = create_app(settings, pi_runner=object())
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=restarted), base_url="http://test") as client:
+            login = (await client.post("/api/v1/auth/demo", json={"email": "existing@example.org"})).json()
+            headers = {"Authorization": f"Bearer {login['access_token']}"}
+            assert (await client.get("/api/v1/c", headers=headers)).json() == sessions
+
+
 @pytest.mark.asyncio
 async def test_user_can_create_a_project_and_session_without_affecting_another_user():
     app = create_app()

@@ -17,6 +17,31 @@ from app.db.postgres_migrations import migrate_postgres
 from app.domain.persistent_conversation import PersistentConversationStore
 
 
+def test_personal_list_starts_empty_and_preserves_legacy_history(pg_schema: tuple[str, str]) -> None:
+    """New accounts have no placeholder; stored and used legacy chats remain visible."""
+    dsn, schema = pg_schema
+    migrate_postgres(dsn, schema=schema)
+    database = PostgresDatabase(dsn, schema=schema)
+    try:
+        store = PersistentConversationStore(database)
+        project_id = store.project_for("alice").id
+        assert store.sessions_for("alice", project_id) == []
+        assert store.messages_for("alice", "session-alice") == []
+        assert store.sessions_for("alice", project_id) == []
+        created = store.create_session("alice", project_id, "新的科研任务")
+        assert store.sessions_for("alice", project_id) == [created]
+        run = store.send_message("alice", "session-alice", MessageRequest(content="旧对话"))
+        assert run is not None
+        sessions = store.sessions_for("alice", project_id)
+        assert [item.id for item in sessions] == ["session-alice", created.id]
+        assert sessions[0].latest_run_id == run.run_id
+        assert store.sessions_for("bob", store.project_for("bob").id) == []
+        assert store.archive_session("alice", "session-alice")
+        assert store.sessions_for("alice", project_id) == [created]
+    finally:
+        database.close()
+
+
 def test_workspace_and_run_survive_reopen(pg_schema: tuple[str, str]) -> None:
     """Project, typed messages, event cursor, and Pi path survive pool restart."""
     dsn, schema = pg_schema

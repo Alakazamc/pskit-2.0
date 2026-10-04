@@ -504,7 +504,8 @@ async def test_live_pi_can_use_a_shared_openai_compatible_gateway(tmp_path):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             headers = {"Authorization": "Bearer signed-jwt"}
             (await client.get("/api/v1/g", headers=headers)).json()[0]
-            session = (await client.get("/api/v1/c", headers=headers)).json()[0]
+            session = (await client.post("/api/v1/c", headers=headers,
+                                         json={"title": "Gateway test"})).json()
             sent = await client.post(f"/api/v1/c/{session['id']}/messages", headers=headers,
                                      json={"content": "hello"})
             await asyncio.sleep(0.02)

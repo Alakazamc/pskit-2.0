@@ -249,7 +249,7 @@ class ConversationStore:
         return True
 
     def sessions_for(self, user_id: str, project_id: str) -> list[Session] | None:
-        """List active mock sessions and the default session's latest Run."""
+        """List created chats and legacy chats with saved content or Runs."""
         if not any(project.id == project_id for project in self.projects_for(user_id)):
             return None
         archived = self._archived_sessions.get(user_id, set())
@@ -257,19 +257,25 @@ class ConversationStore:
         sessions = [session for session in self._sessions.get(user_id, {}).values()
                     if session.project_id == project_id and session.id != default_id
                     and session.id not in archived]
-        if self.project_for(user_id).id != project_id:
-            return sessions
-        if default_id in archived:
-            return sessions
-        session = self._sessions.get(user_id, {}).get(default_id) or Session(
-            id=default_id, project_id=project_id, title="新的科研任务"
+        stored_default = self._sessions.get(user_id, {}).get(default_id)
+        has_history = bool(self._messages.get(default_id)) or any(
+            owner == user_id and run_session_id == default_id
+            for owner, run_session_id, _ in self._runs.values()
         )
-        for run_id, (owner, run_session_id, _) in reversed(self._runs.items()):
-            if owner == user_id and run_session_id == session.id:
-                status = self.run_status_for(user_id, run_id)
-                return [session.model_copy(update={"latest_run_id": run_id, "status": status.status}),
-                        *sessions]
-        return [session, *sessions]
+        if (self.project_for(user_id).id == project_id and default_id not in archived
+                and (stored_default is not None or has_history)):
+            sessions.insert(0, stored_default or Session(
+                id=default_id, project_id=project_id, title="新的科研任务"
+            ))
+        for index, session in enumerate(sessions):
+            for run_id, (owner, run_session_id, _) in reversed(self._runs.items()):
+                if owner == user_id and run_session_id == session.id:
+                    status = self.run_status_for(user_id, run_id)
+                    sessions[index] = session.model_copy(
+                        update={"latest_run_id": run_id, "status": status.status}
+                    )
+                    break
+        return sessions
 
     def _owns_session(self, user_id: str, session_id: str) -> bool:
         """Check mock session ownership and active project visibility."""

@@ -20,7 +20,7 @@ def test_only_expired_pi_run_lease_is_recovered(tmp_path, monkeypatch):
     second = PersistentConversationStore(path)
     user_id = "alice"
     project_id = first.project_for(user_id).id
-    session_id = first.sessions_for(user_id, project_id)[0].id
+    session_id = first.create_session(user_id, project_id, "Lease recovery").id
     request = MessageRequest(content="research question", attachments=[], skills=[], resources=[])
     run_id = first.send_message(user_id, session_id, request).run_id
 

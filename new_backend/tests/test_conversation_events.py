@@ -31,9 +31,9 @@ async def test_user_can_send_message_in_own_project_session():
         projects = await client.get("/api/v1/g", headers=headers)
         assert projects.status_code == 200
         projects.json()[0]["id"]
-        sessions = await client.get("/api/v1/c", headers=headers)
-        assert sessions.status_code == 200
-        session_id = sessions.json()[0]["id"]
+        session = await client.post("/api/v1/c", headers=headers, json={"title": "PDB 检索"})
+        assert session.status_code == 201
+        session_id = session.json()["id"]
 
         sent = await client.post(
             f"/api/v1/c/{session_id}/messages",
@@ -59,8 +59,8 @@ async def test_foreign_session_is_not_visible():
         bob = await _login(client, "bob@example.org")
         (await client.get("/api/v1/g", headers=alice)).json()[0]["id"]
         session_id = (
-            await client.get("/api/v1/c", headers=alice)
-        ).json()[0]["id"]
+            await client.post("/api/v1/c", headers=alice, json={"title": "私有对话"})
+        ).json()["id"]
 
         response = await client.get(f"/api/v1/c/{session_id}/messages", headers=bob)
 
@@ -75,8 +75,8 @@ async def test_run_events_resume_after_cursor_without_duplicates():
         headers = await _login(client, "alice@example.org")
         (await client.get("/api/v1/g", headers=headers)).json()[0]["id"]
         session_id = (
-            await client.get("/api/v1/c", headers=headers)
-        ).json()[0]["id"]
+            await client.post("/api/v1/c", headers=headers, json={"title": "事件恢复"})
+        ).json()["id"]
         run_id = (
             await client.post(
                 f"/api/v1/c/{session_id}/messages",
@@ -105,8 +105,8 @@ async def test_foreign_run_events_are_not_visible():
         bob = await _login(client, "bob@example.org")
         (await client.get("/api/v1/g", headers=alice)).json()[0]["id"]
         session_id = (
-            await client.get("/api/v1/c", headers=alice)
-        ).json()[0]["id"]
+            await client.post("/api/v1/c", headers=alice, json={"title": "私有 Run"})
+        ).json()["id"]
         run_id = (
             await client.post(
                 f"/api/v1/c/{session_id}/messages", headers=alice, json={"content": "你好"}
@@ -125,9 +125,9 @@ async def test_event_stream_waits_for_a_background_task_and_emits_completion():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             headers = await _login(client, "alice@example.org")
             (await client.get("/api/v1/g", headers=headers)).json()[0]["id"]
-            session_id = (await client.get(
-                "/api/v1/c", headers=headers
-            )).json()[0]["id"]
+            session_id = (await client.post(
+                "/api/v1/c", headers=headers, json={"title": "AF3 任务"}
+            )).json()["id"]
             run_id = (await client.post(
                 f"/api/v1/c/{session_id}/messages", headers=headers,
                 json={"content": "run AF3"},
@@ -146,9 +146,9 @@ async def test_run_event_snapshot_returns_while_background_task_is_waiting():
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         headers = await _login(client, "alice@example.org")
         (await client.get("/api/v1/g", headers=headers)).json()[0]["id"]
-        session_id = (await client.get(
-            "/api/v1/c", headers=headers
-        )).json()[0]["id"]
+        session_id = (await client.post(
+            "/api/v1/c", headers=headers, json={"title": "后台任务快照"}
+        )).json()["id"]
         run_id = (await client.post(
             f"/api/v1/c/{session_id}/messages", headers=headers,
             json={"content": "run AF3"},

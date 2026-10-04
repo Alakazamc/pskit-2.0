@@ -336,7 +336,15 @@ class WorkspaceMixin:
                 "SELECT title,archived_at FROM workspace_sessions WHERE id=? AND user_id=?",
                 (default_id, user_id),
             ).fetchone()
-            if default_row is None or default_row[1] is None:
+            has_history = self.db.execute(
+                "SELECT 1 FROM agent_messages WHERE user_id=? AND session_id=? LIMIT 1",
+                (user_id, default_id),
+            ).fetchone() or self.db.execute(
+                "SELECT 1 FROM agent_runs WHERE user_id=? AND session_id=? LIMIT 1",
+                (user_id, default_id),
+            ).fetchone()
+            if (default_row is not None and default_row[1] is None
+                    or default_row is None and has_history):
                 sessions.insert(0, Session(
                     id=default_id, project_id=project_id,
                     title=default_row[0] if default_row else "新的科研任务",

@@ -183,7 +183,7 @@ def test_artifact_bytes_reduce_remaining_file_storage(pg_schema):
     try:
         conversations = PersistentConversationStore(db)
         project = conversations.project_for("member")
-        session = conversations.sessions_for("member", project.id)[0]
+        session = conversations.create_session("member", project.id, "Artifact storage")
         run = conversations.send_message(
             "member", session.id, MessageRequest(content="Produce artifact")
         )

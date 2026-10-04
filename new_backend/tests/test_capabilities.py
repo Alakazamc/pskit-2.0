@@ -151,8 +151,8 @@ async def test_af3_job_is_private_and_wakes_waiting_run():
             bob = await _login(client, "bob@example.org")
             (await client.get("/api/v1/g", headers=alice)).json()[0]["id"]
             session_id = (
-                await client.get("/api/v1/c", headers=alice)
-            ).json()[0]["id"]
+                await client.post("/api/v1/c", headers=alice, json={"title": "AF3 分析"})
+            ).json()["id"]
             run_id = (
                 await client.post(
                     f"/api/v1/c/{session_id}/messages",
@@ -200,8 +200,8 @@ async def test_af3_chat_rejects_insufficient_quota_without_creating_message():
         headers = await _login(client, "alice@example.org")
         (await client.get("/api/v1/g", headers=headers)).json()[0]
         session = (
-            await client.get("/api/v1/c", headers=headers)
-        ).json()[0]
+            await client.post("/api/v1/c", headers=headers, json={"title": "GPU 额度"})
+        ).json()
         first = await client.post(
             "/api/v1/af3/jobs", headers=headers, json={"estimated_gpu_minutes": 41}
         )

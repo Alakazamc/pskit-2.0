@@ -84,8 +84,8 @@ async def test_token_allowance_is_per_user_and_blocks_exhausted_user():
         app.state.quotas.set_token_limit(alice["user"]["id"], 0)
         (await client.get("/api/v1/g", headers=alice_headers)).json()[0]
         session = (
-            await client.get("/api/v1/c", headers=alice_headers)
-        ).json()[0]
+            await client.post("/api/v1/c", headers=alice_headers, json={"title": "Token 额度"})
+        ).json()
         denied = await client.post(
             f"/api/v1/c/{session['id']}/messages",
             headers=alice_headers,
