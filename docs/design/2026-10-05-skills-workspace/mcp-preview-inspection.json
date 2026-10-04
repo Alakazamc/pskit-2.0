@@ -1,0 +1,82 @@
+{
+  "scope": "Static design preview only; no product/API/runtime/model checks",
+  "errors": [],
+  "views": [
+    {
+      "view": "desktop-dark",
+      "viewport": 1360,
+      "documentWidth": 1360,
+      "pageWidth": 740,
+      "modalWidth": null,
+      "modalBottom": null,
+      "height": 850
+    },
+    {
+      "view": "desktop-guide",
+      "viewport": 1360,
+      "documentWidth": 1360,
+      "pageWidth": 740,
+      "modalWidth": 640,
+      "modalBottom": 791.34375,
+      "height": 850
+    },
+    {
+      "view": "desktop-light",
+      "viewport": 1360,
+      "documentWidth": 1360,
+      "pageWidth": 740,
+      "modalWidth": null,
+      "modalBottom": null,
+      "height": 850
+    },
+    {
+      "view": "mobile-dark",
+      "viewport": 390,
+      "documentWidth": 390,
+      "pageWidth": 354,
+      "modalWidth": null,
+      "modalBottom": null,
+      "height": 844
+    },
+    {
+      "view": "mobile-add",
+      "viewport": 390,
+      "documentWidth": 390,
+      "pageWidth": 354,
+      "modalWidth": 366,
+      "modalBottom": 718,
+      "height": 844
+    },
+    {
+      "view": "mobile-guide",
+      "viewport": 390,
+      "documentWidth": 390,
+      "pageWidth": 354,
+      "modalWidth": 366,
+      "modalBottom": 820.34375,
+      "height": 844
+    }
+  ],
+  "interaction": {
+    "sidebar_mcp_visible": true,
+    "initial_rows": 4,
+    "search_rows": 1,
+    "empty_state_has_unique_ids": true,
+    "personal_rows": 1,
+    "toggle_enabled": "true",
+    "local_address_hint": "云端无法直接连接你电脑的内网地址。请查看内网接入指南。",
+    "save_disabled_before_selection": true,
+    "after_add_rows": 5,
+    "escape_closes_panel": true,
+    "existing_skill_card_dimensions": {
+      "x": 419,
+      "y": 320,
+      "width": 100,
+      "height": 80
+    },
+    "mobile_status_visible": true,
+    "mobile_unreachable_visible": true,
+    "full_guide_http_status": 200,
+    "full_guide_mobile_width": 390
+  }
+}

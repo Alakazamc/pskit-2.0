@@ -46,11 +46,12 @@ LiteLLM 已有 Managed Skills，不能说它完全不支持 Skill 管理；实�
 
 ## 4. 信息架构与路由
 
-用户侧常用导航：新对话、Skills、工具集、项目、最近对话。设置位于账号入口。管理台继续使用已有独立 `/admin/*` 区域，普通用户不需要看到模型服务发布 / 容器运维等操作。
+用户侧常用导航：新对话、Skills、MCP、工具集、项目、最近对话。设置位于账号入口。管理台继续使用已有独立 `/admin/*` 区域，普通用户不需要看到模型服务发布 / 容器运维等操作。
 
 - `/skills`：目录，query 保留搜索和分类状态。
 - `/skills/:skillId`：直接打开对应详情面板；关闭返回原列表并恢复滚动 / 搜索。
 - `/skills/:skillId?version=:version&file=:relativePath`：可定位版本和文件；路径由服务器验证。
+- `/mcp`：平台服务与本人连接、启停、工具授权、添加连接和内网接入指南；详见[MCP 连接补充设计](2026-10-05-user-mcp-connections-design.md)。
 - `/session/:sessionId` 与 `/p/:projectId/c/:sessionId`：保留现有规范会话地址。
 - 会话的 `?panel=artifacts&run=:runId` 打开该规划 / Run 的产物；关闭不离开对话。
 - `/settings?tab=general|skills|workspace|usage|account`：居中的设置容器，支持深链接。
@@ -264,6 +265,7 @@ LiteLLM adapter 负责模型调用 metadata / tags / callback 关联；MLflow ad
 2. **Skill 包、选择、Pi 注册**：不可变包 / 个人草稿、默认与 session 选择、Run 快照、受控物化与 loader；复用当前 Registry / Pi 工具 ACL。
 3. **用户工作空间控制**：desired_state、准入拒绝、暂停 / 恢复、活动 lease、远端结果等待与多会话范围。
 4. **旧能力批次与触发观测**：按表逐项迁移和服务验收；PSKit 账本先行，LiteLLM/MLflow exporter 独立接入。
+5. **个人 MCP 连接**：紧凑列表 / 添加 / 指南的 HTTP 契约可与目录 UI 并行；逐用户连接版本、凭据、受控出站、工具授权与 Pi 准入共同验收。不能把现有启动级 MCP 配置直接当作任意 URL 的自助入口。
 
 用户此前授权 TDD；实施阶段按公共 HTTP、受控 Pi、PostgreSQL / 真容器边界编写失败再通过的验证，外部模型服务才使用替身。
 
@@ -280,6 +282,8 @@ LiteLLM adapter 负责模型调用 metadata / tags / callback 关联；MLflow ad
 
 ## 15. 设计稿与审阅
 
-[可点击 HTML 设计稿](../../design/2026-10-05-skills-workspace/index.html) 展示目录、详情、会话选择、规划产物和设置。它使用明确标注的示例内容，全部状态只在浏览器内存变化，不连接 API、不写数据库、不运行容器或模型。正式 UI 必须按 HTTP 契约取得数据。
+[可点击 HTML 设计稿](../../design/2026-10-05-skills-workspace/index.html) 展示目录、详情、会话选择、规划产物、设置和 MCP 连接。它使用明确标注的示例内容，全部状态只在浏览器内存变化，不连接 API、不写数据库、不运行容器或模型。正式 UI 必须按 HTTP 契约取得数据。
+
+新增的[MCP 连接补充设计](2026-10-05-user-mcp-connections-design.md)与本规格合并审阅；[内网接入指南](../../guides/user-mcp-ngrok.md)说明浏览器与云端网络的区别、ngrok 配置和专用凭据。
 
 本轮设计自检关注：用户明确需求已覆盖；不存在“选中即成功触发”“创建目录即 Pi 生效”“关容器即取消 AF3”等混淆；待澄清产品名不会阻塞目录与会话 API。书面设计确认后再编写实施计划并开始产品实现。
