@@ -20,11 +20,16 @@ async def test_catalog_lists_accessible_aliases_and_only_confirmed_vision_models
         if request.url.path == "/v1/models":
             return httpx.Response(200, json={"data": [
                 {"id": "text-model"}, {"id": "vision-model"}, {"id": "vision-model"},
+                {"id": "anthropic/*"},
             ]})
         if request.url.path == "/model/info":
             return httpx.Response(200, json={"data": [
                 {"model_name": "text-model", "model_info": {"supports_vision": False}},
-                {"model_name": "vision-model", "model_info": {"supports_vision": True}},
+                {"model_name": "vision-model", "model_info": {
+                    "supports_vision": True, "supports_reasoning": True,
+                    "supports_xhigh_reasoning_effort": True,
+                    "supports_low_reasoning_effort": False,
+                }},
             ]})
         raise AssertionError(str(request.url))
 
@@ -37,10 +42,35 @@ async def test_catalog_lists_accessible_aliases_and_only_confirmed_vision_models
     assert [(item.id, item.supports_images) for item in models] == [
         ("text-model", False), ("vision-model", True),
     ]
+    assert models[0].reasoning_levels == []
+    assert models[1].reasoning_levels == ["medium", "high", "xhigh"]
     assert len(requests) == 2
     assert await catalog.resolve("vision-model") == models[1]
     with pytest.raises(ValueError, match="unavailable"):
         await catalog.resolve("hidden-model")
+
+
+@pytest.mark.asyncio
+async def test_alias_requires_confirmed_reasoning_on_each_deployment_and_filters_non_chat():
+    def gateway(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [{"id": name} for name in
+                ("mixed", "partial", "embedding", "image-generation")]})
+        return httpx.Response(200, json={"data": [
+            {"model_name": "mixed", "model_info": {"supports_reasoning": True}},
+            {"model_name": "mixed", "model_info": {}},
+            {"model_name": "partial", "model_info": {"supports_reasoning": True,
+                                                     "supports_max_reasoning_effort": True}},
+            {"model_name": "partial", "model_info": {"supports_reasoning": True}},
+            {"model_name": "embedding", "model_info": {"mode": "embedding"}},
+            {"model_name": "image-generation", "model_info": {"mode": "image_generation"}},
+        ]})
+    catalog = ModelCatalog(base_url="http://gateway:4000", api_key="test-key",
+                           default_model="embedding", transport=httpx.MockTransport(gateway))
+    models = await catalog.list_models()
+    assert [model.id for model in models] == ["mixed", "partial"]
+    assert models[0].reasoning_levels == []
+    assert models[1].reasoning_levels == ["medium", "high"]
 
 
 @pytest.mark.asyncio
@@ -95,7 +125,8 @@ async def test_authenticated_model_list_only_exposes_public_alias_and_image_flag
             "Authorization": f"Bearer {login.json()['access_token']}",
         })
     assert unauthorized.status_code == 401
-    assert response.json() == [{"id": "visible-model", "supports_images": True}]
+    assert response.json() == [{"id": "visible-model", "supports_images": True,
+                                "reasoning_levels": []}]
     assert "provider-secret" not in response.text
 
 
@@ -113,6 +144,9 @@ async def test_selected_model_is_validated_and_pinned_to_the_accepted_run(tmp_pa
             return httpx.Response(200, json={"data": [
                 {"id": "default-model"}, {"id": "chosen-model"},
             ]})
+        if request.url.path == "/model/info":
+            return httpx.Response(200, json={"data": [{"model_name": "chosen-model",
+                "model_info": {"supports_reasoning": True}}]})
         return httpx.Response(403)
 
     runner = RecordingPi()
@@ -134,7 +168,7 @@ async def test_selected_model_is_validated_and_pinned_to_the_accepted_run(tmp_pa
                 "content": "hello", "model": "not-visible",
             })
             accepted = await client.post(path, headers=headers, json={
-                "content": "hello", "model": "chosen-model",
+                "content": "hello", "model": "chosen-model", "reasoning_effort": "high",
             })
             run_id = accepted.json()["run_id"]
             for _ in range(100):
@@ -144,7 +178,37 @@ async def test_selected_model_is_validated_and_pinned_to_the_accepted_run(tmp_pa
     assert denied.status_code == 422
     assert accepted.status_code == 200
     assert app.state.conversations.run_context(run_id)["model_id"] == "chosen-model"
+    assert app.state.conversations.run_context(run_id)["reasoning_effort"] == "high"
     assert runner.environment["PSKIT_MODEL_ID"] == "chosen-model"
+    assert runner.environment["PSKIT_REASONING_EFFORT"] == "high"
+
+
+@pytest.mark.asyncio
+async def test_unsupported_reasoning_level_is_rejected_before_run_is_created(tmp_path):
+    def gateway(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [{"id": "chosen-model"}]})
+        return httpx.Response(200, json={"data": [{"model_name": "chosen-model",
+            "model_info": {"supports_reasoning": True}}]})
+
+    app = create_app(Settings(agent_db_path=str(tmp_path / "agent.sqlite3")))
+    app.state.model_catalog = ModelCatalog(
+        base_url="http://gateway:4000", api_key="server-secret",
+        default_model="chosen-model", transport=httpx.MockTransport(gateway),
+    )
+    async with app.router.lifespan_context(app):  # noqa: SIM117 - Keep lifespan separate.
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://backend") as client:
+            login = await client.post("/api/v1/auth/demo", json={"email": "alice@example.org"})
+            headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+            project = (await client.get("/api/v1/g", headers=headers)).json()[0]
+            session_id = project["id"].replace("project-", "session-")
+            denied = await client.post(f"/api/v1/c/{session_id}/messages", headers=headers,
+                                       json={"content": "hello", "model": "chosen-model",
+                                             "reasoning_effort": "max"})
+            assert denied.status_code == 422
+            assert denied.json()["detail"]["code"] == "MODEL_REASONING_UNAVAILABLE"
+            assert (await client.get(f"/api/v1/c/{session_id}/messages", headers=headers)).json() == []
 
 
 @pytest.mark.asyncio

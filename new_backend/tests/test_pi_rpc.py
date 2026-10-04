@@ -8,6 +8,85 @@ from app.adapters.live.pi_rpc import PiRpcError, PiRpcRunner
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("level", ["off", "high", "xhigh", "max"])
+async def test_pi_rpc_sets_explicit_thinking_level_before_prompt(tmp_path, level):
+    executable = tmp_path / "fake-pi-thinking"
+    capture = tmp_path / "commands.json"
+    executable.write_text("""#!/usr/bin/env python3
+import json, os, pathlib, sys
+commands = []
+for line in sys.stdin:
+ command = json.loads(line)
+ commands.append(command['type'])
+ if command['type'] == 'get_state':
+  data = {'sessionFile': '/tmp/thinking.jsonl'}
+ elif command['type'] == 'get_available_thinking_levels':
+  data = {'levels': ['off', 'medium', 'high', 'xhigh', 'max']}
+ elif command['type'] == 'set_thinking_level':
+  assert command['level'] == os.environ['PSKIT_REASONING_EFFORT']
+  data = {}
+ elif command['type'] == 'prompt':
+  pathlib.Path(os.environ['TEST_THINKING_CAPTURE']).write_text(json.dumps(commands))
+  data = {'disposition': 'started'}
+ print(json.dumps({'id': command['id'], 'type': 'response', 'success': True, 'data': data}), flush=True)
+ if command['type'] == 'prompt':
+  print(json.dumps({'type': 'message_end', 'message': {'role': 'assistant',
+                    'content': [{'type': 'text', 'text': 'ok'}]}}), flush=True)
+  print(json.dumps({'type': 'agent_settled'}), flush=True)
+  break
+""", encoding="utf-8")
+    executable.chmod(0o755)
+    runner = PiRpcRunner(executable=str(executable), session_dir=str(tmp_path / "sessions"),
+                         model_gateway_base_url="http://gateway:4000/v1",
+                         model_gateway_model="thinking-model")
+    result = await runner.prompt("session-1", "hello", lambda _: None, environment={
+        "MODEL_GATEWAY_API_KEY": "test-key", "PSKIT_REASONING_EFFORT": level,
+        "TEST_THINKING_CAPTURE": str(capture),
+    })
+    assert result["text"] == "ok"
+    assert json.loads(capture.read_text()) == ["get_state", "get_available_thinking_levels",
+                                               "set_thinking_level", "prompt"]
+    config = json.loads((tmp_path / "sessions/session-1/.pi-config/models.json").read_text())
+    assert config["providers"]["model-gateway"]["models"][0]["reasoning"] is True
+    if level in {"xhigh", "max"}:
+        assert config["providers"]["model-gateway"]["models"][0]["thinkingLevelMap"][level] == level
+    if level == "off":
+        assert config["providers"]["model-gateway"]["models"][0]["thinkingLevelMap"]["off"] == "none"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["unavailable", "rejected"])
+async def test_pi_rpc_does_not_prompt_if_explicit_thinking_level_cannot_be_applied(tmp_path, failure):
+    executable = tmp_path / "fake-pi-thinking-error"
+    capture = tmp_path / "commands.json"
+    executable.write_text("""#!/usr/bin/env python3
+import json, os, pathlib, sys
+commands = []
+for line in sys.stdin:
+ command = json.loads(line)
+ commands.append(command['type'])
+ pathlib.Path(os.environ['TEST_THINKING_CAPTURE']).write_text(json.dumps(commands))
+ data = {'sessionFile': '/tmp/thinking.jsonl'}
+ if command['type'] == 'get_available_thinking_levels':
+  data = {'levels': ['off'] if os.environ['TEST_THINKING_FAILURE'] == 'unavailable' else ['high']}
+ success = command['type'] != 'set_thinking_level'
+ print(json.dumps({'id': command['id'], 'type': 'response', 'success': success,
+                   'data': data, 'error': 'unsupported level' if not success else None}), flush=True)
+""", encoding="utf-8")
+    executable.chmod(0o755)
+    runner = PiRpcRunner(executable=str(executable), session_dir=str(tmp_path / "sessions"),
+                         model_gateway_base_url="http://gateway:4000/v1",
+                         model_gateway_model="thinking-model")
+    with pytest.raises(PiRpcError) as caught:
+        await runner.prompt("session-1", "hello", lambda _: None, environment={
+            "MODEL_GATEWAY_API_KEY": "test-key", "PSKIT_REASONING_EFFORT": "high",
+            "TEST_THINKING_CAPTURE": str(capture), "TEST_THINKING_FAILURE": failure,
+        })
+    assert caught.value.code == "MODEL_REASONING_UNAVAILABLE"
+    assert "prompt" not in json.loads(capture.read_text())
+
+
+@pytest.mark.asyncio
 async def test_pi_rpc_sends_image_content_and_declares_vision_input(tmp_path):
     executable = tmp_path / "fake-pi-image"
     capture = tmp_path / "command.json"

@@ -97,6 +97,7 @@ class PiRpcRunner:
                 raise
             active_session_file = str(branch_file)
         child_env = {**os.environ, **(environment or {})}
+        requested_level = (environment or {}).get("PSKIT_REASONING_EFFORT")
         gateway_url = self.model_gateway_base_url or self.new_api_base_url
         gateway_model = (environment or {}).get("PSKIT_MODEL_ID") or self.model_gateway_model or self.new_api_model
         provider_name = "model-gateway" if self.model_gateway_base_url else "new-api"
@@ -114,15 +115,24 @@ class PiRpcRunner:
         if gateway_url:
             if not gateway_model or not child_env.get(key_env):
                 raise PiRpcError("Model gateway model or key is missing")
+            model_config = {
+                "id": gateway_model,
+                "input": ["text", "image"]
+                if child_env.get("PSKIT_MODEL_SUPPORTS_IMAGES") == "1" else ["text"],
+            }
+            if requested_level:
+                model_config["reasoning"] = True
+                if requested_level in {"xhigh", "max"}:
+                    model_config["thinkingLevelMap"] = {requested_level: requested_level}
+                elif requested_level == "off":
+                    model_config["thinkingLevelMap"] = {"off": "none"}
             config = {
                 "providers": {
                     provider_name: {
                         "baseUrl": f"{gateway_url.rstrip('/').removesuffix('/v1')}/v1",
                         "api": "openai-completions",
                         "apiKey": f"${key_env}",
-                        "models": [{"id": gateway_model, "input": ["text", "image"]
-                                    if child_env.get("PSKIT_MODEL_SUPPORTS_IMAGES") == "1"
-                                    else ["text"]}],
+                        "models": [model_config],
                     },
                 },
             }
@@ -199,6 +209,18 @@ class PiRpcRunner:
             current_file = state.get("sessionFile") or active_session_file
             if branch_file is not None and Path(current_file).resolve() != branch_file:
                 raise PiRpcError("Pi did not open the isolated session branch")
+            if requested_level:
+                available_id = await write_command("get_available_thinking_levels")
+                available, _ = await read_response(available_id)
+                if requested_level not in available.get("levels", []):
+                    raise PiRpcError("Selected thinking level is unavailable",
+                                     code="MODEL_REASONING_UNAVAILABLE")
+                level_id = await write_command("set_thinking_level", level=requested_level)
+                try:
+                    await read_response(level_id)
+                except PiRpcError as exc:
+                    raise PiRpcError("Pi rejected the selected thinking level",
+                                     code="MODEL_REASONING_UNAVAILABLE") from exc
             prompt_id = await write_command("prompt", message=message, **(
                 {"images": images} if images else {}
             ))

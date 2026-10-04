@@ -212,6 +212,9 @@ class AgentService:
             environment["PSKIT_MODEL_ID"] = model_id
         if self.store.run_context(run_id).get("model_supports_images") is True:
             environment["PSKIT_MODEL_SUPPORTS_IMAGES"] = "1"
+        reasoning_effort = self.store.run_context(run_id).get("reasoning_effort")
+        if reasoning_effort:
+            environment["PSKIT_REASONING_EFFORT"] = reasoning_effort
         if self.model_gateway_api_key is not None:
             environment["MODEL_GATEWAY_API_KEY"] = (
                 f"{run_id}.{self.tool_token(run_id)}" if self.model_gateway_proxy_enabled

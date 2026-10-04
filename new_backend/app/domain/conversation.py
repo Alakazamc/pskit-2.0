@@ -76,6 +76,7 @@ class ConversationStore:
         allowed_tools: tuple[str, ...] = (), user_prompt: str = "", model_id: str = "",
         image_ids: tuple[str, ...] = (),
         model_supports_images: bool = False,
+        reasoning_effort: str | None = None,
     ) -> tuple[RunRef, bool] | None:
         """Charge mock Tokens and accept a user message once per request key.
 
@@ -100,7 +101,7 @@ class ConversationStore:
             IdempotencyConflict: The key was reused with different input.
             TokenQuotaExceeded: The mock ledger rejects the charge.
         """
-        del instructions, allowed_tools, user_prompt, model_id, image_ids, model_supports_images
+        del instructions, allowed_tools, user_prompt, model_id, image_ids, model_supports_images, reasoning_effort
         if self.messages_for(user_id, session_id) is None:
             return None
         key = (user_id, session_id, idempotency_key) if idempotency_key else None

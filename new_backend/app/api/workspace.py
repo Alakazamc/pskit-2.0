@@ -285,6 +285,8 @@ async def send_message(
         selected_model = await request.app.state.model_catalog.resolve(payload.model)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail={"code": "MODEL_UNAVAILABLE"}) from exc
+    if payload.reasoning_effort and payload.reasoning_effort not in selected_model.reasoning_levels:
+        raise HTTPException(status_code=422, detail={"code": "MODEL_REASONING_UNAVAILABLE"})
     try:
         context = catalog.resolve_context(user.id, payload)
     except ContextNotFound as exc:
@@ -319,6 +321,7 @@ async def send_message(
             allowed_tools=context.allowed_tools, user_prompt=context.user_prompt,
             model_id=selected_model.id,
             model_supports_images=selected_model.supports_images,
+            reasoning_effort=payload.reasoning_effort,
             image_ids=context.image_ids,
         )
     except TokenQuotaExceeded as exc:

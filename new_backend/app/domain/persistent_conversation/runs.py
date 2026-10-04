@@ -252,6 +252,7 @@ class RunsMixin:
         allowed_tools: tuple[str, ...] = (), user_prompt: str = "", model_id: str = "",
         image_ids: tuple[str, ...] = (),
         model_supports_images: bool = False,
+        reasoning_effort: str | None = None,
     ) -> tuple[RunRef, bool] | None:
         """Admit a message, reserve Tokens, and queue its Run atomically.
 
@@ -324,6 +325,7 @@ class RunsMixin:
                  json.dumps({"instructions": instructions, "allowed_tools": allowed_tools,
                              "user_prompt": user_prompt, "model_id": model_id,
                              "model_supports_images": model_supports_images,
+                             "reasoning_effort": reasoning_effort,
                              "image_ids": list(image_ids)})),
             )
             if idempotency_key:

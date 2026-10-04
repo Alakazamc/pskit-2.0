@@ -677,6 +677,10 @@ export type MessageRequest = {
      */
     model?: string | null;
     /**
+     * Reasoning Effort
+     */
+    reasoning_effort?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
+    /**
      * Attachments
      */
     attachments?: Array<ContextRef>;
@@ -704,6 +708,10 @@ export type ModelOption = {
      * Supports Images
      */
     supports_images?: boolean;
+    /**
+     * Reasoning Levels
+     */
+    reasoning_levels?: Array<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>;
 };
 
 /**

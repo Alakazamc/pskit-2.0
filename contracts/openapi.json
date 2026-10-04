@@ -4414,6 +4414,26 @@
             ],
             "title": "Model"
           },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "minimal",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
           "attachments": {
             "items": {
               "$ref": "#/components/schemas/ContextRef"
@@ -4454,6 +4474,22 @@
             "type": "boolean",
             "title": "Supports Images",
             "default": false
+          },
+          "reasoning_levels": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "off",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            },
+            "type": "array",
+            "title": "Reasoning Levels"
           }
         },
         "type": "object",
