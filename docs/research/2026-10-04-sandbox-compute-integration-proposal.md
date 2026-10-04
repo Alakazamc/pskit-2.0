@@ -122,57 +122,41 @@ capability:
 
 权重或工具 Schema 更新产生新版本；已启动作业保存 capability、资源与计量策略快照。GPU slot 按物理 device UUID 分配，不能因不同模型各自有 `concurrency: 1` 就允许同一张卡被重复独占。
 
-### 薄包装器的建议形态
+### 薄包装器与统一返回协议（2026-10-04 用户修订）
 
-以下为伪接口，`pskit_compute` 尚未实现：
+平台统一的是服务返回格式。模型可以运行在本地、SSH、HTTP 或 MCP 服务中；SDK 不假设自己能测量该模型的 CPU/GPU。
 
 ```python
-@service.compute_tool(name="predict_structure", policy_ref="lab-rna.v1")
-def predict(sequence: str, ctx: ExecutionContext) -> ArtifactRef:
-    ctx.check_cancelled()
-    ctx.report_progress(phase="inference", completed=0, total=1)
-    output = existing_model.predict(sequence)
-    return ctx.save_artifact(output, name="structure.cif")
+@service.compute_tool(name="predict_structure", required_usage=["wall_ms", "gpu_device_ms"])
+def predict(sequence: str, ctx: ExecutionContext) -> Completed:
+    result = existing_service.predict(sequence)
+    return Completed(result=result.output, usage=UsageReport(
+        wall_ms=result.wall_ms, gpu_device_ms=result.gpu_device_ms,
+        source="service_reported",
+    ), artifacts=result.artifacts)
 ```
 
-平台/SDK负责上下文、幂等、用量记录和异常终态，原模型函数负责推理。包装器可以做协作取消、计时、申请额度；**硬限制由外部可信 supervisor 执行**。共享模型进程无法独立杀一个请求时，必须声明软限制或采用隔离执行通道，不能写一个 decorator 就承诺已停止 GPU。
+`ExecutionReport = Completed | Pending | Failed`。Completed 含 result、usage、artifacts；Pending 只有 job_id，不含最终 usage；Failed 含 code/message 与已消耗 usage。异步终态可以带原服务 job_id。维护者负责正确归因用量，平台校验单位、必需字段、累计值、授权与幂等；共享服务不声明可独立强杀。
 
-协议外壳可复用官方 MCP Python SDK 或 FastMCP；PSKit 薄包装器只补执行授权、用量和任务关联。FastMCP 的后台任务扩展也有自己的持久后端要求，不能默认当作已有 PostgreSQL 任务账本的替代。具体版本与现有 SDK 兼容性见计量研究文档。[官方 SDK](https://py.sdk.modelcontextprotocol.io/)、[FastMCP Tools](https://gofastmcp.com/servers/tools)、[FastMCP Tasks](https://gofastmcp.com/servers/tasks)
+## 5. 返回用量与额度口径
 
-## 5. 计算计量与额度的明确口径
+| 字段 | 口径 |
+| --- | --- |
+| wall_ms | 服务报告执行经过时间，不自动等于 GPU 时间 |
+| cpu_core_ms | 全部 CPU 核累计毫秒 |
+| gpu_device_ms | 全部 GPU 设备累计毫秒 |
+| peak_memory_bytes | 峰值内存字节 |
+| peak_gpu_memory_bytes | 峰值显存字节 |
+| gpu_count | 使用 GPU 数 |
+| source | service_reported / measured / estimated / unknown |
 
-| 建议字段 | 口径与例子 | 用途 |
-| --- | --- | --- |
-| `queue_ms` | 等待调度时间 | 展示，不扣 GPU |
-| `wall_ms` | 执行经过时间，包括 I/O | 展示，不称为真实 GPU 时间 |
-| `cpu_core_ms` | Job 进程树/cgroup 的累计 CPU 时间；4 核各忙 10 秒 = 40 核秒 | 每日 CPU 账本 |
-| `gpu_device_ms` | 被 Job 分配/占用的各 GPU 时间之和；2 卡各占 60 秒 = 120 GPU 秒 | 推荐首版每日 GPU 账本 |
-| `cuda_elapsed_ms` | 受控 CUDA event/stream 的性能区间 | 性能诊断，不能自动推导共享请求账单 |
-| `gpu_memory_peak_bytes` | 峰值显存 | 准入与监控 |
+六个数值字段均为严格非负整数或 null。null 表示未知；0 仅表示明确没有消耗，不由缺值补零。峰值不作为累计时间。required_usage 由服务策略指定；验收和结算时缺少非空必需值即拒绝。内部服务自报可由管理员批准用于额度，source 必须保留；这不等于第三方验证的账单。
 
-CPU 计量依据 cgroup v2 `cpu.stat`，而 `cpu.max`/Docker `--cpus` 限制的是运行时 CPU 带宽，两者不等于每日额度。[Linux cgroup v2](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html)、[Docker 资源约束](https://docs.docker.com/engine/containers/resource_constraints/)
+额度生命周期：身份/已发布版本校验 → CPU/GPU 预占 → service-bound worker grant → 可选累计心跳 → Completed/Failed 最终 usage → 持久 receipt → Pi 唤醒。失败/取消仍扣已消耗资源。取消请求不证明远程执行已停止；失联保留预占且不自动再运行。
 
-同用户容器中多个会话并行时，容器级 CPU 计数只能提供用户总账；要给每个 attempt 归账，须独立受控进程树/cgroup。常驻模型进程多个请求并发时，其 PID 的 CPU/GPU 总量也不能准确拆成每用户用量。此时选择独占请求通道、真实可归因测量，或公开的分摊策略，不能用网络请求时长伪装精确计算计量。[NVML process accounting](https://docs.nvidia.com/deploy/archive/R550/nvml-api/group__nvmlAccountingStats.html)
+显式报告可包含 UTC 时间窗口；平台按窗口比例进行整数切片并保留总值，不能由一个 wall_ms 反推出实际 GPU 分布。未提供分段计量时该拆分是归账政策，不宣称逐日物理测量。旧 AF3 分钟换算仍标 legacy_wall，旧任务与通用任务隔离聚合，防止重复扣额。可信本地 supervisor 可另行实现，但不是通用 SDK 前置条件。
 
-GPU 空闲驻留和服务公共权重加载默认属于服务成本；取得请求 GPU slot 后仍占用设备的加载、推理、清理进入声明的计费阶段。CUDA 异步执行要求正确测量完成边界，简单函数前后计时可能提前结束；共享 GPU 上的全局 synchronize 也可能等待别人的工作。[PyTorch CUDA semantics](https://docs.pytorch.org/docs/main/notes/cuda.html)
-
-RTX A6000 不在 NVIDIA MIG 支持产品表中，不应将其设计成每用户一份硬件 GPU 分区。首版更适合设备 lease/受控并发。CPU/GPU 毫秒整数入账，界面显示分钟；失败或取消已经使用的资源仍结算，不能每次 heartbeat 向上取整一分钟。[NVIDIA MIG 支持列表](https://docs.nvidia.com/datacenter/tesla/mig-user-guide/supported-gpus.html)
-
-### 额度生命周期
-
-```text
-身份与发布策略校验 → 额度预占 → worker claim 与授权
-  → 累计心跳/用量 → 申请下一窗口，或请求停止
-  → 执行停止确认 → 最终结算 → 有证据的异常对账
-```
-
-- grant 绑定 `job_id / attempt / worker / capability_version`，含用量上限与固定绝对执行 deadline；心跳与重试不得重置 deadline。
-- 网络断开只在已经授权的窗口内继续。预算耗尽由独立 supervisor 停止，不能依赖 Agent 自觉不再调用。
-- supervisor 采样、发送停止与设备释放都有延迟。需提前预留停止余量、声明可接受的计量误差并记录实际用量；此次不承诺在某个 GPU 毫秒处零超用强切。无法界定停止能力的共享服务只能发布软限制策略。
-- 取消 HTTP 请求、任务 TTL 到期、worker 没心跳，都不能证明 CUDA 已停止；未确认时保留预占/待对账状态。
-- 建议沿用现有 UTC 配额日，并对跨日执行切片；昨日未结算 reservation 不因新一天到来而删除。若选择提交日归账，必须明确公布并限制绝对时长。
-- receiver 先持久化进度/用量/结果，再上传；只有收到中央事务提交后的匹配 receipt 才清理本地已确认记录。丢 ACK 重传原记录，不重新执行推理。
-- 使用现有 PostgreSQL claim、fencing 与 outbox 机制即可；此次没有建议增加 Redis/Celery 等新基础设施。
+receiver 先持久化结果再上传；仅收到中央已提交且匹配 payload hash 的 receipt 才清除。丢 ACK 重发同一报告，不重新推理。继续使用 PostgreSQL lease/fencing/outbox，无 Redis/Celery。
 
 ## 6. API、事件与 MCP 映射草案
 

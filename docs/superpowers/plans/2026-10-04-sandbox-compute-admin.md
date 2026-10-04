@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在现有新版 PSKit 中完成每用户沙箱、同门科研模型接入与 CPU/GPU 计量，以及统一模型开放和额度管理页面。
+**Goal:** 在现有新版 PSKit 中完成每用户沙箱、同门科研模型统一返回协议与 CPU/GPU 用量上报，以及统一模型开放和额度管理页面。
 
 **Architecture:** 保持 React + Vite、Python、Supabase、LiteLLM 与单 PostgreSQL。先补齐现有 Docker 沙箱 provider，再将 AF3 执行机制推广成通用 Job/账本，管理台通过 Python 的 JWT/RBAC 操作这些业务对象。
 
@@ -17,14 +17,17 @@
 - 复用现有 Docker manager；OpenSandbox 保持 provider 替换边界，不同时启动第二套容器调度器。
 - 镜像和 Pi 版本固定；保持 `mcp>=1.26,<2`，本轮不以协议升级为前提。
 - GPU 服务独立于用户 CPU 沙箱；Pi 只获得 Run 范围权限，不持提供商或管理密钥。
-- CPU 核毫秒、GPU 设备毫秒整数计账；旧 AF3 walltime 明确标为旧计量口径，不虚构 CUDA 耗时。
+- 平台统一返回协议 `ExecutionReport = Completed | Pending | Failed`，不要求 SDK 统一测量任意远程服务。维护者上报严格非负整数用量；未知为 `null`，已知未消耗才为 `0`。
+- `UsageReport` 含 `wall_ms / cpu_core_ms / gpu_device_ms / peak_memory_bytes / peak_gpu_memory_bytes / gpu_count / source`；source 为 service_reported、measured、estimated、unknown。服务声明 required_usage；终态缺少必需值不能验收或结算。
+- 包装器只适配函数、HTTP、MCP 的业务输出；cgroup/CUDA/NVML 不作为通用 SDK 前提。内部服务上报是责任人的声明；准入与硬停止能力分别声明，不把自报值声称为外部核验账单。失败也报告并结算已消耗用量。
+- CPU 核毫秒、GPU 设备毫秒整数计账；旧 AF3 walltime 明确标为 legacy_wall，不虚构 CUDA 耗时。
 - 沿用单 PostgreSQL 与任务 lease/outbox；不引入 Redis/Celery 或重复额度真相源。
 - Token 沿用现有月额度，GPU 沿用用户现有每日限制；CPU 默认额度必须显式配置。测试示例额度不写成生产默认值。
 - 后端新增 API 是真实持久业务接口；前端 mock 使用同一接口契约，仅用于开发和测试，不增加写死演示数据。
 - 前端保持中英双语、主题适配，遵守 [AGENTS.md](/home/jhli/pskit-2.0/new_frontend/AGENTS.md)。
 - 本计划先在本地/隔离 Staging 验收；生产发布采用现有部署 skill 和发布记录，不把测试记录迁入生产。
 - `.venv/bin/python` 命令从 `new_backend/` 执行，`npm` 命令从 `new_frontend/` 执行；仓库相对路径统一从项目根目录解析。
-- migration 004→005→006 显式顺序执行，启动不静默改生产 schema；应用回退必须使用能识别新 schema/Job 的兼容镜像，不能直接重启严格只接受 schema v3 的旧镜像。
+- 代码当前 PostgreSQL schema v3；本次 B 阶段使用下一版 004_compute.sql，后续 A/C 按实际实施顺序分配版本，不为计划编号创建空迁移。迁移显式顺序执行，启动不静默改生产 schema；应用回退必须使用能识别新 schema/Job 的兼容镜像，不能直接重启严格只接受 schema v3 的旧镜像。
 - 旧 `docs/adr/0001-final-stack.md` 对 Vue/LangGraph/Celery 的选择属于旧系统；本轮依据用户已指定的新版 React/Pi/单 PostgreSQL 架构，不恢复旧技术栈。
 
 ## Review Focus
@@ -40,12 +43,12 @@
 | 阶段 | 实施文件 | 可独立验收的结果 |
 | --- | --- | --- |
 | A | [用户沙箱](/home/jhli/pskit-2.0/docs/superpowers/plans/2026-10-04-user-sandbox.md) | 多会话安全复用、活动回收、文件/产物往返、排空换镜像 |
-| B | [通用计算与 SDK](/home/jhli/pskit-2.0/docs/superpowers/plans/2026-10-04-compute-sdk-metering.md) | 同门服务注册、持久 Job、可信计量/预算、ACK 重放和 Pi 唤醒 |
+| B | [通用计算与 SDK](/home/jhli/pskit-2.0/docs/superpowers/plans/2026-10-04-compute-sdk-metering.md) | 同门服务注册、持久 Job、统一结果/用量协议及预算、ACK 重放和 Pi 唤醒 |
 | C | [管理台](/home/jhli/pskit-2.0/docs/superpowers/plans/2026-10-04-agent-admin-console.md) | JWT/RBAC 管理、逐用户模型发布、额度和任务运营、中英页面 |
 
-顺序 A → B → C。每个任务遵循一个公开行为的 red → green，再补下一行为；不是一次写完全部测试再实现。每个阶段分批 commit，沿用用户“无需再次询问 commit”的授权。
+用户本次明确先修订并实施 B；B 不依赖未实现的 A 迁移或 C 管理页面，A/C 保留后续独立交付。每个任务遵循一个公开行为的 red → green，再补下一行为；不是一次写完全部测试再实现。每个阶段分批 commit，沿用用户“无需再次询问 commit”的授权。
 
-## 拟确认的 TDD 测试边界
+## 已授权的 TDD 测试边界
 
 1. **沙箱边界**：私有 manager/bridge HTTP API、公开 `SandboxPiRunner.prompt` 合约、文件导入导出接口；Docker HTTP 与 Pi RPC 是外部替身边界。
 2. **计算边界**：公开 Job/usage API、可信 worker claim/heartbeat/result/receipt 协议、SDK 的函数注册与执行接口、Pi 自动继续可观察结果。
@@ -63,4 +66,4 @@
 - [ ] 发布前审查源码、版本化 migration、配额账本兼容、服务端 secret 边界及回退说明。
 - [ ] 文档明确实际已验证范围、CPU/GPU 硬限制能力、尚待真实模型接口的信息。
 
-本计划与三个子计划已完成静态自审；实施前须按 `superpowers:writing-plans` 审阅计划，并按 `tdd` 确认以上新增测试边界。用户既有当前工作区、原生逐项执行和分批 commit 选择继续有效。
+2026-10-04 用户已提供统一返回协议并要求“修改计划，然后直接开始实现”；据此直接执行 B，沿用既有 TDD 边界、当前工作区、原生逐项执行和分批 commit 授权，不增加重复审批。
