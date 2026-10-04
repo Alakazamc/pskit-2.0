@@ -2,30 +2,58 @@
 
 日期：2026-10-04。本文依据仓库中的 [`stack.sh`](stack.sh)、Compose 叠加文件和 Nginx 配置。它解释**配置规定的部署方式**；容器是否正在运行，应以目标主机上的 `stack.sh status` 和 `docker ps` 为准。
 
-## 先看全图
+## 生产环境端口图
 
-```text
-公网浏览器
-  │ HTTPS :443
-  ▼
-阿里云宿主机 Nginx
-  ├─ 页面、/assets/ ─────────────→ /var/www/agent.bioailab.net（React dist）
-  ├─ /api/v1/ ────────────────→ 127.0.0.1:18088 → backend:8000
-  └─ 指定的 /auth/v1/ 回调 ──→ 127.0.0.1:18130 → api-gw:8000
+```mermaid
+flowchart LR
+    Browser["公网浏览器"]
+    Operator["运维浏览器<br/>WireGuard"]
+    Receiver["A6000 AF3 接收器<br/>10.9.8.2"]
+    Compute["A6000 AF3 计算容器"]
 
-backend ── Docker 网络 ──→ gateway:4000（LiteLLM）→ 模型提供商
-   │                        → api-gw:8000（Supabase）
-   └────────────────────────→ db:5432（共享 PostgreSQL）
+    subgraph Host["阿里云宿主机"]
+        PublicNginx["Nginx<br/>公网 :80 / :443"]
+        Dist["React dist<br/>/var/www/agent.bioailab.net"]
+        PrivateNginx["Nginx<br/>WireGuard 10.9.8.1:18184"]
+    end
 
-A6000 AF3 接收器
-  │ WireGuard → 10.9.8.1:18184
-  ▼
-阿里云私网 Nginx → 127.0.0.1:18185 → af3-callback-proxy:8080
-                                                │ Docker 网络
-                                                └────────→ backend:8000
+    subgraph Agent["Compose: pskit-agent-cloud"]
+        Backend["backend:8000<br/>发布到 127.0.0.1:18088"]
+        Pi["Pi RPC<br/>在 backend 容器内"]
+        Callback["af3-callback-proxy:8080<br/>发布到 127.0.0.1:18185"]
+    end
+
+    subgraph Supabase["Compose: pskit-agent-supabase"]
+        ApiGw["api-gw:8000<br/>发布到 127.0.0.1:18130"]
+        Auth["Auth / Storage"]
+        Db["db:5432<br/>没有宿主机映射"]
+    end
+
+    subgraph Model["Compose: pskit-agent-litellm"]
+        Gateway["gateway:4000<br/>按配置发布到 10.9.8.1:4000"]
+    end
+    Provider["模型提供商"]
+
+    Browser -->|"HTTPS :443；HTTP :80 重定向"| PublicNginx
+    PublicNginx -->|"页面与静态资源"| Dist
+    PublicNginx -->|"/api/v1/ → 127.0.0.1:18088"| Backend
+    PublicNginx -->|"指定的 /auth/v1/ 回调 → 127.0.0.1:18130"| ApiGw
+    Backend <--> Pi
+    Backend -->|"api-gw:8000"| ApiGw
+    Backend -->|"db:5432"| Db
+    Backend -->|"内部模型代理 → gateway:4000"| Gateway
+    ApiGw --> Auth
+    Auth --> Db
+    Gateway -->|"提供商 API"| Provider
+    Gateway -->|"litellm 数据库，db:5432"| Db
+    Operator -.->|"10.9.8.1:4000 管理入口"| Gateway
+    Receiver -->|"主动领任务、回报；10.9.8.1:18184"| PrivateNginx
+    Receiver --> Compute
+    PrivateNginx -->|"127.0.0.1:18185"| Callback
+    Callback -->|"backend:8000"| Backend
 ```
 
-`backend:8000`、`gateway:4000` 和 `db:5432` 是**容器网络内**的地址。它们不是阿里云公网端口。阿里云的 `10.9.8.1` 是 WireGuard 地址；A6000 使用 `10.9.8.2`。本地浏览器预览使用的 `localhost` 端口不由这套生产 Compose 指定。
+图中的虚线表示 WireGuard 运维入口；实线表示业务请求。`backend:8000`、`gateway:4000` 和 `db:5432` 是**容器网络内**的地址。不同容器可以同时使用内部端口 `8000`，因为它们各有网络命名空间。它们不是阿里云公网端口。阿里云的 `10.9.8.1` 是 WireGuard 地址；A6000 使用 `10.9.8.2`。本地浏览器预览使用的 `localhost` 端口不由这套生产 Compose 指定。
 
 ## `stack.sh` 实际启动什么
 
@@ -85,6 +113,19 @@ A6000 的接收器使用 `network_mode: host`，没有 `ports:` 映射。它主�
 ## Staging 端口与生产隔离
 
 Staging 使用不同的 Compose 项目、Docker 网络、数据卷和密钥。它的模型请求进入替身；AF3 在后端使用 mock 执行器。Staging 不连接 A6000。
+
+```mermaid
+flowchart LR
+    Tester["测试者<br/>WireGuard"] -->|"10.9.8.1:18132"| StageNginx["Staging Nginx"]
+    StageNginx -->|"页面"| StageDist["Staging React dist"]
+    StageNginx -->|"/api/v1/ → 127.0.0.1:18090"| StageBackend["backend:8000<br/>AF3 mock 在此执行"]
+    StageBackend -->|"api-gw:8000"| StageApi["Staging api-gw:8000<br/>宿主机 127.0.0.1:18131"]
+    StageBackend -->|"gateway:4000"| StageLite["Staging LiteLLM:4000<br/>WireGuard 10.9.8.1:4002"]
+    StageLite -->|"model-stub:8000"| ModelStub["模型替身<br/>无宿主机端口"]
+    StageBackend -->|"db:5432"| StageDb["Staging PostgreSQL<br/>无宿主机端口"]
+    StageLite --> StageDb
+    StageApi --> StageDb
+```
 
 | Staging 入口 | 映射或转发 | 用途 |
 | --- | --- | --- |
