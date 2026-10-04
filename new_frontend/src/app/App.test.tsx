@@ -80,7 +80,8 @@ it("upgrades a mock guest without changing ownership or losing its session", asy
   render(<App />);
   const actor = userEvent.setup();
   await actor.click(await screen.findByRole("button", { name: "先以游客身份体验" }));
-  await actor.click(await screen.findByRole("link", { name: "设置" }));
+  await actor.click(await screen.findByRole("button", { name: "账号菜单：Guest" }));
+  await actor.click(screen.getByRole("menuitem", { name: "设置" }));
   expect(await screen.findByText("游客可聊天和上传少量文件；GPU 与 AF3 任务需要升级账号。")).toBeInTheDocument();
   await actor.type(await screen.findByLabelText("升级邮箱"), "new@example.org");
   await actor.click(screen.getByRole("button", { name: "发送验证码" }));
@@ -142,12 +143,14 @@ it("warns before discarding a mock guest and revokes its server session", async 
   vi.stubGlobal("fetch", fetcher);
   render(<App />);
   const actor = userEvent.setup();
-  await actor.click(await screen.findByRole("button", { name: "退出登录" }));
+  await actor.click(await screen.findByRole("button", { name: "账号菜单：Guest" }));
+  await actor.click(screen.getByRole("menuitem", { name: "退出登录" }));
   expect(confirm).toHaveBeenCalledWith("游客会话退出后将无法找回。确定退出吗？");
   expect(window.localStorage.getItem("research_access_token")).toBe("guest-jwt");
   expect(fetcher.mock.calls.some(([input]) => String(input).endsWith("/auth/logout"))).toBe(false);
 
-  await actor.click(screen.getByRole("button", { name: "退出登录" }));
+  await actor.click(screen.getByRole("button", { name: "账号菜单：Guest" }));
+  await actor.click(screen.getByRole("menuitem", { name: "退出登录" }));
   await waitFor(() => expect(window.localStorage.getItem("research_access_token")).toBeNull());
   expect(fetcher.mock.calls.some(([input]) => String(input).endsWith("/auth/logout"))).toBe(true);
 });

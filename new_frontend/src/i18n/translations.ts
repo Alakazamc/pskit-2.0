@@ -1,4 +1,6 @@
 export const zh = {
+  "account.menu": "账号菜单",
+  "account.open": "账号菜单：{name}",
   "profile.title": "个人资料",
   "profile.name": "昵称",
   "profile.save": "保存昵称",
@@ -638,6 +640,8 @@ export const zh = {
 export type TranslationKey = keyof typeof zh;
 
 export const en: Record<TranslationKey, string> = {
+  "account.menu": "Account menu",
+  "account.open": "Account menu: {name}",
   "profile.title": "Profile",
   "profile.name": "Nickname",
   "profile.save": "Save nickname",

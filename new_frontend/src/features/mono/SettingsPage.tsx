@@ -1,4 +1,5 @@
 import type { AuthSessionResponse, ResearchApi, UserIdentity } from "../../api/types";
+import { useLocation } from "react-router-dom";
 import { LanguageSwitch, useLanguage } from "../../i18n/LanguageProvider";
 import { GuestUpgrade } from "../auth/GuestUpgrade";
 import { AdminEntry } from "../admin/AdminEntry";
@@ -11,8 +12,9 @@ export function SettingsPage({ api, user, theme, onThemeChange, onUserChange, on
   onSession?: (session: AuthSessionResponse) => void; onLogout: () => void;
 }) {
   const { t } = useLanguage();
+  const { hash, key } = useLocation();
   return <div className="mono-page-scroll"><div className="mono-page-content settings-content">
-    <ProfileSettings key={user.id} api={api} user={user} onUserChange={onUserChange} />
+    <ProfileSettings key={user.id} api={api} user={user} onUserChange={onUserChange} focusKey={hash === "#profile" ? key : undefined} />
     <div className="settings-preferences">
       <section className="mono-panel mono-settings-panel"><h2>{t("mono.appearance")}</h2><div className="mono-segmented"><button className={theme === "light" ? "active" : ""} onClick={() => onThemeChange("light")}>{t("mono.light")}</button><button className={theme === "dark" ? "active" : ""} onClick={() => onThemeChange("dark")}>{t("mono.dark")}</button></div></section>
       <section className="mono-panel mono-settings-panel"><h2>{t("mono.language")}</h2><LanguageSwitch /></section>
