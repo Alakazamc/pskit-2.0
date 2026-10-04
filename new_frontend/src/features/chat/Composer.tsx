@@ -161,7 +161,6 @@ export function Composer({ onSend, onUpload, onStop, runActive = false, skills, 
         </div>}
       </div>
       <div className="composer-toolbar">
-        <ModelPicker models={availableModels} selected={selectedModel} selectionUnavailable={modelUnavailable} effort={reasoningEffort} hasImages={attachments.some((item) => fileKind(item.name) === "image")} onModelChange={setModel} onEffortChange={setReasoningEffort} />
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild><button className="add-button" type="button" aria-label={t("composer.addContext")}><Plus size={19} /></button></DropdownMenu.Trigger>
           <DropdownMenu.Portal container={portalContainer}><DropdownMenu.Content className="add-menu" side="top" sideOffset={8} align="start">
@@ -172,8 +171,11 @@ export function Composer({ onSend, onUpload, onStop, runActive = false, skills, 
             <DropdownMenu.Item onSelect={() => setText(`${content}@`)}><AtSign size={16} /> {t("composer.resources")}</DropdownMenu.Item>
           </DropdownMenu.Content></DropdownMenu.Portal>
         </DropdownMenu.Root>
-        {runActive && onStop ? <button type="button" className="send-button" aria-label={t("agent.cancel")} disabled={stopping} onClick={() => { setStopping(true); setStopError(null); void onStop().catch((caught) => { const key = errorTranslationKey(caught); setStopError(key ? t(key) : t("workspace.cancelFailed")); }).finally(() => setStopping(false)); }}><Square size={14} fill="currentColor" /></button>
-          : <button type="button" className="send-button" aria-label={t("composer.send")} disabled={!content.trim() || disabled || runActive || modelUnavailable || uploadTiles.some((tile) => tile.status === "uploading")} onClick={() => void send()}><ArrowUp size={19} /></button>}
+        <div className="composer-model-controls">
+          <ModelPicker models={availableModels} selected={selectedModel} selectionUnavailable={modelUnavailable} effort={reasoningEffort} hasImages={attachments.some((item) => fileKind(item.name) === "image")} onModelChange={setModel} onEffortChange={setReasoningEffort} />
+          {runActive && onStop ? <button type="button" className="send-button" aria-label={t("agent.cancel")} disabled={stopping} onClick={() => { setStopping(true); setStopError(null); void onStop().catch((caught) => { const key = errorTranslationKey(caught); setStopError(key ? t(key) : t("workspace.cancelFailed")); }).finally(() => setStopping(false)); }}><Square size={14} fill="currentColor" /></button>
+            : <button type="button" className="send-button" aria-label={t("composer.send")} disabled={!content.trim() || disabled || runActive || modelUnavailable || uploadTiles.some((tile) => tile.status === "uploading")} onClick={() => void send()}><ArrowUp size={19} /></button>}
+        </div>
       </div>
     </div>
     {stopError && <div className="composer-stop-error" role="alert">{stopError}</div>}

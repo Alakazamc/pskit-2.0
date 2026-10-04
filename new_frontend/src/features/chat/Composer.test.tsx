@@ -117,6 +117,7 @@ describe("Composer file references", () => {
       models={[{ id: "text-model", supports_images: false, reasoning_levels: [] },
         { id: "anthropic/claude-opus-4-8", supports_images: true, reasoning_levels: ["medium", "high", "xhigh"] }]} /></LanguageProvider>);
     await user.click(screen.getByRole("button", { name: /选择模型/ }));
+    await user.click(screen.getByRole("button", { name: /切换模型/ }));
     await user.type(screen.getByRole("searchbox", { name: "搜索模型" }), "opus");
     await user.click(screen.getByRole("button", { name: /claude-opus-4-8/ }));
     const slider = screen.getByRole("slider", { name: "推理强度" });
@@ -129,6 +130,28 @@ describe("Composer file references", () => {
       model: "anthropic/claude-opus-4-8", reasoning_effort: "high",
     }));
     expect(screen.getByRole("button", { name: /选择模型/ })).toHaveTextContent("高");
+  });
+
+  it("changes models inside the settings panel and returns to the thinking control", async () => {
+    const user = userEvent.setup();
+    render(<LanguageProvider><Composer onSend={vi.fn()} onUpload={vi.fn()} skills={[]} resources={[]}
+      models={[{ id: "first-model", supports_images: false, reasoning_levels: ["medium", "high"] },
+        { id: "second-model", supports_images: true, reasoning_levels: ["medium", "high", "xhigh"] }]} /></LanguageProvider>);
+
+    await user.click(screen.getByRole("button", { name: /选择模型与推理强度/ }));
+    const panel = screen.getByRole("dialog", { name: "模型与推理设置" });
+    expect(within(panel).getByRole("slider", { name: "推理强度" })).toBeInTheDocument();
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+
+    await user.click(within(panel).getByRole("button", { name: /切换模型/ }));
+    await user.type(screen.getByRole("searchbox", { name: "搜索模型" }), "second");
+    await user.click(screen.getByRole("button", { name: "second-model" }));
+
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+    const slider = within(panel).getByRole("slider", { name: "推理强度" });
+    expect(slider).toHaveAttribute("aria-valuetext", "默认");
+    fireEvent.change(slider, { target: { value: "3" } });
+    expect(screen.getByRole("button", { name: /选择模型与推理强度/ })).toHaveTextContent("second-model极高");
   });
 
   it("shows an empty model catalog and asks to reselect a removed model", async () => {
@@ -144,6 +167,7 @@ describe("Composer file references", () => {
     await user.type(screen.getByLabelText("消息内容"), "hello");
     expect(screen.getByRole("button", { name: "发送消息" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: /选择模型/ }));
+    await user.click(screen.getByRole("button", { name: /切换模型/ }));
     await user.click(screen.getByRole("button", { name: "available-model" }));
     await user.click(screen.getByRole("button", { name: "发送消息" }));
     expect(onSend).toHaveBeenCalledWith(expect.objectContaining({ model: "available-model" }));
@@ -161,6 +185,7 @@ describe("Composer file references", () => {
     expect(onUpload).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("支持图片的模型");
     await user.click(screen.getByRole("button", { name: /选择模型/ }));
+    await user.click(screen.getByRole("button", { name: /切换模型/ }));
     await user.click(screen.getByRole("button", { name: /vision-model/ }));
     await user.upload(input, image);
     await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(1));

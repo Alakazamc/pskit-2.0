@@ -74,12 +74,24 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             choose = "选择模型与推理强度" if zh else "Choose model and thinking level"
             search_name = "搜索模型" if zh else "Search models"
             thinking = "推理强度" if zh else "Thinking level"
+            switch_model = "切换模型" if zh else "Switch model"
             high = "高" if zh else "High"
             maximum = "最大" if zh else "Maximum"
             medium = "中" if zh else "Medium"
             default = "默认" if zh else "Default"
-            await page.get_by_role("button", name=choose, exact=False).click()
-            assert await page.locator(".composer-model-popover").get_attribute("data-side") == "top"
+            trigger = page.get_by_role("button", name=choose, exact=False)
+            trigger_box = await trigger.bounding_box()
+            send_box = await page.locator(".send-button").bounding_box()
+            add_box = await page.locator(".add-button").bounding_box()
+            assert 0 <= send_box["x"] - trigger_box["x"] - trigger_box["width"] <= 12, (trigger_box, send_box)
+            assert trigger_box["x"] > add_box["x"], (trigger_box, add_box)
+            trigger_appearance = await trigger.evaluate("el => ({border: getComputedStyle(el).borderTopWidth, background: getComputedStyle(el).backgroundColor})")
+            assert trigger_appearance["border"] == "0px", trigger_appearance
+            await trigger.click()
+            panel = page.locator(".composer-settings-popover")
+            assert await panel.get_attribute("data-side") == "top"
+            assert await page.get_by_role("searchbox").count() == 0
+            await page.get_by_role("button", name=switch_model, exact=False).click()
             search = page.get_by_role("searchbox", name=search_name)
             await search.focus()
             appearance = await search.evaluate("""el => {
@@ -93,6 +105,11 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             assert appearance["border"] == "0px" and appearance["shadow"] == "none", appearance
             assert appearance["rowBorder"] == "0px", appearance
             assert appearance["rowBackground"] not in {"transparent", "rgba(0, 0, 0, 0)"}, appearance
+            model_popup = await page.locator(".composer-model-popover").bounding_box()
+            assert model_popup["x"] >= 0 and model_popup["x"] + model_popup["width"] <= width + 1, model_popup
+            assert model_popup["y"] >= 0 and model_popup["y"] + model_popup["height"] <= height + 1, model_popup
+            await page.keyboard.press("Escape")
+            assert await page.get_by_role("searchbox").count() == 0
 
             slider = page.get_by_role("slider", name=thinking)
             assert await slider.get_attribute("aria-orientation") == "vertical"
@@ -126,27 +143,33 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             await slider.press("ArrowDown")
             assert await slider.get_attribute("aria-valuetext") == high
             await page.screenshot(path=str(screenshots / f"{theme}-{language}-{width}-lever.png"))
-            popup = await page.locator(".composer-model-popover").bounding_box()
+            popup = await panel.bounding_box()
+            assert popup["width"] <= 220, popup
             assert popup["x"] >= 0 and popup["x"] + popup["width"] <= width + 1, popup
             assert popup["y"] >= 0 and popup["y"] + popup["height"] <= height + 1, popup
             assert box["y"] + box["height"] <= popup["y"] + popup["height"], (box, popup)
 
+            await page.get_by_role("button", name=switch_model, exact=False).click()
             await search.fill("text-model")
             await page.get_by_role("button", name="openai/text-model", exact=True).click()
             assert await page.get_by_role("slider").count() == 0
+            assert await panel.is_visible()
+            await page.get_by_role("button", name=switch_model, exact=False).click()
             await search.fill("opus")
             await page.get_by_role("button", name="anthropic/claude-opus-4-8", exact=True).click()
+            assert await page.get_by_role("searchbox").count() == 0
             assert await slider.get_attribute("aria-valuetext") == default
             await slider.focus()
             await slider.press("ArrowUp")
             await slider.press("ArrowUp")
             await page.keyboard.press("Escape")
+            assert await trigger.inner_text() == ("claude-opus-4-8\n" + high)
             await page.get_by_role("textbox", name="消息内容" if zh else "Message", exact=True).fill("Explain the results")
             await page.get_by_role("button", name="发送消息" if zh else "Send message", exact=True).click()
             await page.wait_for_function("document.querySelector('.composer-input-area textarea').value === ''")
             assert sent[0]["model"] == "anthropic/claude-opus-4-8" and sent[0]["reasoning_effort"] == "high", sent
             assert not errors, errors
-            print(f"PASS {theme} {language} {width}x{height}: focus, upward drag, keyboard, reset, request", flush=True)
+            print(f"PASS {theme} {language} {width}x{height}: right controls, settings panel, focus, upward drag, keyboard, reset, request", flush=True)
             await context.close()
         await browser.close()
 
