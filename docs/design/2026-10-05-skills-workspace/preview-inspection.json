@@ -1,0 +1,68 @@
+{
+  "artifact": "standalone design preview, not product tests",
+  "checks": [
+    {
+      "cards": 31,
+      "first_card": {
+        "x": 419,
+        "y": 320,
+        "width": 100,
+        "height": 80
+      }
+    },
+    {
+      "search_homology_results": 2,
+      "focused_input_styles": {
+        "outline": "none",
+        "border": "none"
+      }
+    },
+    {
+      "selected_file": "references/inputs.md"
+    },
+    {
+      "cancel_restored_file": true
+    },
+    {
+      "session_selection_count": "3"
+    },
+    {
+      "workspace_paused": "false"
+    },
+    {
+      "mobile_skills_width": {
+        "viewport": 390,
+        "content": 390
+      }
+    },
+    {
+      "mobile_dialog": {
+        "x": 12,
+        "y": 172,
+        "width": 366,
+        "height": 500
+      }
+    },
+    {
+      "mobile_chat_width": {
+        "viewport": 390,
+        "content": 390
+      }
+    }
+  ],
+  "page_errors": [],
+  "final_layout_checks": [
+    {
+      "mobile_file_content_bottom": 614,
+      "mobile_footer_top": 614,
+      "content_stays_above_footer": true
+    },
+    {
+      "picker_reopens_at_top": 0,
+      "mobile_chat_width": 390
+    },
+    {
+      "settings_mobile_width": 390
+    }
+  ]
+}
