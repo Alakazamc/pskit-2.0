@@ -1,6 +1,6 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Atom, Clock3, Database, ExternalLink, Search } from "lucide-react";
+import { ArrowRight, Atom, Clock3, Database, Dna, ExternalLink, Search } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { McpResult, Project, ResearchApi } from "../../api/types";
@@ -12,6 +12,9 @@ import { CatalogSearch } from "../../components/catalog/CatalogSearch";
 import { DetailPanel } from "../../components/catalog/DetailPanel";
 import { GenericToolPage } from "./GenericToolPage";
 import { StructureViewerPage } from "./StructureViewerPage";
+import { CoralWorkspace } from "../coral/CoralWorkspace";
+import { CoralHistory } from "../coral/CoralHistory";
+import { coralCapabilityId } from "../coral/coralResult";
 
 export function ToolDirectory({ api, userId, projects, selectedName, viewer = false, theme }: {
   api: ResearchApi; userId: string; projects: Project[]; selectedName?: string;
@@ -24,6 +27,8 @@ export function ToolDirectory({ api, userId, projects, selectedName, viewer = fa
   const matches = (name: string, description = "") => `${name} ${description}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase());
   const filtered = (tools.data ?? []).filter((tool) => matches(tool.name, tool.description));
   const showViewer = matches(t("tools.viewerTitle"), t("tools.viewerCardDescription"));
+  const showCoral = matches("CORAL", t("coral.description"));
+  const coral = selectedName === coralCapabilityId;
   const selected = tools.data?.find((tool) => tool.name === selectedName);
   return <div className="mono-page-scroll"><div className="mono-page-content">
     <CatalogSearch value={search} onChange={setSearch} label={t("tools.searchDirectory")} />
@@ -31,13 +36,14 @@ export function ToolDirectory({ api, userId, projects, selectedName, viewer = fa
     {tools.isError && <p className="mono-form-error" role="alert">{t("tools.loadFailed")}</p>}
     <div className="catalog-entry-grid">
       {showViewer && <CatalogCard title={t("tools.viewerTitle")} description={t("tools.viewerCardDescription")} icon={<Atom />} to="/tools/structure" />}
+      {showCoral && <CatalogCard title="CORAL" description={t("coral.description")} icon={<Dna />} to="/tools/coral" />}
       {filtered.map((tool) => <CatalogCard key={tool.name} title={tool.name} description={tool.description} icon={<Database />} to={tool.name === "search_pdb" ? "/tools/pdb" : `/tools/run/${encodeURIComponent(tool.name)}`} />)}
     </div>
-    {!tools.isLoading && !tools.isError && !showViewer && filtered.length === 0 && <p className="mono-muted">{t("catalog.noMatches")}</p>}
-    {(selectedName || viewer) && <ToolDetails key={viewer ? "viewer" : selectedName} title={viewer ? t("tools.viewerTitle") : selectedName!}
-      description={viewer ? t("tools.viewerCardDescription") : selected?.description} onClose={() => navigate("/tools")}
+    {!tools.isLoading && !tools.isError && !showViewer && !showCoral && filtered.length === 0 && <p className="mono-muted">{t("catalog.noMatches")}</p>}
+    {(selectedName || viewer) && <ToolDetails key={viewer ? "viewer" : selectedName} title={coral ? "CORAL" : viewer ? t("tools.viewerTitle") : selectedName!}
+      description={coral ? t("coral.description") : viewer ? t("tools.viewerCardDescription") : selected?.description} onClose={() => navigate("/tools")}
       api={api} userId={userId} projects={projects} tool={selectedName}>
-      {viewer ? <StructureViewerPage theme={theme} /> : selectedName === "search_pdb" ? <PdbWorkspace api={api} userId={userId} /> : <GenericToolPage api={api} userId={userId} name={selectedName!} />}
+      {coral ? <CoralWorkspace api={api} userId={userId} /> : viewer ? <StructureViewerPage theme={theme} /> : selectedName === "search_pdb" ? <PdbWorkspace api={api} userId={userId} /> : <GenericToolPage api={api} userId={userId} name={selectedName!} />}
     </ToolDetails>}
   </div></div>;
 }
@@ -51,7 +57,11 @@ function ToolDetails({ title, description, onClose, api, userId, projects, tool,
   const tab = tool && searchParams.get("tab") === "history" ? "history" : "run";
   const body = useRef<HTMLDivElement>(null);
   const focusPending = useRef(false);
-  const focusArgument = () => body.current?.querySelector<HTMLElement>("input:not([disabled]),textarea:not([disabled]),select:not([disabled])")?.focus();
+  const focusArgument = () => {
+    const expand = body.current?.querySelector<HTMLButtonElement>("button[data-coral-expand]");
+    if (expand && expand.getClientRects().length) expand.click();
+    else body.current?.querySelector<HTMLElement>("input:not([disabled]),textarea:not([disabled]),select:not([disabled])")?.focus();
+  };
   useLayoutEffect(() => {
     if (tab === "run" && focusPending.current) {
       focusPending.current = false;
@@ -67,13 +77,13 @@ function ToolDetails({ title, description, onClose, api, userId, projects, tool,
     if (tab === "run") focusArgument();
     else { focusPending.current = true; selectTab("run"); }
   };
-  return <DetailPanel open onOpenChange={(open) => { if (!open) onClose(); }} title={title} description={description} onEdit={edit}>
+  return <DetailPanel open onOpenChange={(open) => { if (!open) onClose(); }} title={title} description={description} onEdit={edit} className={tool === coralCapabilityId ? "coral-detail-panel" : ""}>
     <div ref={body}><Tabs.Root value={tab} onValueChange={selectTab}>
       {tool && <Tabs.List className="catalog-detail-tabs" aria-label={title}>
         <Tabs.Trigger value="run">{t("tools.arguments")}</Tabs.Trigger><Tabs.Trigger value="history">{t("tools.history")}</Tabs.Trigger>
       </Tabs.List>}
       <Tabs.Content value="run" forceMount hidden={tab !== "run"}>{children}</Tabs.Content>
-      {tool && <Tabs.Content value="history"><ToolRunHistory api={api} projects={projects} userId={userId} tool={tool} /></Tabs.Content>}
+      {tool && <Tabs.Content value="history">{tool === coralCapabilityId ? <CoralHistory api={api} userId={userId} /> : <ToolRunHistory api={api} projects={projects} userId={userId} tool={tool} />}</Tabs.Content>}
     </Tabs.Root></div>
   </DetailPanel>;
 }

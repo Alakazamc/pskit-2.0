@@ -53,8 +53,17 @@ export type McpResult = Api.McpInvokeResult & { status: "completed" };
 export type ToolRun = Api.ToolRun & { project_id: string | null };
 export type Af3Job = Api.Af3Job;
 export type Af3JobRequest = Api.Af3JobRequest;
+export type ComputeCapability = Api.CapabilityVersion;
+export type ComputeJob = Api.ComputeJob;
+export type ComputeJobRequest = Api.ComputeJobRequest;
+export type ComputeJobSummary = Api.ComputeJobSummary;
 
 export interface ResearchApi extends AdminApi {
+  getComputeCapabilities(): Promise<ComputeCapability[]>;
+  getComputeJobs(capabilityId: string): Promise<ComputeJobSummary[]>;
+  submitComputeJob(payload: ComputeJobRequest, key: string): Promise<ComputeJob>;
+  getComputeJob(id: string): Promise<ComputeJob>;
+  cancelComputeJob(id: string): Promise<ComputeJob>;
   startAnonymous(captchaToken?: string): Promise<AuthSessionResponse>;
   beginGuestEmailUpgrade(email: string): Promise<Api.EmailUpgradeStartResponse>;
   verifyGuestEmailUpgrade(email: string, code: string): Promise<AuthSessionResponse>;

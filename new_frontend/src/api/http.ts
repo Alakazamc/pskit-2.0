@@ -47,6 +47,11 @@ export function createHttpApi({ baseUrl = "/api/v1", token, fetcher = fetch, onU
   };
   return {
     ...createAdminApi(request),
+    getComputeCapabilities: () => request("/compute/capabilities"),
+    getComputeJobs: (capabilityId) => request(`/compute/jobs?capability_id=${encodeURIComponent(capabilityId)}`),
+    submitComputeJob: (payload, key) => request("/compute/jobs", { method: "POST", body: JSON.stringify(payload), headers: { "Idempotency-Key": key } }),
+    getComputeJob: (id) => request(`/compute/jobs/${encodeURIComponent(id)}`),
+    cancelComputeJob: (id) => post(`/compute/jobs/${encodeURIComponent(id)}/cancel`, {}),
     startAnonymous: (captchaToken) => post("/auth/anonymous", { captcha_token: captchaToken ?? null }),
     beginGuestEmailUpgrade: (email) => post("/auth/upgrade/email", { email }),
     verifyGuestEmailUpgrade: (email, code) => post("/auth/upgrade/email/verify", { email, token: code }),
