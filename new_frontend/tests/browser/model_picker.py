@@ -95,7 +95,9 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             panel = page.locator(".composer-settings-popover")
             assert await panel.get_attribute("data-side") == "top"
             settings_box = await panel.bounding_box()
-            assert settings_box["width"] <= 96, settings_box
+            assert settings_box["width"] <= 88, settings_box
+            padding = await panel.evaluate("el => parseFloat(getComputedStyle(el).paddingLeft)")
+            assert padding <= 4, padding
             assert settings_box["width"] * settings_box["height"] <= 22000, settings_box
             assert settings_box["height"] <= 176, settings_box
             assert await panel.get_by_text("模型" if zh else "Model", exact=True).count() == 0
@@ -104,6 +106,12 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             level_box = await model_button.locator("span").bounding_box()
             caret_box = await model_button.locator("svg").bounding_box()
             assert caret_box["y"] >= level_box["y"] + level_box["height"], (level_box, caret_box)
+            level_center_y = level_box["y"] + level_box["height"] / 2
+            assert abs(level_center_y - settings_box["y"] - settings_box["height"] / 2) <= 1, (level_box, settings_box)
+            grip_box = await panel.locator(".composer-effort-grip").bounding_box()
+            left_center_x = (settings_box["x"] + padding + 1 + grip_box["x"]) / 2
+            assert abs(level_box["x"] + level_box["width"] / 2 - left_center_x) <= 2, (level_box, grip_box)
+            assert abs(caret_box["x"] + caret_box["width"] / 2 - level_box["x"] - level_box["width"] / 2) <= 1, (caret_box, level_box)
             assert await page.get_by_role("searchbox").count() == 0
             await page.get_by_role("button", name=switch_model, exact=False).click()
             search = page.get_by_role("searchbox", name=search_name)
@@ -173,8 +181,11 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             assert await slider.get_attribute("aria-valuetext") == maximum
             maximum_box = await model_button.bounding_box()
             assert maximum_box["x"] >= settings_box["x"] and maximum_box["x"] + maximum_box["width"] <= settings_box["x"] + settings_box["width"], (maximum_box, settings_box)
+            maximum_label = await model_button.locator("span").bounding_box()
+            assert abs(maximum_label["y"] + maximum_label["height"] / 2 - level_center_y) <= 1, (maximum_label, level_box)
             await slider.press("Home")
             box = await slider.bounding_box()
+            assert box["width"] >= 44 and box["x"] >= settings_box["x"] and box["x"] + box["width"] <= settings_box["x"] + settings_box["width"], (box, settings_box)
             x, bottom, top = box["x"] + box["width"] / 2, box["y"] + box["height"] - 10, box["y"] + 10
             if width < 500:
                 cdp = await context.new_cdp_session(page)
