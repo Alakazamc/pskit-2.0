@@ -197,8 +197,9 @@
 .composer-model-trigger>svg{flex:none;color:var(--mono-muted,var(--secondary))}
 .composer-model-effort{flex:none;padding-left:6px;border-left:1px solid var(--mono-border,var(--border));color:var(--mono-muted,var(--secondary))}
 .composer-model-popover{z-index:220;width:min(410px,calc(100vw - 24px));max-height:min(70dvh,560px);display:flex;flex-direction:column;overflow:hidden;padding:9px;border:1px solid var(--mono-border,var(--border));border-radius:16px;background:var(--mono-surface,var(--surface));color:var(--mono-text,var(--text));box-shadow:0 18px 50px #0003}
-.composer-model-search{height:38px;display:flex;align-items:center;gap:8px;padding:0 10px;border:1px solid var(--mono-border,var(--border));border-radius:9px;color:var(--mono-muted,var(--secondary))}
-.composer-model-search input{width:100%;height:100%;border:0;outline:0;background:transparent;color:var(--mono-text,var(--text));font:inherit;font-size:13px}
+.composer-model-search{height:38px;flex:none;display:flex;align-items:center;gap:8px;padding:0 10px;border:0;border-radius:9px;color:var(--mono-muted,var(--secondary))}
+.composer-model-search:focus-within{background:var(--mono-subtle,var(--soft))}
+.composer-model-search input,.mono-app .composer-model-search input:focus-visible{min-width:0;width:100%;height:100%;margin:0;padding:0;border:0;outline:none;box-shadow:none;appearance:none;background:transparent;color:var(--mono-text,var(--text));font:inherit;font-size:13px}
 .composer-model-list{min-height:0;max-height:235px;overflow:auto;padding:7px 0}
 .composer-model-group-label,.composer-model-section-title{padding:7px 8px;color:var(--mono-muted,var(--secondary));font-size:11px;font-weight:650}
 .composer-model-option{width:100%;min-height:48px;display:flex;align-items:center;gap:10px;padding:6px 9px;border:0;border-radius:9px;background:transparent;color:var(--mono-text,var(--text));text-align:left;cursor:pointer}
@@ -209,13 +210,29 @@
 .composer-model-option-text small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mono-muted,var(--secondary));font-size:10px}
 .composer-model-option>svg{flex:none;color:var(--mono-text,var(--text))}
 .composer-model-empty{margin:12px 8px;color:var(--mono-muted,var(--secondary));font-size:12px}
-.composer-model-thinking{border-top:1px solid var(--mono-border,var(--border));padding:3px 0 2px}
+.composer-model-thinking{flex:none;border-top:1px solid var(--mono-border,var(--border));padding:3px 0 2px}
 .composer-model-thinking>p{margin:5px 8px;color:var(--mono-muted,var(--secondary));font-size:11px}
-.composer-effort-options{display:flex;flex-wrap:wrap;gap:6px;padding:3px 8px}
-.composer-effort-options label{min-width:44px;min-height:34px;display:flex;align-items:center;justify-content:center;padding:0 9px;border:1px solid var(--mono-border,var(--border));border-radius:8px;color:var(--mono-muted,var(--secondary));font-size:12px;cursor:pointer}
-.composer-effort-options label:has(input:checked){border-color:var(--mono-text,var(--text));background:var(--mono-subtle,var(--soft));color:var(--mono-text,var(--text))}
-.composer-effort-options input{position:absolute;width:1px;height:1px;opacity:0}
-.composer-effort-options label:focus-within{outline:2px solid var(--mono-text,var(--text));outline-offset:2px}
+.composer-thinking-header{display:flex;align-items:center;justify-content:space-between;padding-right:8px}
+.composer-thinking-header strong{color:var(--mono-text,var(--text));font-size:12px;font-weight:600}
+.composer-effort-control{--effort-height:clamp(164px,32dvh,196px);display:flex;align-items:center;gap:14px;padding:8px}
+.composer-effort-lever{position:relative;width:44px;height:var(--effort-height);flex:none;border-radius:9px;background:var(--mono-subtle,var(--soft))}
+.composer-effort-lever:has(input:focus-visible){background:var(--mono-selected,var(--hover));box-shadow:inset 0 0 0 1px var(--mono-soft,var(--secondary))}
+.composer-effort-face{position:absolute;inset:10px 0;pointer-events:none}
+.composer-effort-track{position:absolute;top:0;bottom:0;left:20px;width:4px;overflow:hidden;border-radius:4px;background:var(--mono-border,var(--border))}
+.composer-effort-track>span{position:absolute;bottom:0;width:100%;height:var(--effort-position);border-radius:inherit;background:var(--mono-soft,var(--secondary))}
+.composer-effort-grip{position:absolute;bottom:var(--effort-position);left:50%;width:34px;height:20px;transform:translate(-50%,50%);border:1px solid var(--mono-border,var(--border));border-radius:5px;background:var(--mono-text,var(--text));color:var(--mono-inverse,var(--surface));box-shadow:0 2px 5px #0002}
+.composer-effort-grip::before{content:"";position:absolute;inset:6px 8px;border-top:1px solid currentColor;border-bottom:1px solid currentColor;opacity:.55}
+.composer-effort-lever input{position:absolute;inset:0;width:44px;height:100%;margin:0;padding:0;border:0;appearance:none;writing-mode:vertical-lr;direction:rtl;opacity:0;cursor:ns-resize;touch-action:none}
+.composer-effort-lever input::-webkit-slider-thumb{appearance:none;width:20px;height:20px}
+.composer-effort-lever input::-moz-range-thumb{width:20px;height:20px;border:0}
+.composer-effort-scale{height:var(--effort-height);min-width:52px;flex:none;display:flex;flex-direction:column;justify-content:space-between}
+.composer-effort-scale span{height:20px;display:flex;align-items:center;gap:9px;color:var(--mono-muted,var(--secondary));font-size:12px}
+.composer-effort-scale span::before{content:"";width:9px;height:1px;background:var(--mono-border,var(--border))}
+.composer-effort-scale span[data-active="true"]{color:var(--mono-text,var(--text));font-weight:650}
+.composer-effort-scale span[data-active="true"]::before{background:var(--mono-text,var(--text))}
+.composer-effort-guidance{min-width:0;padding-left:6px;color:var(--mono-muted,var(--secondary));font-size:11px;line-height:1.65}
+.composer-effort-guidance p{margin:0 0 6px}
+.composer-effort-guidance p:first-child{color:var(--mono-text,var(--text));font-weight:500}
 @media(max-width:500px){.composer-model-trigger{max-width:min(57vw,230px)}.composer-model-popover{max-height:68dvh}.composer-model-list{max-height:30dvh}}
 .add-button {
   height:31px;

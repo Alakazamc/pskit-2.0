@@ -1,16 +1,12 @@
 import * as Popover from "@radix-ui/react-popover";
-import { Check, ChevronDown, Search } from "lucide-react";
+import { Check, ChevronUp, Search } from "lucide-react";
 import { useState } from "react";
 import type { MessageRequest, ModelOption } from "../../api/types";
 import { useWorkspacePortalContainer } from "../../hooks/useWorkspacePortalContainer";
 import { useLanguage } from "../../i18n/LanguageProvider";
+import { effortKeys, ThinkingSlider } from "./ThinkingSlider";
 
 type Effort = NonNullable<MessageRequest["reasoning_effort"]>;
-const effortKeys: Record<Effort, "composer.effortOff" | "composer.effortMinimal" | "composer.effortLow" | "composer.effortMedium" | "composer.effortHigh" | "composer.effortXhigh" | "composer.effortMax"> = {
-  off: "composer.effortOff", minimal: "composer.effortMinimal", low: "composer.effortLow",
-  medium: "composer.effortMedium", high: "composer.effortHigh",
-  xhigh: "composer.effortXhigh", max: "composer.effortMax",
-};
 
 function modelLabel(id: string): string {
   return id.split("/").at(-1) ?? id;
@@ -42,7 +38,7 @@ export function ModelPicker({ models, selected, effort, hasImages, selectionUnav
   const effortLabel = t(activeEffort ? effortKeys[activeEffort] : "composer.effortDefault");
   return <Popover.Root open={open} onOpenChange={(next) => { setOpen(next); if (!next) setQuery(""); }}>
     <Popover.Trigger asChild><button type="button" className="composer-model-trigger" aria-label={`${t("composer.chooseModel")}: ${label} · ${effortLabel}`} title={selected?.id}>
-      <span>{label}</span><span className="composer-model-effort">{effortLabel}</span><ChevronDown size={14} aria-hidden="true" />
+      <span>{label}</span><span className="composer-model-effort">{effortLabel}</span><ChevronUp size={14} aria-hidden="true" />
     </button></Popover.Trigger>
     <Popover.Portal container={portalContainer}><Popover.Content className="composer-model-popover" side="top" sideOffset={9} align="start" collisionPadding={12}>
       <div className="composer-model-search"><Search size={15} aria-hidden="true" /><input type="search" aria-label={t("composer.searchModels")} placeholder={t("composer.searchModels")} value={query} onChange={(event) => setQuery(event.target.value)} /></div>
@@ -61,14 +57,10 @@ export function ModelPicker({ models, selected, effort, hasImages, selectionUnav
         </div>)}
       </div>
       <div className="composer-model-thinking">
-        <div className="composer-model-section-title">{t("composer.thinkingLevel")}</div>
-        {levels.length === 0 ? <p>{t("composer.noThinkingLevels")}</p> : <>
-          <div className="composer-effort-options" role="radiogroup" aria-label={t("composer.thinkingLevel")}>
-            <label><input type="radio" name="composer-thinking-level" checked={!activeEffort} onChange={() => onEffortChange(undefined)} />{t("composer.effortDefault")}</label>
-            {levels.map((level) => <label key={level}><input type="radio" name="composer-thinking-level" checked={activeEffort === level} onChange={() => onEffortChange(level)} />{t(effortKeys[level])}</label>)}
-          </div>
-          <p>{t("composer.thinkingHint")}</p>
-        </>}
+        {levels.length === 0 ? <>
+          <div className="composer-model-section-title">{t("composer.thinkingLevel")}</div>
+          <p>{t("composer.noThinkingLevels")}</p>
+        </> : <ThinkingSlider levels={levels} effort={activeEffort} onChange={onEffortChange} />}
       </div>
     </Popover.Content></Popover.Portal>
   </Popover.Root>;

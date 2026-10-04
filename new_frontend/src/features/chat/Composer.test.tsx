@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Composer } from "./Composer";
@@ -119,7 +119,10 @@ describe("Composer file references", () => {
     await user.click(screen.getByRole("button", { name: /选择模型/ }));
     await user.type(screen.getByRole("searchbox", { name: "搜索模型" }), "opus");
     await user.click(screen.getByRole("button", { name: /claude-opus-4-8/ }));
-    await user.click(screen.getByRole("radio", { name: "高" }));
+    const slider = screen.getByRole("slider", { name: "推理强度" });
+    expect(slider).toHaveAttribute("aria-orientation", "vertical");
+    fireEvent.change(slider, { target: { value: "2" } });
+    expect(slider).toHaveAttribute("aria-valuetext", "高");
     await user.type(screen.getByLabelText("消息内容"), "解释一下");
     await user.click(screen.getByRole("button", { name: "发送消息" }));
     expect(onSend).toHaveBeenCalledWith(expect.objectContaining({

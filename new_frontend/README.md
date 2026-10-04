@@ -79,4 +79,12 @@ npm run lint
 npm run build
 ```
 
+模型选择器的浏览器回归脚本位于 `tests/browser/model_picker.py`。在安装了 Python Playwright 和 Chromium 的环境中，保持前端运行后执行：
+
+```bash
+python tests/browser/model_picker.py --base-url http://localhost:5174
+```
+
+可用 `--browser-executable` 指定已有 Chromium，用 `--screenshots` 指定截图目录。脚本拦截认证、模型目录和聊天 API，使用合成数据，检查搜索框焦点边框、向上拖动推理推杆、手机触摸、键盘档位、模型切换重置和实际发送参数，不调用真实模型。覆盖中英、深浅主题及桌面、手机宽度。
+
 后端默认 mock 使用进程内状态，重启后重置；当前 Skill 和 MCP mock 资源来自服务端目录。启用后端 `RESEARCH_AGENT_RUNTIME=pi` 后，消息、Run、事件和 AF3 mock 任务持久化到 SQLite；前端刷新时会从会话最近一次 Run 恢复进度订阅。模型调用需要服务端配置 Pi 凭据；Token 用量优先采用模型回报值，缺失时按输入估算。
