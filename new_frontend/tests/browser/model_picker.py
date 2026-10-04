@@ -2,7 +2,9 @@
 
 import argparse
 import asyncio
+import colorsys
 import json
+import re
 from pathlib import Path
 
 from playwright.async_api import async_playwright
@@ -56,6 +58,8 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
                          "reasoning_levels": ["medium", "high", "xhigh", "max"]},
                         {"id": "openai/text-model", "supports_images": False,
                          "reasoning_levels": []},
+                        {"id": "openai/effort-model", "supports_images": False,
+                         "reasoning_levels": ["off", "minimal", "low", "medium", "high", "xhigh", "max"]},
                         *[{"id": f"provider/model-{n}", "supports_images": False,
                            "reasoning_levels": []} for n in range(20)],
                     ]
@@ -123,11 +127,38 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
 
             slider = page.get_by_role("slider", name=thinking)
             assert await slider.get_attribute("aria-orientation") == "vertical"
+            flame = page.locator(".composer-effort-track > span")
+
+            async def flame_appearance():
+                return await flame.evaluate("""el => {
+                    const s = getComputedStyle(el);
+                    return {color: s.backgroundColor, glow: s.boxShadow,
+                            height: el.getBoundingClientRect().height,
+                            opacity: s.opacity};
+                }""")
+
+            async def check_flame(level, hue_range):
+                appearance = await flame_appearance()
+                channels = [float(n) / 255 for n in re.findall(r"[\d.]+", appearance["color"])[:3]]
+                hue, saturation, _ = colorsys.rgb_to_hsv(*channels)
+                assert hue_range[0] <= hue * 360 <= hue_range[1] and saturation > 0.5, (level, appearance)
+                assert appearance["glow"] != "none" and appearance["height"] > 0, (level, appearance)
+                await panel.screenshot(path=str(screenshots / f"{theme}-{language}-{width}-{level}.png"))
+                return appearance
+
             await slider.focus()
             await slider.press("ArrowUp")
             assert await slider.get_attribute("aria-valuetext") == medium
+            await check_flame("medium", (150, 175))
             await slider.press("ArrowUp")
             assert await slider.get_attribute("aria-valuetext") == high
+            await check_flame("high", (40, 60))
+            await slider.press("ArrowUp")
+            await check_flame("xhigh", (15, 35))
+            await slider.press("ArrowUp")
+            await check_flame("max", (0, 12))
+            await slider.press("ArrowDown")
+            await slider.press("ArrowDown")
             await slider.press("ArrowDown")
             assert await slider.get_attribute("aria-valuetext") == medium
             await slider.press("Home")
@@ -161,6 +192,20 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             assert popup["y"] >= 0 and popup["y"] + popup["height"] <= height + 1, popup
             assert box["y"] + box["height"] <= popup["y"] + popup["height"], (box, popup)
 
+            await model_button.click()
+            await search.fill("effort-model")
+            await page.get_by_role("button", name="openai/effort-model", exact=True).click()
+            assert (await flame_appearance())["height"] == 0
+            await slider.focus()
+            await slider.press("ArrowUp")
+            assert (await flame_appearance())["opacity"] == "0"
+            await slider.press("ArrowUp")
+            await check_flame("minimal", (210, 230))
+            await slider.press("ArrowUp")
+            await check_flame("low", (180, 200))
+            await slider.press("ArrowUp")
+            await check_flame("medium", (150, 175))
+
             await page.get_by_role("button", name=switch_model, exact=False).click()
             await search.fill("text-model")
             await page.get_by_role("button", name="openai/text-model", exact=True).click()
@@ -181,7 +226,7 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             await page.wait_for_function("document.querySelector('.composer-input-area textarea').value === ''")
             assert sent[0]["model"] == "anthropic/claude-opus-4-8" and sent[0]["reasoning_effort"] == "high", sent
             assert not errors, errors
-            print(f"PASS {theme} {language} {width}x{height}: right controls, settings panel, focus, upward drag, keyboard, reset, request", flush=True)
+            print(f"PASS {theme} {language} {width}x{height}: right controls, settings panel, focus, colored exhaust, upward drag, keyboard, reset, request", flush=True)
             await context.close()
         await browser.close()
 

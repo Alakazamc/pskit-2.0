@@ -27,7 +27,7 @@ export function ThinkingSlider({ levels, effort, onChange, levelControl }: {
 
   return <>
     <div className="composer-effort-control">
-      <div className="composer-effort-lever" style={{ "--effort-position": position, "--effort-fraction": index / (steps.length - 1) } as CSSProperties}>
+      <div className="composer-effort-lever" data-effort={steps[index] ?? "default"} style={{ "--effort-position": position, "--effort-fraction": index / (steps.length - 1) } as CSSProperties}>
         <div className="composer-effort-face" aria-hidden="true">
           <span className="composer-effort-track"><span /></span>
           <span className="composer-effort-grip"><Plane size={26} className="composer-plane-icon" fill="currentColor" strokeWidth={1.3} /></span>
