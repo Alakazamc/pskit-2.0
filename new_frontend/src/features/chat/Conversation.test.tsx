@@ -144,6 +144,26 @@ it("renders incomplete streamed Markdown and shows a spinner without a progress 
   expect((await screen.findByText("部分内容")).closest("strong")).toBeInTheDocument();
 });
 
+it("keeps the streamed reply visible until the saved reply replaces it", async () => {
+  const user: Message = {
+    id: "user-current", session_id: "session-1", role: "user", created_at: "2026-10-04T10:00:00Z",
+    parts: [{ type: "text", text: "Please answer" }],
+  };
+  const run = projectEvents(emptyRun, [
+    { id: "1", run_id: "run-current", created_at: "2026-10-04T10:00:01Z", type: "message.delta", data: { delta: "Ready to help" } },
+    { id: "2", run_id: "run-current", created_at: "2026-10-04T10:00:02Z", type: "run.completed", data: { status: "completed" } },
+  ]);
+  const { rerender } = render(<LanguageProvider><Conversation messages={[user]} run={run} /></LanguageProvider>);
+  expect(await screen.findByText("Ready to help")).toBeVisible();
+
+  const saved: Message = {
+    id: "assistant-current", session_id: "session-1", role: "assistant", created_at: "2026-10-04T10:00:02Z",
+    parts: [{ type: "text", text: "Ready to help" }],
+  };
+  rerender(<LanguageProvider><Conversation messages={[user, saved]} run={run} /></LanguageProvider>);
+  await waitFor(() => expect(screen.getAllByText("Ready to help")).toHaveLength(1));
+});
+
 it("copies the raw text of each assistant reply from its lower-left action", async () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });

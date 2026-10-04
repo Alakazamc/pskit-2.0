@@ -85,6 +85,13 @@ export function Conversation({ messages, run, runId, onCancel }: { messages: Mes
   const { t } = useLanguage();
   const runError = localizedRunError(run, t);
   const runActive = (run.status === "running" || run.status === "waiting") && !run.approval;
+  const lastUserIndex = messages.reduce((last, message, index) => message.role === "user" ? index : last, -1);
+  const runStartedAt = run.events.find((event) => event.created_at)?.created_at;
+  const savedReplyAvailable = messages.some((message, index) => message.role === "assistant"
+    && index > lastUserIndex
+    && (!runStartedAt || Date.parse(message.created_at) >= Date.parse(runStartedAt)));
+  const showRunReply = run.status !== "idle" && (run.status !== "completed"
+    || (run.text.length > 0 && !savedReplyAvailable));
   return <div className="conversation-scroll">
     {messages.length === 0 && run.status === "idle" ? <div className="empty-chat">
       <div className="empty-icon"><FlaskConical size={28} /></div>
@@ -105,7 +112,7 @@ export function Conversation({ messages, run, runId, onCancel }: { messages: Mes
         {message.role === "assistant" && <div className="assistant-avatar"><Bot size={17} /></div>}
         <div className="message-body">{message.role === "assistant" && <span className="message-author">Research Agent</span>}<MessageParts parts={message.parts} markdown={message.role === "assistant"} />{message.role === "assistant" && <div className="message-actions"><ReplyCopyButton text={message.parts.filter((part) => part.type === "text").map((part) => part.text).join("\n\n")} /></div>}</div>
       </article>)}
-      {run.status !== "idle" && run.status !== "completed" && <article className="message-row assistant"><div className="assistant-avatar"><Bot size={17} /></div><div className="message-body"><span className="message-author">Research Agent</span>{runError ? <p className="message-text">{runError}</p> : run.text && <LazyMarkdownContent text={run.text} streaming={runActive} />}{run.tools.filter((tool) => tool.status === "running").map((tool) => <div className="task-pill" key={tool.id}><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {tool.name}</div>)}{run.jobId && !["failed", "cancelled"].includes(run.status) && <div className="task-pill"><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {run.jobLabel || t("conversation.backgroundTask")}{Number.isFinite(run.progress) && ` · ${Math.round(run.progress)}%`}</div>}<div className="message-actions"><ReplyCopyButton text={runError ?? run.text} />{runActive && <span className="message-generating" role="status" aria-label={t("conversation.generating")}><LoaderCircle className="message-spinner" size={16} aria-hidden="true" /></span>}{runActive && onCancel && <StopRunButton key={runId ?? "active"} onCancel={onCancel} />}</div></div></article>}
+      {showRunReply && <article className="message-row assistant"><div className="assistant-avatar"><Bot size={17} /></div><div className="message-body"><span className="message-author">Research Agent</span>{runError ? <p className="message-text">{runError}</p> : run.text && <LazyMarkdownContent text={run.text} streaming={runActive} />}{run.tools.filter((tool) => tool.status === "running").map((tool) => <div className="task-pill" key={tool.id}><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {tool.name}</div>)}{run.jobId && !["failed", "cancelled"].includes(run.status) && <div className="task-pill"><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {run.jobLabel || t("conversation.backgroundTask")}{Number.isFinite(run.progress) && ` · ${Math.round(run.progress)}%`}</div>}<div className="message-actions"><ReplyCopyButton text={runError ?? run.text} />{runActive && <span className="message-generating" role="status" aria-label={t("conversation.generating")}><LoaderCircle className="message-spinner" size={16} aria-hidden="true" /></span>}{runActive && onCancel && <StopRunButton key={runId ?? "active"} onCancel={onCancel} />}</div></div></article>}
     </div>}
   </div>;
 }
