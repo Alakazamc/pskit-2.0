@@ -91,6 +91,7 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             panel = page.locator(".composer-settings-popover")
             assert await panel.get_attribute("data-side") == "top"
             settings_box = await panel.bounding_box()
+            assert settings_box["width"] <= 96, settings_box
             assert settings_box["width"] * settings_box["height"] <= 22000, settings_box
             assert settings_box["height"] <= 176, settings_box
             assert await panel.get_by_text("模型" if zh else "Model", exact=True).count() == 0
@@ -133,6 +134,8 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             assert await slider.get_attribute("aria-valuetext") == default
             await slider.press("End")
             assert await slider.get_attribute("aria-valuetext") == maximum
+            maximum_box = await model_button.bounding_box()
+            assert maximum_box["x"] >= settings_box["x"] and maximum_box["x"] + maximum_box["width"] <= settings_box["x"] + settings_box["width"], (maximum_box, settings_box)
             await slider.press("Home")
             box = await slider.bounding_box()
             x, bottom, top = box["x"] + box["width"] / 2, box["y"] + box["height"] - 10, box["y"] + 10
