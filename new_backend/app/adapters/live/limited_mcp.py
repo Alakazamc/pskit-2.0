@@ -1,9 +1,9 @@
 import asyncio
+from threading import Event
 
 from app.contracts.capabilities import McpInvokeResult, McpTool
 from app.domain.mcp_capacity import McpCapacityStore
-from app.ports.providers import DiscoverableMcpProvider
-from app.ports.providers import ProviderUnavailable
+from app.ports.providers import DiscoverableMcpProvider, ProviderUnavailable
 
 
 class McpCapacityExceeded(Exception):
@@ -13,9 +13,15 @@ class McpCapacityExceeded(Exception):
 class LimitedMcp:
     """Share a bounded MCP execution pool across public and internal calls."""
 
-    def __init__(self, provider: DiscoverableMcpProvider, *, max_calls: int,
-                 queue_timeout_seconds: float, shared: McpCapacityStore | None = None,
-                 lease_seconds: float = 35) -> None:
+    def __init__(
+        self,
+        provider: DiscoverableMcpProvider,
+        *,
+        max_calls: int,
+        queue_timeout_seconds: float,
+        shared: McpCapacityStore | None = None,
+        lease_seconds: float = 35,
+    ) -> None:
         """Set local concurrency and optional shared lease limits for MCP calls."""
         self.provider = provider
         self.queue_timeout_seconds = queue_timeout_seconds
@@ -46,6 +52,7 @@ class LimitedMcp:
         token: str | None = None
         call: asyncio.Task | None = None
         heartbeat: asyncio.Task | None = None
+        stop_heartbeat = Event()
         try:
             if self.shared is not None:
                 while token is None:
@@ -56,28 +63,34 @@ class LimitedMcp:
                     if remaining <= 0:
                         raise McpCapacityExceeded("MCP execution capacity exceeded")
                     await asyncio.sleep(min(0.025, remaining))
-                heartbeat = asyncio.create_task(self._renew(token))
+                heartbeat = asyncio.create_task(self._renew(token, stop_heartbeat))
             call = asyncio.create_task(self.provider.invoke(name, arguments))
             if heartbeat is None:
                 return await call
-            done, _pending = await asyncio.wait({call, heartbeat}, return_when=asyncio.FIRST_COMPLETED)
+            done, _pending = await asyncio.wait(
+                {call, heartbeat}, return_when=asyncio.FIRST_COMPLETED
+            )
             if heartbeat in done:
                 raise ProviderUnavailable("MCP capacity lease lost")
             return await call
         finally:
-            for task in (call, heartbeat):
-                if task is not None:
-                    task.cancel()
-            await asyncio.gather(*(task for task in (call, heartbeat) if task is not None),
-                                 return_exceptions=True)
+            stop_heartbeat.set()
+            if call is not None:
+                call.cancel()
+            await asyncio.gather(
+                *(task for task in (call, heartbeat) if task is not None), return_exceptions=True
+            )
             if token is not None and self.shared is not None:
                 self.shared.release(token)
             self._slots.release()
 
-    async def _renew(self, token: str) -> None:
-        """Keep a shared call lease alive until invocation completes."""
+    async def _renew(self, token: str, stop: Event) -> None:
+        """Renew independently of event-loop latency and finish before releasing capacity."""
         assert self.shared is not None
-        while True:
-            await asyncio.sleep(min(5, self.lease_seconds / 3))
-            if not self.shared.renew(token, self.lease_seconds):
-                raise ProviderUnavailable("MCP capacity lease lost")
+
+        def maintain() -> None:
+            while not stop.wait(min(5, self.lease_seconds / 3)):
+                if not self.shared.renew(token, self.lease_seconds):
+                    raise ProviderUnavailable("MCP capacity lease lost")
+
+        await asyncio.to_thread(maintain)

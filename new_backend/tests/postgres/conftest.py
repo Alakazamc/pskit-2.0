@@ -4,6 +4,7 @@ import os
 import uuid
 
 import pytest
+from admin_support import admin_system  # noqa: F401
 from compute_support import ledger_system  # noqa: F401
 
 

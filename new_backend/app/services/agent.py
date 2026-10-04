@@ -8,6 +8,8 @@ import uuid
 
 from app.adapters.live.pi_rpc import PiRpcError
 from app.contracts.conversation import (
+    ArtifactCreatedData,
+    ArtifactCreatedEvent,
     MessageDeltaData,
     MessageDeltaEvent,
     MessageEndEvent,
@@ -95,6 +97,7 @@ class AgentService:
         self._tool_secret = tool_token_secret or secrets.token_bytes(32)
         self.mcp_tool_calls = mcp_tool_calls
         self.catalog = None
+        self.workspace_transfer = None
         self.compute_leases = None
         self._instance_id = uuid.uuid4().hex
         self._locks: dict[str, asyncio.Lock] = {}
@@ -293,6 +296,23 @@ class AgentService:
                 ))
             self.store.append_event(user_id, run_id, projected)
 
+    async def _collect_workspace(self, user_id, session_id, run_id, attempt_id):
+        if not self.store.owns_lease(run_id, self._instance_id):
+            return
+        for artifact in await self.workspace_transfer.collect(user_id, session_id, attempt_id):
+            self.store.append_event(
+                user_id,
+                run_id,
+                ArtifactCreatedEvent(
+                    run_id=run_id,
+                    data=ArtifactCreatedData(
+                        artifact_id=artifact.id,
+                        name=artifact.name,
+                        kind=artifact.kind,
+                    ),
+                ),
+            )
+
     async def _execute(self, user_id: str, session_id: str, run_id: str, content: str) -> None:
         """Run an initial Pi turn under its session lock and durable lease.
 
@@ -322,6 +342,13 @@ class AgentService:
                 self._record_progress_event(user_id, run_id, event)
 
             try:
+                workspace_refs = []
+                if self.workspace_transfer is not None:
+                    workspace_refs = await self.workspace_transfer.prepare(
+                        user_id,
+                        session_id,
+                        self.store.run_context(run_id).get("file_ids", []),
+                    )
                 image_ids = self.store.run_context(run_id).get("image_ids", [])
                 images = []
                 for file_id in image_ids:
@@ -339,7 +366,21 @@ class AgentService:
                     session_id, content, on_event,
                     session_file=self.store.session_file_for(user_id, session_id),
                     environment=self._environment(user_id, run_id),
-                    system_prompt_suffix=instructions,
+                    system_prompt_suffix=instructions + (
+                        "\nWorkspace uploads:\n" + "\n".join(
+                            f"{ref.name}: {ref.relative_path}" for ref in workspace_refs
+                        )
+                        if workspace_refs else ""
+                    ),
+                    **(
+                        {
+                            "include_attempt_id": True,
+                            "after_attempt": lambda completed: self._collect_workspace(
+                                user_id, session_id, run_id, completed["attempt_id"],
+                            ),
+                        }
+                        if self.workspace_transfer is not None else {}
+                    ),
                     **({"images": images} if images else {}),
                 )
                 if not self.store.owns_lease(run_id, self._instance_id):
@@ -441,6 +482,15 @@ class AgentService:
                     environment=self._environment(user_id, run_id),
                     system_prompt_suffix=instructions,
                     allow_handled=True,
+                    **(
+                        {
+                            "include_attempt_id": True,
+                            "after_attempt": lambda completed: self._collect_workspace(
+                                user_id, session_id, run_id, completed["attempt_id"],
+                            ),
+                        }
+                        if self.workspace_transfer is not None else {}
+                    ),
                 )
                 if not self.store.owns_lease(run_id, self._instance_id):
                     return

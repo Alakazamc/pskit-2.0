@@ -282,7 +282,11 @@ async def send_message(
     if existing:
         return existing
     try:
-        selected_model = await request.app.state.model_catalog.resolve(payload.model)
+        policy = getattr(request.app.state, 'model_policy', None)
+        selected_model = (await policy.resolve(user.id, payload.model, 'chat') if policy and policy.managed
+                          else await request.app.state.model_catalog.resolve(payload.model))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail={"code": "MODEL_FORBIDDEN"}) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail={"code": "MODEL_UNAVAILABLE"}) from exc
     if payload.reasoning_effort and payload.reasoning_effort not in selected_model.reasoning_levels:

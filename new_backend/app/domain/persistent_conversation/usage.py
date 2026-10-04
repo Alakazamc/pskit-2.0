@@ -119,7 +119,9 @@ class UsageMixin:
             limit: Maximum combined entries to return.
 
         Returns:
-            The latest entries in chronological order.
+            Recent entries preserving each ledger's insertion order. Wall-clock
+            timestamps merge the resources but cannot reverse a ledger after
+            a clock adjustment; the original recorded timestamps stay intact.
         """
         token_rows = self.db.execute(
             "SELECT id,period,kind,amount,run_id,created_at,status FROM agent_token_entries "
@@ -130,21 +132,28 @@ class UsageMixin:
             "gpu_accounting_status "
             "FROM agent_jobs WHERE user_id=? ORDER BY rowid DESC LIMIT ?", (user_id, limit),
         ).fetchall()
-        entries = [UsageEntry(
+        token_entries = [UsageEntry(
             id=f"token-{row[0]}", resource="tokens", kind=row[2], amount=row[3],
             status=row[6], period=row[1], run_id=row[4],
             created_at=datetime.fromisoformat(row[5]),
-        ) for row in token_rows]
-        entries.extend(UsageEntry(
+        ) for row in reversed(token_rows)]
+        job_entries = [UsageEntry(
             id=f"job-{row[0]}", resource="gpu_minutes", kind="job",
             amount=(row[4] or 0) if row[6] in {"settled", "reconciled", "released"}
             else row[3],
             status=row[6] if row[6] in {"pending_reconciliation", "reconciled"} else row[2],
             period=row[5][:10], run_id=row[1], job_id=row[0],
             created_at=datetime.fromisoformat(row[5]),
-        ) for row in job_rows)
-        latest = sorted(entries, key=lambda entry: entry.created_at, reverse=True)[:limit]
-        return list(reversed(latest))
+        ) for row in reversed(job_rows)]
+        timed_entries: list[tuple[datetime, UsageEntry]] = []
+        for ledger in (token_entries, job_entries):
+            sort_time = datetime.min.replace(tzinfo=UTC)
+            for entry in ledger:
+                # Ledger sequence is authoritative when the host clock moves back.
+                sort_time = max(sort_time, entry.created_at)
+                timed_entries.append((sort_time, entry))
+        recent = sorted(timed_entries, key=lambda item: item[0])[-limit:]
+        return [entry for _sort_time, entry in recent]
 
     def set_token_limit(self, user_id: str, limit: int) -> None:
         """Replace a user's monthly Token limit.

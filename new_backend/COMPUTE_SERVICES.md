@@ -60,7 +60,7 @@ RESEARCH_AGENT_COMPUTE_SERVICES_JSON=[]
 RESEARCH_AGENT_COMPUTE_SERVICE_KEYS_JSON={}
 ```
 
-需 live PostgreSQL 与 persistent Pi runtime。没有 manifest 的目录为空，不产生演示模型。当前 manifest 由运维配置导入，管理台发布/撤销/用户分组在 C 阶段接入。GPU 沿用现有用户每日分钟限制，内部乘 60000；CPU 可用服务器默认或 compute_cpu_limits 的用户限额。已有 Token 月账本保持不变。
+需 live PostgreSQL 与 persistent Pi runtime。没有 manifest 的目录为空，不产生演示模型。服务器配置导入保持兼容；管理台现可编辑服务草稿、检查实际 Schema，并发布不可变能力版本及用户/组授权。服务地址和凭据采用服务器批准的引用，页面不填 API key。发布、审计和 outbox 同事务，已创建 Job 保留能力快照，后续提交与领取检查当前授权。管理配置方法见 [ADMIN.md](ADMIN.md)。GPU 沿用现有用户每日分钟限制，内部乘 60000；CPU 可用服务器默认或管理员设置的用户限额。已有 Token 月账本保持不变。
 
 ## 4. 用户、Pi 与 worker 接口
 

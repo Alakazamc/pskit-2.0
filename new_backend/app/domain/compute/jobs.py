@@ -90,22 +90,24 @@ class ComputeJobs:
                                       "budget", "status", "accounting_status", "progress", "run_id",
                                       "tool_call_id", "report"), row)))
 
-    def cancel(self, user_id, job_id):
-        with self.database.transaction() as connection:
-            admission_lock(connection)
-            job = self.get(user_id, job_id, connection=connection)
-            if not job:
-                raise LookupError("JOB_NOT_FOUND")
-            if job.status == "queued":
-                connection.execute("UPDATE agent_jobs SET status='cancelled',"
-                                   "gpu_accounting_status='released' WHERE id=%s", (job_id,))
-                if self.ledger:
-                    self.ledger.release(connection, job_id)
-                connection.execute("INSERT INTO compute_outbox (job_id,run_id) VALUES (%s,%s) "
-                                   "ON CONFLICT(job_id) DO NOTHING", (job_id, job.run_id))
-            elif job.status == "running":
-                connection.execute("UPDATE agent_jobs SET status='cancelling' WHERE id=%s", (job_id,))
-            return self.get(user_id, job_id, connection=connection)
+    def cancel(self, user_id, job_id, *, connection=None):
+        if connection is None:
+            with self.database.transaction() as conn:
+                return self.cancel(user_id, job_id, connection=conn)
+        admission_lock(connection)
+        job = self.get(user_id, job_id, connection=connection)
+        if not job:
+            raise LookupError("JOB_NOT_FOUND")
+        if job.status == "queued":
+            connection.execute("UPDATE agent_jobs SET status='cancelled',"
+                               "gpu_accounting_status='released' WHERE id=%s", (job_id,))
+            if self.ledger:
+                self.ledger.release(connection, job_id)
+            connection.execute("INSERT INTO compute_outbox (job_id,run_id) VALUES (%s,%s) "
+                               "ON CONFLICT(job_id) DO NOTHING", (job_id, job.run_id))
+        elif job.status == "running":
+            connection.execute("UPDATE agent_jobs SET status='cancelling' WHERE id=%s", (job_id,))
+        return self.get(user_id, job_id, connection=connection)
 
     def active_for_run(self, user_id, run_id):
         with self.database.connection() as connection:

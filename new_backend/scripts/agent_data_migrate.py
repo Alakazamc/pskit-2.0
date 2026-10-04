@@ -46,10 +46,34 @@ _PI_ROOT = Path("/data/pi-sessions")
 _SQLITE_METADATA = {"sqlite_sequence", "sqlite_stat1", "sqlite_stat4"}
 _MIGRATION_ONLY = {"schema_migrations"}
 _POSTGRES_COMPUTE = {
-    "compute_capability_versions", "compute_job_data", "compute_reservations",
-    "compute_usage_reports", "compute_usage_daily", "compute_cpu_limits",
-    "compute_device_leases", "compute_result_receipts", "compute_outbox",
+    "compute_capability_versions",
+    "compute_job_data",
+    "compute_reservations",
+    "compute_usage_reports",
+    "compute_usage_daily",
+    "compute_cpu_limits",
+    "compute_device_leases",
+    "compute_result_receipts",
+    "compute_outbox",
 }
+_POSTGRES_CONTROL_PLANE = {
+    "sandbox_owners",
+    "sandbox_leases",
+    "sandbox_operations",
+    "sandbox_artifacts",
+    "admin_roles",
+    "admin_group_members",
+    "admin_audit_events",
+    "admin_models",
+    "admin_services",
+    "admin_service_versions",
+    "admin_service_checks",
+    "admin_config_releases",
+    "admin_config_outbox",
+    "admin_revisions",
+    "admin_user_limits",
+}
+_POSTGRES_ONLY = _POSTGRES_COMPUTE | _POSTGRES_CONTROL_PLANE
 
 
 @dataclass(frozen=True)
@@ -108,9 +132,13 @@ def _verify_snapshot(snapshot_dir: Path) -> set[str]:
         if not isinstance(relative, str) or not isinstance(expected, str):
             raise ValueError("Agent snapshot manifest contains an invalid entry")  # noqa: TRY004
         candidate = PurePosixPath(relative)
-        if (candidate.is_absolute() or ".." in candidate.parts or "\\" in relative
-                or (relative != "agent.sqlite3" and not relative.startswith("pi-sessions/"))
-                or not re.fullmatch(r"[0-9a-f]{64}", expected)):
+        if (
+            candidate.is_absolute()
+            or ".." in candidate.parts
+            or "\\" in relative
+            or (relative != "agent.sqlite3" and not relative.startswith("pi-sessions/"))
+            or not re.fullmatch(r"[0-9a-f]{64}", expected)
+        ):
             raise ValueError("Agent snapshot manifest contains an unsafe entry")
         if not hmac.compare_digest(_sha256(snapshot_dir / relative), expected):
             raise ValueError("Agent snapshot checksum mismatch")
@@ -121,16 +149,20 @@ def copy_pi_transcripts(snapshot_dir: Path, destination: Path) -> int:
     """Copy verified Pi files into a fresh persistent directory atomically."""
     snapshot_dir, destination = Path(snapshot_dir), Path(destination)
     files = _verify_snapshot(snapshot_dir)
-    if destination.is_symlink() or (destination.exists() and
-                                    (not destination.is_dir() or any(destination.iterdir()))):
+    if destination.is_symlink() or (
+        destination.exists() and (not destination.is_dir() or any(destination.iterdir()))
+    ):
         raise FileExistsError(destination)
     mounted_empty = destination.is_dir()
     if destination.resolve().is_relative_to(snapshot_dir.resolve()):
         raise ValueError("Pi destination must be outside the snapshot")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    staged = Path(tempfile.mkdtemp(
-        prefix=".pi-import-", dir=destination if mounted_empty else destination.parent,
-    ))
+    staged = Path(
+        tempfile.mkdtemp(
+            prefix=".pi-import-",
+            dir=destination if mounted_empty else destination.parent,
+        )
+    )
     try:
         for relative in sorted(files):
             if not relative.startswith("pi-sessions/"):
@@ -168,8 +200,11 @@ def copy_pi_transcripts(snapshot_dir: Path, destination: Path) -> int:
 
 def _sqlite_copy(source: Path, destination: Path) -> None:
     """Copy a validated snapshot to scratch before running legacy migrations."""
-    with (closing(sqlite3.connect(f"{source.as_uri()}?mode=ro", uri=True)) as old,
-          closing(sqlite3.connect(destination)) as current, current):
+    with (
+        closing(sqlite3.connect(f"{source.as_uri()}?mode=ro", uri=True)) as old,
+        closing(sqlite3.connect(destination)) as current,
+        current,
+    ):
         old.backup(current)
         if current.execute("PRAGMA integrity_check").fetchone() != ("ok",):
             raise ValueError("Agent SQLite integrity check failed")
@@ -180,10 +215,14 @@ def _upgrade_sqlite_copy(path: Path) -> None:
     store = PersistentConversationStore(str(path))
     try:
         for migrate in (
-            migrate_catalog_schema, migrate_identity_policy_schema,
-            migrate_internal_tool_auth_schema, migrate_mcp_capacity_schema,
-            migrate_mcp_tool_calls_schema, migrate_oauth_schema,
-            migrate_pdf_capacity_schema, migrate_tool_run_schema,
+            migrate_catalog_schema,
+            migrate_identity_policy_schema,
+            migrate_internal_tool_auth_schema,
+            migrate_mcp_capacity_schema,
+            migrate_mcp_tool_calls_schema,
+            migrate_oauth_schema,
+            migrate_pdf_capacity_schema,
+            migrate_tool_run_schema,
         ):
             migrate(store.db)
     finally:
@@ -193,18 +232,25 @@ def _upgrade_sqlite_copy(path: Path) -> None:
 
 
 def _table_names(connection: psycopg.Connection, schema: str) -> set[str]:
-    return {row[0] for row in connection.execute(
-        "SELECT table_name FROM information_schema.tables "
-        "WHERE table_schema=%s AND table_type='BASE TABLE'", (schema,),
-    )}
+    return {
+        row[0]
+        for row in connection.execute(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema=%s AND table_type='BASE TABLE'",
+            (schema,),
+        )
+    }
 
 
 def _columns(connection: psycopg.Connection, schema: str, table: str) -> list[str]:
-    return [row[0] for row in connection.execute(
-        "SELECT column_name FROM information_schema.columns "
-        "WHERE table_schema=%s AND table_name=%s ORDER BY ordinal_position",
-        (schema, table),
-    )]
+    return [
+        row[0]
+        for row in connection.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema=%s AND table_name=%s ORDER BY ordinal_position",
+            (schema, table),
+        )
+    ]
 
 
 def _mapped_pi_path(value: str, session_id: str, snapshot_dir: Path, pi_root: Path) -> str:
@@ -212,7 +258,7 @@ def _mapped_pi_path(value: str, session_id: str, snapshot_dir: Path, pi_root: Pa
     parts = PurePosixPath(value).parts
     if session_id not in parts:
         raise ValueError("Pi checkpoint is outside its session directory")
-    relative = PurePosixPath(*parts[parts.index(session_id):])
+    relative = PurePosixPath(*parts[parts.index(session_id) :])
     if ".." in relative.parts or len(relative.parts) < 2:
         raise ValueError("Pi checkpoint has an unsafe path")
     archived = snapshot_dir / "pi-sessions" / relative
@@ -231,24 +277,33 @@ def _canonical(value: Any) -> Any:
 
 
 def _digest_rows(rows: Iterable[tuple]) -> str:
-    hashes = [hashlib.sha256(json.dumps(
-        [_canonical(value) for value in row], ensure_ascii=False,
-        separators=(",", ":"), sort_keys=True,
-    ).encode()).digest() for row in rows]
+    hashes = [
+        hashlib.sha256(
+            json.dumps(
+                [_canonical(value) for value in row],
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode()
+        ).digest()
+        for row in rows
+    ]
     return hashlib.sha256(b"".join(sorted(hashes))).hexdigest()
 
 
 def _copy_rows(
-    source: sqlite3.Connection, destination: psycopg.Connection,
-    *, staging_schema: str, snapshot_dir: Path, pi_root: Path,
+    source: sqlite3.Connection,
+    destination: psycopg.Connection,
+    *,
+    staging_schema: str,
+    snapshot_dir: Path,
+    pi_root: Path,
 ) -> dict[str, int]:
     """Copy every known SQLite table and verify canonical per-row hashes."""
     old_tables = {
-        row[0] for row in source.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        )
+        row[0] for row in source.execute("SELECT name FROM sqlite_master WHERE type='table'")
     } - _SQLITE_METADATA
-    new_tables = _table_names(destination, staging_schema) - _MIGRATION_ONLY - _POSTGRES_COMPUTE
+    new_tables = _table_names(destination, staging_schema) - _MIGRATION_ONLY - _POSTGRES_ONLY
     if old_tables != new_tables:
         raise ValueError("SQLite and PostgreSQL table sets differ")
     counts: dict[str, int] = {}
@@ -261,7 +316,8 @@ def _copy_rows(
         has_ordinal = "ordinal" in target_columns and "ordinal" not in source_columns
         inserted_columns = [*source_columns, *(["ordinal"] if has_ordinal else [])]
         statement = sql.SQL("INSERT INTO {}.{} ({}) VALUES ({})").format(
-            sql.Identifier(staging_schema), sql.Identifier(table),
+            sql.Identifier(staging_schema),
+            sql.Identifier(table),
             sql.SQL(",").join(map(sql.Identifier, inserted_columns)),
             sql.SQL(",").join(sql.Placeholder() for _ in inserted_columns),
         )
@@ -274,24 +330,37 @@ def _copy_rows(
                 values["content"] = values["content"].replace("\x00", "\ufffd")
             if table == "pi_sessions":
                 values["session_file"] = _mapped_pi_path(
-                    values["session_file"], values["session_id"], snapshot_dir, pi_root,
+                    values["session_file"],
+                    values["session_id"],
+                    snapshot_dir,
+                    pi_root,
                 )
             if table == "agent_runs" and values.get("checkpoint_file"):
                 values["checkpoint_file"] = _mapped_pi_path(
-                    values["checkpoint_file"], values["session_id"], snapshot_dir, pi_root,
+                    values["checkpoint_file"],
+                    values["session_id"],
+                    snapshot_dir,
+                    pi_root,
                 )
             if has_ordinal:
                 values["ordinal"] = rowid
             row = tuple(values[column] for column in inserted_columns)
             destination.execute(statement, row)
-            expected_hashes.append(hashlib.sha256(json.dumps(
-                [_canonical(value) for value in row], ensure_ascii=False,
-                separators=(",", ":"), sort_keys=True,
-            ).encode()).digest())
+            expected_hashes.append(
+                hashlib.sha256(
+                    json.dumps(
+                        [_canonical(value) for value in row],
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    ).encode()
+                ).digest()
+            )
             count += 1
         selected = sql.SQL("SELECT {} FROM {}.{}").format(
             sql.SQL(",").join(map(sql.Identifier, inserted_columns)),
-            sql.Identifier(staging_schema), sql.Identifier(table),
+            sql.Identifier(staging_schema),
+            sql.Identifier(table),
         )
         found = destination.execute(selected)
         if _digest_rows(found) != hashlib.sha256(b"".join(sorted(expected_hashes))).hexdigest():
@@ -304,24 +373,34 @@ def _reset_sequences(connection: psycopg.Connection, schema: str) -> None:
     """Advance identity sequences beyond imported IDs and SQLite rowids."""
     identities = connection.execute(
         "SELECT table_name,column_name FROM information_schema.columns "
-        "WHERE table_schema=%s AND is_identity='YES'", (schema,),
+        "WHERE table_schema=%s AND is_identity='YES'",
+        (schema,),
     ).fetchall()
     for table, column in identities:
-        maximum = connection.execute(sql.SQL("SELECT MAX({}) FROM {}.{}").format(
-            sql.Identifier(column), sql.Identifier(schema), sql.Identifier(table),
-        )).fetchone()[0]
+        maximum = connection.execute(
+            sql.SQL("SELECT MAX({}) FROM {}.{}").format(
+                sql.Identifier(column),
+                sql.Identifier(schema),
+                sql.Identifier(table),
+            )
+        ).fetchone()[0]
         sequence = connection.execute(
-            "SELECT pg_get_serial_sequence(%s,%s)", (f"{schema}.{table}", column),
+            "SELECT pg_get_serial_sequence(%s,%s)",
+            (f"{schema}.{table}", column),
         ).fetchone()[0]
         if sequence is None:
             raise ValueError("PostgreSQL identity sequence is unavailable")
         connection.execute(
-            "SELECT setval(%s,%s,%s)", (sequence, maximum or 1, maximum is not None),
+            "SELECT setval(%s,%s,%s)",
+            (sequence, maximum or 1, maximum is not None),
         )
 
 
 def _activate_stage(
-    connection: psycopg.Connection, *, stage: str, target: str,
+    connection: psycopg.Connection,
+    *,
+    stage: str,
+    target: str,
 ) -> str | None:
     """Swap the verified stage into service in one PostgreSQL transaction."""
     connection.execute(
@@ -329,39 +408,59 @@ def _activate_stage(
         (f"pskit-activate:{target}",),
     )
     exists = connection.execute(
-        "SELECT 1 FROM pg_namespace WHERE nspname=%s", (target,),
+        "SELECT 1 FROM pg_namespace WHERE nspname=%s",
+        (target,),
     ).fetchone()
     backup = None
     if exists:
         for table in _table_names(connection, target) - _MIGRATION_ONLY:
-            rows = connection.execute(sql.SQL("SELECT 1 FROM {}.{} LIMIT 1").format(
-                sql.Identifier(target), sql.Identifier(table),
-            )).fetchone()
+            rows = connection.execute(
+                sql.SQL("SELECT 1 FROM {}.{} LIMIT 1").format(
+                    sql.Identifier(target),
+                    sql.Identifier(table),
+                )
+            ).fetchone()
             if rows:
-                raise ValueError("Active PSKit schema contains business rows; freeze and reconcile first")
+                raise ValueError(
+                    "Active PSKit schema contains business rows; freeze and reconcile first"
+                )
         backup = f"{target}_preimport_{uuid.uuid4().hex[:8]}"
-        connection.execute(sql.SQL("ALTER SCHEMA {} RENAME TO {}").format(
-            sql.Identifier(target), sql.Identifier(backup),
-        ))
-    connection.execute(sql.SQL("ALTER SCHEMA {} RENAME TO {}").format(
-        sql.Identifier(stage), sql.Identifier(target),
-    ))
+        connection.execute(
+            sql.SQL("ALTER SCHEMA {} RENAME TO {}").format(
+                sql.Identifier(target),
+                sql.Identifier(backup),
+            )
+        )
+    connection.execute(
+        sql.SQL("ALTER SCHEMA {} RENAME TO {}").format(
+            sql.Identifier(stage),
+            sql.Identifier(target),
+        )
+    )
     if connection.execute("SELECT 1 FROM pg_roles WHERE rolname='pskit_app'").fetchone():
         role = sql.Identifier("pskit_app")
         namespace = sql.Identifier(target)
         connection.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO {}").format(namespace, role))
-        connection.execute(sql.SQL(
-            "GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA {} TO {}"
-        ).format(namespace, role))
-        connection.execute(sql.SQL(
-            "GRANT USAGE,SELECT,UPDATE ON ALL SEQUENCES IN SCHEMA {} TO {}"
-        ).format(namespace, role))
+        connection.execute(
+            sql.SQL("GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA {} TO {}").format(
+                namespace, role
+            )
+        )
+        connection.execute(
+            sql.SQL("GRANT USAGE,SELECT,UPDATE ON ALL SEQUENCES IN SCHEMA {} TO {}").format(
+                namespace, role
+            )
+        )
     return backup
 
 
 def import_sqlite_snapshot(
-    sqlite_path: Path, database_url: str, *, staging_schema: str = "pskit_stage",
-    target_schema: str = "pskit", pi_root: Path = _PI_ROOT,
+    sqlite_path: Path,
+    database_url: str,
+    *,
+    staging_schema: str = "pskit_stage",
+    target_schema: str = "pskit",
+    pi_root: Path = _PI_ROOT,
 ) -> ImportReport:
     """Verify, stage, and atomically activate a stopped Agent SQLite snapshot."""
     sqlite_path = Path(sqlite_path)
@@ -377,7 +476,8 @@ def import_sqlite_snapshot(
     source_hash = _sha256(sqlite_path)
     with psycopg.connect(database_url) as admin:
         if admin.execute(
-            "SELECT 1 FROM pg_namespace WHERE nspname=%s", (staging_schema,),
+            "SELECT 1 FROM pg_namespace WHERE nspname=%s",
+            (staging_schema,),
         ).fetchone():
             raise ValueError("Staging schema already exists; inspect and remove it before retry")
     with tempfile.TemporaryDirectory(prefix="agent-sqlite-import-") as scratch:
@@ -390,23 +490,31 @@ def import_sqlite_snapshot(
             migrate_postgres(database_url, schema=staging_schema)
             with sqlite3.connect(disposable) as source, psycopg.connect(database_url) as connection:
                 counts = _copy_rows(
-                    source, connection, staging_schema=staging_schema,
-                    snapshot_dir=snapshot_dir, pi_root=pi_root,
+                    source,
+                    connection,
+                    staging_schema=staging_schema,
+                    snapshot_dir=snapshot_dir,
+                    pi_root=pi_root,
                 )
                 _reset_sequences(connection, staging_schema)
             with psycopg.connect(database_url) as connection:
                 backup = _activate_stage(connection, stage=staging_schema, target=target_schema)
         except BaseException:
             with psycopg.connect(database_url, autocommit=True) as admin:
-                admin.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
-                    sql.Identifier(staging_schema)
-                ))
+                admin.execute(
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                        sql.Identifier(staging_schema)
+                    )
+                )
             raise
     return ImportReport(table_counts=counts, source_sha256=source_hash, backup_schema=backup)
 
 
 def export_sqlite_snapshot(
-    database_url: str, destination: Path, *, schema: str = "pskit",
+    database_url: str,
+    destination: Path,
+    *,
+    schema: str = "pskit",
 ) -> ExportReport:
     """Write current private PostgreSQL state to a new offline SQLite file."""
     schema, destination = _identifier(schema), Path(destination)
@@ -414,28 +522,39 @@ def export_sqlite_snapshot(
         raise FileExistsError(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{destination.name}.", suffix=".sqlite3", dir=destination.parent,
+        prefix=f".{destination.name}.",
+        suffix=".sqlite3",
+        dir=destination.parent,
     )
     os.close(descriptor)
     temporary = Path(temporary_name)
     counts: dict[str, int] = {}
     try:
         _upgrade_sqlite_copy(temporary)
-        with (psycopg.connect(database_url) as source,
-              closing(sqlite3.connect(temporary)) as target, target):
+        with (
+            psycopg.connect(database_url) as source,
+            closing(sqlite3.connect(temporary)) as target,
+            target,
+        ):
             source.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             old_tables = {
-                row[0] for row in target.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                )
+                row[0]
+                for row in target.execute("SELECT name FROM sqlite_master WHERE type='table'")
             } - _SQLITE_METADATA
-            for table in _POSTGRES_COMPUTE:
-                exists = source.execute(sql.SQL("SELECT 1 FROM {}.{} LIMIT 1").format(
-                    sql.Identifier(schema), sql.Identifier(table),
-                )).fetchone()
+            source_tables = _table_names(source, schema)
+            for table in sorted(_POSTGRES_ONLY & source_tables):
+                exists = source.execute(
+                    sql.SQL("SELECT 1 FROM {}.{} LIMIT 1").format(
+                        sql.Identifier(schema),
+                        sql.Identifier(table),
+                    )
+                ).fetchone()
                 if exists:
-                    raise ValueError("Compute state requires a PostgreSQL backup; SQLite export would lose data")
-            new_tables = _table_names(source, schema) - _MIGRATION_ONLY - _POSTGRES_COMPUTE
+                    kind = "Compute" if table in _POSTGRES_COMPUTE else "Management or sandbox"
+                    raise ValueError(
+                        f"{kind} state requires a PostgreSQL backup; SQLite export would lose data"
+                    )
+            new_tables = source_tables - _MIGRATION_ONLY - _POSTGRES_ONLY
             if old_tables != new_tables:
                 raise ValueError("PostgreSQL and SQLite table sets differ")
             for table in old_tables:
@@ -449,7 +568,8 @@ def export_sqlite_snapshot(
                 selected = [*columns, *(["ordinal"] if has_ordinal else [])]
                 query = sql.SQL("SELECT {} FROM {}.{}").format(
                     sql.SQL(",").join(map(sql.Identifier, selected)),
-                    sql.Identifier(schema), sql.Identifier(table),
+                    sql.Identifier(schema),
+                    sql.Identifier(table),
                 )
                 if has_ordinal:
                     query += sql.SQL(" ORDER BY ordinal")
@@ -494,21 +614,29 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     database_url = os.getenv("RESEARCH_AGENT_DATABASE_URL", "")
     if args.action != "copy-pi" and not database_url:
-        parser.error("RESEARCH_AGENT_DATABASE_URL must be provided through a protected environment file")
+        parser.error(
+            "RESEARCH_AGENT_DATABASE_URL must be provided through a protected environment file"
+        )
     if args.action == "copy-pi":
         files = copy_pi_transcripts(args.snapshot, args.destination)
         print(f"Pi transcript copy complete: {files} verified files")
     elif args.action == "import":
         report = import_sqlite_snapshot(
-            args.sqlite, database_url, staging_schema=args.stage,
+            args.sqlite,
+            database_url,
+            staging_schema=args.stage,
             pi_root=args.pi_root,
         )
-        print(f"Agent import complete: {sum(report.table_counts.values())} rows, "
-              f"{len(report.table_counts)} tables")
+        print(
+            f"Agent import complete: {sum(report.table_counts.values())} rows, "
+            f"{len(report.table_counts)} tables"
+        )
     else:
         report = export_sqlite_snapshot(database_url, args.destination, schema=args.schema)
-        print(f"Agent export complete: {sum(report.table_counts.values())} rows, "
-              f"{len(report.table_counts)} tables")
+        print(
+            f"Agent export complete: {sum(report.table_counts.values())} rows, "
+            f"{len(report.table_counts)} tables"
+        )
     return 0
 
 

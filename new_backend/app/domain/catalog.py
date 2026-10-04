@@ -237,7 +237,10 @@ class CatalogStore:
         self._registered_rows = rows
         self._rebuild_skills()
 
-    def register_skill_version(self, manifest: SkillManifest, instructions: str) -> CatalogItem:
+    def register_skill_version(self, manifest: SkillManifest, instructions: str, *,
+                               audit_callback=None, audit_actor='operator:legacy-admin-key',
+                               audit_reason='Legacy operator Skill registration', audit_request_id=None,
+                               expected_revision=None) -> CatalogItem:
         """Atomically register an immutable, increasing Skill version.
 
         Args:
@@ -267,6 +270,12 @@ class CatalogStore:
         tools_json = json.dumps(manifest.tools)
         self.db.execute("BEGIN IMMEDIATE")
         try:
+            previous_version = self.db.execute(
+                "SELECT COALESCE(MAX(version),0) FROM catalog_skill_versions WHERE id=?",
+                (manifest.id,),
+            ).fetchone()[0]
+            if expected_revision is not None and previous_version != expected_revision:
+                raise SkillVersionConflict
             existing = self.db.execute(
                 "SELECT name,description,tools_json,instructions "
                 "FROM catalog_skill_versions WHERE id=? AND version=?",
@@ -288,6 +297,12 @@ class CatalogStore:
                     (manifest.id, manifest.version, manifest.name, manifest.description,
                      tools_json, instructions, datetime.now(UTC).isoformat()),
                 )
+            if audit_callback:
+                audit_callback(audit_actor, 'skills:register', manifest.id, audit_reason,
+                               {'version': previous_version},
+                               {'version': manifest.version, 'tools': manifest.tools,
+                                'instruction_sha256': hashlib.sha256(instructions.encode()).hexdigest()},
+                               audit_request_id, connection=self.db)
             self.db.commit()
         except BaseException:
             self.db.rollback()
@@ -346,7 +361,10 @@ class CatalogStore:
                 if (allowed is None or resource.id in allowed)
                 and self.tool_allowed_for(user_id, resource.id)]
 
-    def set_skill_grants(self, user_id: str, skill_ids: list[str]) -> list[str]:
+    def set_skill_grants(self, user_id: str, skill_ids: list[str], *,
+                         audit_callback=None, audit_actor='operator:legacy-admin-key',
+                         audit_reason='Legacy operator Skill grants', audit_request_id=None,
+                         expected_revision=None) -> list[str]:
         """Replace a user's explicit Skill grants.
 
         Args:
@@ -363,13 +381,34 @@ class CatalogStore:
         if len(set(skill_ids)) != len(skill_ids) or not set(skill_ids).issubset(self._all_skill_specs):
             raise ValueError("Unknown or duplicate Skill ID")
         if self.db:
-            with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            try:
                 self._require_account_active(user_id)
+                before = self._allowed_skill_ids(user_id)
+                revision = self.db.execute(
+                    "SELECT revision FROM admin_revisions WHERE kind='skills' AND resource_id=?",
+                    (user_id,),
+                ).fetchone() if audit_callback else None
+                current_revision = revision[0] if revision else 0
+                if expected_revision is not None and current_revision != expected_revision:
+                    from app.domain.admin.roles import RevisionConflict
+                    raise RevisionConflict('REVISION_CONFLICT')
                 self.db.execute(
                     "INSERT INTO catalog_skill_grants (user_id,skill_ids_json) VALUES (?,?) "
                     "ON CONFLICT(user_id) DO UPDATE SET skill_ids_json=excluded.skill_ids_json",
                     (user_id, json.dumps(skill_ids)),
                 )
+                if audit_callback:
+                    self.db.execute("INSERT INTO admin_revisions VALUES ('skills',?,?) "
+                                    "ON CONFLICT(kind,resource_id) DO UPDATE SET revision=excluded.revision",
+                                    (user_id,current_revision+1))
+                    audit_callback(audit_actor, 'skills:grants', user_id, audit_reason,
+                                   {'skill_ids':sorted(before) if before is not None else None},
+                                   {'skill_ids':skill_ids}, audit_request_id, connection=self.db)
+                self.db.commit()
+            except BaseException:
+                self.db.rollback()
+                raise
         else:
             self._skill_grants[user_id] = set(skill_ids)
         return skill_ids
@@ -390,10 +429,18 @@ class CatalogStore:
     def stored_bytes_for(self, user_id: str) -> int:
         """Sum a user's stored upload bytes across files."""
         if self.db:
-            return self.db.execute(
+            uploaded = self.db.execute(
                 "SELECT COALESCE(SUM(size),0) FROM catalog_files WHERE user_id=?",
                 (user_id,),
             ).fetchone()[0]
+            has_artifacts = isinstance(self.db, PostgresStatements) or self.db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_artifact_blobs'"
+            ).fetchone() is not None
+            artifacts = self.db.execute(
+                "SELECT COALESCE(SUM(size),0) FROM agent_artifact_blobs WHERE user_id=?",
+                (user_id,),
+            ).fetchone()[0] if has_artifacts else 0
+            return uploaded + artifacts
         return sum(file.size for file in self._files.get(user_id, []))
 
     def single_file_limit_for(self, user_id: str) -> int | None:
@@ -405,10 +452,13 @@ class CatalogStore:
 
     def total_storage_limit_for(self, user_id: str) -> int | None:
         """Return a guest storage limit or ``None`` for a member."""
+        lookup = getattr(self, "admin_storage_limit_for", None)
+        admin_limit = lookup(user_id) if lookup else None
         policy = getattr(self, "identity_policy", None)
         if policy is not None and policy.tier_for(user_id) == "guest":
-            return getattr(self, "guest_storage_limit_bytes", 10 * 1024 * 1024)
-        return None
+            guest_limit = getattr(self, "guest_storage_limit_bytes", 10 * 1024 * 1024)
+            return min(guest_limit, admin_limit) if admin_limit is not None else guest_limit
+        return admin_limit
 
     def add_file(
         self, user_id: str, payload: FileUploadRequest,
@@ -556,13 +606,18 @@ class CatalogStore:
         single_limit = self.single_file_limit_for(user_id)
         if single_limit is not None and size > single_limit:
             raise InvalidFileUpload("FILE_TOO_LARGE", 413)
-        total_limit = (self.total_storage_limit_for(user_id) if max_total_bytes is None
-                       else max_total_bytes)
+        def current_limit():
+            configured = self.total_storage_limit_for(user_id)
+            if max_total_bytes is None:
+                return configured
+            return min(configured, max_total_bytes) if configured is not None else max_total_bytes
+        total_limit = current_limit()
         file = FileRef(id=f"file-{uuid.uuid4()}", name=name, size=size)
         if self.db:
             self.db.execute("BEGIN IMMEDIATE")
             try:
                 self._require_account_active(user_id)
+                total_limit = current_limit()
                 used = self.stored_bytes_for(user_id)
                 if total_limit is not None and used + size > total_limit:
                     raise InvalidFileUpload("STORAGE_QUOTA_EXCEEDED", 413)

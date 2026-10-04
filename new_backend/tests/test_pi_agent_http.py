@@ -1233,10 +1233,10 @@ async def test_safe_interrupted_pi_run_retries_after_restart(tmp_path):
                 run_id = (
                     await client.post(f"/api/v1/c/{session_id}/messages", headers=headers, json={"content": "你好"})
                 ).json()["run_id"]
-                await runner.started.wait()
+                await asyncio.wait_for(runner.started.wait(), timeout=0.5)
                 return run_id
 
-    run_id = await asyncio.wait_for(first_process(), timeout=0.5)
+    run_id = await first_process()
     restarted = create_app(settings, pi_runner=FakePi())
     async with restarted.router.lifespan_context(restarted):  # noqa: SIM117 - Start lifespan first.
         async with httpx.AsyncClient(

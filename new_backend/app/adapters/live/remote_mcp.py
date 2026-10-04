@@ -55,6 +55,7 @@ class RemoteMcp:
         self.timeout_seconds = timeout_seconds
         self._http_client = http_client
         self._tools: list[McpTool] = []
+        self._schemas: list[dict] = []
 
     def tools(self) -> list[McpTool]:
         """Return cached tool definitions from the last discovery."""
@@ -88,6 +89,22 @@ class RemoteMcp:
             async with asyncio.timeout(self.timeout_seconds):
                 async with self._session() as session:
                     response = await session.list_tools()
+            schemas = []
+            for definition in response.tools:
+                if definition.name not in self.allowed_tools:
+                    continue
+                schema = {"id": definition.name, "input_schema": definition.inputSchema}
+                output = getattr(definition, "outputSchema", None)
+                if output is not None:
+                    schema["output_schema"] = output
+                for value in (definition.inputSchema, output):
+                    if value is not None:
+                        Draft202012Validator.check_schema(value)
+                        if _has_external_ref(value):
+                            raise ValueError("External JSON Schema references are not allowed")
+                schemas.append(schema)
+            if len(json.dumps(schemas, ensure_ascii=False).encode("utf-8")) > MAX_RESULT_BYTES:
+                raise ValueError("MCP discovered schemas exceed limit")
             tools = [McpTool(
                 name=tool.name, description=tool.description or "",
                 input_schema=tool.inputSchema,
@@ -101,7 +118,13 @@ class RemoteMcp:
         except Exception as exc:
             raise ProviderUnavailable("MCP discovery failed") from exc
         self._tools = tools
+        self._schemas = schemas
         return self.tools()
+
+    async def discover_schemas(self) -> list[dict]:
+        """Discover actual input/output schemas without widening the existing tools DTO."""
+        await self.discover()
+        return [dict(schema) for schema in self._schemas]
 
     async def invoke(self, name: str, arguments: dict) -> McpInvokeResult | None:
         """Call a discovered tool and bound the returned result to 1 MiB.

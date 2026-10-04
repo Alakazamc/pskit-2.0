@@ -4,6 +4,8 @@
 
 **数据库迁移状态（2026-10-03）：** `RESEARCH_AGENT_MODE=live` 必须设置 `RESEARCH_AGENT_DATABASE_URL`，所有新后端业务表位于共享 Supabase PostgreSQL 的私有 `pskit` schema；Web 进程只检查迁移版本，不自动迁移。`GET /health/ready` 在数据库不可用或版本不符时返回 503。下面涉及 SQLite 路径、备份和 `PRAGMA` 的说明只适用于旧部署与离线迁移工具；正式切换见 `deploy/agent/SINGLE_POSTGRES_CUTOVER.md`（迁移计划第 10 步生成）。
 
+**沙箱与管理台（2026-10-04）：** PostgreSQL schema v5/v6 保存用户沙箱、管理角色、模型策略、发布与审计。管理入口、受控授权和配置见 [ADMIN.md](ADMIN.md)；每用户容器及多会话工作区见 [SANDBOX.md](../deploy/agent/SANDBOX.md)。本轮完成本地隔离验收，尚未发布到生产。
+
 ## 代码目录
 
 - `app/api/`：公开 HTTP、SSE 和受保护的内部路由；入参和响应类型在 `app/contracts/`。

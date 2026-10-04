@@ -103,6 +103,13 @@ async def preflight_model_call(
     owner = store.owner_for_run(payload.run_id)
     if owner is None:
         raise HTTPException(status_code=404, detail="Run not found")
+    policy = getattr(request.app.state, 'model_policy', None)
+    if policy and policy.managed:
+        alias = store.run_context(payload.run_id).get('model_id') or request.app.state.settings.model_gateway_model or request.app.state.settings.new_api_model
+        try:
+            await policy.authorize(owner, alias, 'chat')
+        except PermissionError as exc:
+            raise HTTPException(403, detail={'code': 'MODEL_FORBIDDEN'}) from exc
     try:
         maximum = store.reserve_model_call(
             owner, payload.run_id, payload.call_id, payload.prompt_bytes,
@@ -134,7 +141,7 @@ async def proxy_model_call(
     if owner is None:
         raise HTTPException(status_code=404, detail="Run not found")
     raw = await request.body()
-    if not raw or len(raw) > 16_000_000:
+    if not raw or len(raw) > 64 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Model request is too large")
     try:
         payload = json.loads(raw)
@@ -144,6 +151,15 @@ async def proxy_model_call(
                       or settings.model_gateway_model or settings.new_api_model)
     if not isinstance(payload, dict) or payload.get("model") != expected_model:
         raise HTTPException(status_code=400, detail="Model is not configured")
+    policy = getattr(request.app.state, 'model_policy', None)
+    allowed_model = None
+    if policy and policy.managed:
+        try:
+            allowed_model = await policy.authorize(owner, expected_model, 'chat')
+        except PermissionError as exc:
+            raise HTTPException(403, detail={'code': 'MODEL_FORBIDDEN'}) from exc
+    if allowed_model and payload.get("reasoning_effort") and payload["reasoning_effort"] not in allowed_model.reasoning_levels:
+        raise HTTPException(422, detail={"code": "MODEL_REASONING_UNAVAILABLE"})
     field = "max_completion_tokens" if "max_completion_tokens" in payload else "max_tokens"
     requested = payload.get(field, 4096)
     if type(requested) is not int or requested < 1:
@@ -151,11 +167,15 @@ async def proxy_model_call(
     # Image data is base64 transport, not text tokens. Reserve a conservative
     # image allowance while the provider's reported usage remains authoritative.
     image_data_bytes: list[int] = []
+    image_count = 0
 
     def count_image_data(value: object) -> None:
+        nonlocal image_count
         if isinstance(value, dict):
             image_url = value.get("image_url")
             url = image_url.get("url") if isinstance(image_url, dict) else image_url
+            if isinstance(url, str):
+                image_count += 1
             if isinstance(url, str) and url.startswith("data:image/") and ";base64," in url:
                 image_data_bytes.append(len(url.encode("utf-8")))
             for nested in value.values():
@@ -165,7 +185,9 @@ async def proxy_model_call(
                 count_image_data(nested)
 
     count_image_data(payload.get("messages", []))
-    if len(image_data_bytes) > 2:
+    if allowed_model and image_count and not allowed_model.supports_images:
+        raise HTTPException(422, detail={"code": "MODEL_DOES_NOT_SUPPORT_IMAGES"})
+    if image_count > 10:
         raise HTTPException(status_code=413, detail="Too many images")
     prompt_bytes = max(1, len(raw) - sum(image_data_bytes) + 2048 * len(image_data_bytes))
     call_id = uuid.uuid4().hex

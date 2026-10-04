@@ -69,6 +69,22 @@ class ComputeLeases:
             ).fetchall()
             for job_id, user_id in rows:
                 job = self.jobs.get(user_id, job_id, connection=connection)
+                if self.jobs.catalog.get(user_id, job.capability.id, job.capability.version,
+                                         connection=connection) is None:
+                    # A queued attempt must still have a current execution grant.
+                    self.jobs.cancel(user_id, job_id, connection=connection)
+                    continue
+                user_limit = connection.execute(
+                    "SELECT concurrency_limit FROM admin_user_limits WHERE user_id=%s",
+                    (user_id,),
+                ).fetchone()
+                if user_limit:
+                    user_active = connection.execute(
+                        "SELECT COUNT(*) FROM agent_jobs WHERE user_id=%s "
+                        "AND status IN ('running','cancelling')", (user_id,),
+                    ).fetchone()[0]
+                    if user_active >= user_limit[0]:
+                        continue
                 active = connection.execute(
                     "SELECT COUNT(*) FROM agent_jobs j JOIN compute_job_data d ON d.job_id=j.id "
                     "WHERE j.status IN ('running','cancelling') AND d.capability_json->>'id'=%s",

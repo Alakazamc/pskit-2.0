@@ -107,10 +107,13 @@ class RunsMixin:
 
     def _max_active_for_user(self, user_id: str, configured_limit: int) -> int:
         """Apply a stricter active Run limit to guest accounts."""
+        lookup = getattr(self, "admin_concurrency_limit_for", None)
+        admin_limit = lookup(user_id) if lookup else None
+        limit = min(configured_limit, admin_limit) if admin_limit is not None else configured_limit
         policy = getattr(self, "identity_policy", None)
         if policy is not None and policy.tier_for(user_id) == "guest":
-            return min(configured_limit, policy.guest_max_active_runs)
-        return configured_limit
+            return min(limit, policy.guest_max_active_runs)
+        return limit
 
     def claim_queued_runs(
         self, owner: str = "local", lease_seconds: int = 10, limit: int = 8,
@@ -326,7 +329,8 @@ class RunsMixin:
                              "user_prompt": user_prompt, "model_id": model_id,
                              "model_supports_images": model_supports_images,
                              "reasoning_effort": reasoning_effort,
-                             "image_ids": list(image_ids)})),
+                             "image_ids": list(image_ids),
+                             "file_ids": [item.id for item in payload.attachments]})),
             )
             if idempotency_key:
                 self.db.execute(

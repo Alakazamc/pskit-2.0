@@ -75,7 +75,10 @@ async def upload_file(
 
 @router.put("/files/content")
 async def upload_streamed_file(
-    name: str, request: Request, user: CurrentUserDep, catalog: CatalogDep,
+    name: str,
+    request: Request,
+    user: CurrentUserDep,
+    catalog: CatalogDep,
 ) -> FileRef:
     """Stream and validate a text, PDF, or image upload against storage limits."""
     from pathlib import Path
@@ -83,14 +86,20 @@ async def upload_streamed_file(
     suffix = Path(name).suffix.lower()
     if suffix != ".pdf" and suffix not in TEXT_FILE_SUFFIXES | IMAGE_MIME_TYPES.keys():
         raise HTTPException(status_code=415, detail={"code": "UNSUPPORTED_FILE_TYPE"})
-    maximum = (MAX_PDF_FILE_BYTES if suffix == ".pdf" else
-               MAX_IMAGE_FILE_BYTES if suffix in IMAGE_MIME_TYPES else MAX_TEXT_FILE_BYTES)
+    maximum = (
+        MAX_PDF_FILE_BYTES
+        if suffix == ".pdf"
+        else MAX_IMAGE_FILE_BYTES
+        if suffix in IMAGE_MIME_TYPES
+        else MAX_TEXT_FILE_BYTES
+    )
     single_limit = catalog.single_file_limit_for(user.id)
     if single_limit is not None:
         maximum = min(maximum, single_limit)
     total_limit = catalog.total_storage_limit_for(user.id)
-    remaining = (None if total_limit is None else
-                 max(0, total_limit - catalog.stored_bytes_for(user.id)))
+    remaining = (
+        None if total_limit is None else max(0, total_limit - catalog.stored_bytes_for(user.id))
+    )
     chunks: list[bytes] = []
     size = 0
     try:
@@ -112,7 +121,9 @@ async def upload_streamed_file(
 
 @router.get("/files/{file_id}/download")
 async def download_file(
-    file_id: str, user: CurrentUserDep, catalog: CatalogDep,
+    file_id: str,
+    user: CurrentUserDep,
+    catalog: CatalogDep,
 ) -> Response:
     """Download the user's file with safe response headers."""
     file = next((item for item in catalog.files_for(user.id) if item.id == file_id), None)
@@ -120,9 +131,12 @@ async def download_file(
     if file is None or content is None:
         raise HTTPException(status_code=404, detail="File not found")
     return Response(
-        content=content, media_type=guess_type(file.name)[0] or "text/plain",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(file.name)}",
-                 "X-Content-Type-Options": "nosniff"},
+        content=content,
+        media_type=guess_type(file.name)[0] or "text/plain",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(file.name)}",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
@@ -133,19 +147,40 @@ async def delete_file(file_id: str, user: CurrentUserDep, catalog: CatalogDep) -
         raise HTTPException(status_code=404, detail="File not found")
 
 
+def _workspace_artifacts(request: Request):
+    transfer = getattr(request.app.state, "workspace_transfer", None)
+    return transfer.artifacts if transfer is not None else None
+
+
+def _artifact_metadata(request: Request, user_id: str, af3):
+    items = af3.artifacts_for(user_id)
+    workspace = _workspace_artifacts(request)
+    return items + [item.model_dump() for item in workspace.list(user_id)] if workspace else items
+
+
+def _artifact_bytes(request: Request, user_id: str, artifact_id: str, af3):
+    existing = af3.artifact_bytes_for(user_id, artifact_id)
+    workspace = _workspace_artifacts(request)
+    return existing or (workspace.read(user_id, artifact_id) if workspace else None)
+
+
 @router.get("/artifacts")
-async def list_artifacts(user: CurrentUserDep, af3: Af3Dep) -> list[ArtifactRef]:
+async def list_artifacts(user: CurrentUserDep, af3: Af3Dep, request: Request) -> list[ArtifactRef]:
     """List AF3 artifact metadata visible to the user."""
-    return [ArtifactRef(**artifact) for artifact in af3.artifacts_for(user.id)]
+    return [ArtifactRef(**artifact) for artifact in _artifact_metadata(request, user.id, af3)]
 
 
 @router.get("/artifacts/{artifact_id}/preview")
 async def preview_artifact(
-    artifact_id: str, user: CurrentUserDep, af3: Af3Dep,
+    artifact_id: str,
+    user: CurrentUserDep,
+    af3: Af3Dep,
+    request: Request,
 ) -> ArtifactPreview:
     """Decode a small text artifact for an in-app preview."""
     metadata = next(
-        (item for item in af3.artifacts_for(user.id) if item["id"] == artifact_id), None
+        (item for item in _artifact_metadata(request, user.id, af3) if item["id"] == artifact_id),
+        None,
     )
     if metadata is None or not metadata["available"]:
         raise HTTPException(status_code=404, detail="Artifact not found")
@@ -153,7 +188,7 @@ async def preview_artifact(
         raise HTTPException(status_code=415, detail={"code": "ARTIFACT_PREVIEW_UNSUPPORTED"})
     if metadata["size"] is None or metadata["size"] > MAX_ARTIFACT_PREVIEW_BYTES:
         raise HTTPException(status_code=413, detail={"code": "ARTIFACT_PREVIEW_TOO_LARGE"})
-    stored = af3.artifact_bytes_for(user.id, artifact_id)
+    stored = _artifact_bytes(request, user.id, artifact_id, af3)
     if stored is None:
         raise HTTPException(status_code=404, detail="Artifact not found")
     name, content = stored
@@ -162,7 +197,9 @@ async def preview_artifact(
     try:
         text = content.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise HTTPException(status_code=415, detail={"code": "ARTIFACT_PREVIEW_UNSUPPORTED"}) from exc
+        raise HTTPException(
+            status_code=415, detail={"code": "ARTIFACT_PREVIEW_UNSUPPORTED"}
+        ) from exc
     if "\x00" in text:
         raise HTTPException(status_code=415, detail={"code": "ARTIFACT_PREVIEW_UNSUPPORTED"})
     return ArtifactPreview(id=artifact_id, name=name, kind=metadata["kind"], text=text)
@@ -170,15 +207,21 @@ async def preview_artifact(
 
 @router.get("/artifacts/{artifact_id}/download")
 async def download_artifact(
-    artifact_id: str, user: CurrentUserDep, af3: Af3Dep,
+    artifact_id: str,
+    user: CurrentUserDep,
+    af3: Af3Dep,
+    request: Request,
 ) -> Response:
     """Download an owned AF3 artifact with safe response headers."""
-    stored = af3.artifact_bytes_for(user.id, artifact_id)
+    stored = _artifact_bytes(request, user.id, artifact_id, af3)
     if stored is None:
         raise HTTPException(status_code=404, detail="Artifact not found")
     name, content = stored
     return Response(
-        content=content, media_type=guess_type(name)[0] or "application/octet-stream",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}",
-                 "X-Content-Type-Options": "nosniff"},
+        content=content,
+        media_type=guess_type(name)[0] or "application/octet-stream",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}",
+            "X-Content-Type-Options": "nosniff",
+        },
     )

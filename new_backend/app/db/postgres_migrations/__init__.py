@@ -5,7 +5,7 @@ from importlib.resources import files
 import psycopg
 from psycopg import sql
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 6
 
 
 def migrate_postgres(dsn: str, *, schema: str = "pskit") -> None:
@@ -39,6 +39,7 @@ def migrate_postgres(dsn: str, *, schema: str = "pskit") -> None:
         for version, filename in (
             (1, "001_core.sql"), (2, "002_components.sql"), (3, "003_quotas.sql"),
             (4, "004_compute.sql"),
+            (5, "005_sandboxes.sql"), (6, "006_admin.sql"),
         ):
             if version in applied:
                 continue

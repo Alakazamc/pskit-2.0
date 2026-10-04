@@ -11,7 +11,11 @@ from typing import Any
 
 class PiRpcError(Exception):
     def __init__(
-        self, message: str, *, code: str = "PI_RUN_FAILED", retryable: bool = False,
+        self,
+        message: str,
+        *,
+        code: str = "PI_RUN_FAILED",
+        retryable: bool = False,
     ) -> None:
         """Attach a stable error code and retry hint to a Pi RPC failure."""
         super().__init__(message)
@@ -24,14 +28,31 @@ def _provider_error_code(message: str) -> str:
     lowered = message.lower()
     if "pskit_token_quota_exceeded" in lowered:
         return "TOKEN_QUOTA_EXCEEDED"
-    if any(part in lowered for part in (
-        "insufficient_quota", "quota exceeded", "out of budget", "insufficient balance",
-        "available balance", "余额不足", "额度不足", "billing",
-    )):
+    if any(
+        part in lowered
+        for part in (
+            "insufficient_quota",
+            "quota exceeded",
+            "out of budget",
+            "insufficient balance",
+            "available balance",
+            "余额不足",
+            "额度不足",
+            "billing",
+        )
+    ):
         return "MODEL_GATEWAY_QUOTA_EXHAUSTED"
-    if any(part in lowered for part in (
-        "unauthorized", "forbidden", "invalid api key", "invalid_api_key", "401", "403",
-    )):
+    if any(
+        part in lowered
+        for part in (
+            "unauthorized",
+            "forbidden",
+            "invalid api key",
+            "invalid_api_key",
+            "401",
+            "403",
+        )
+    ):
         return "MODEL_GATEWAY_AUTH_FAILED"
     if any(part in lowered for part in ("rate limit", "rate_limit", "too many requests", "429")):
         return "MODEL_GATEWAY_RATE_LIMITED"
@@ -78,9 +99,16 @@ class PiRpcRunner:
         allow_handled: bool = False,
         system_prompt_suffix: str = "",
         images: list[dict[str, str]] | None = None,
+        working_directory: str | None = None,
+        transcript_directory: str | None = None,
+        isolated_environment: bool = False,
     ) -> dict[str, str]:
         """Run one Pi RPC prompt in an isolated session branch and relay events."""
-        directory = (Path(self.session_dir) / session_id).resolve()
+        directory = (
+            Path(transcript_directory)
+            if transcript_directory
+            else Path(self.session_dir) / session_id
+        ).resolve()
         directory.mkdir(parents=True, exist_ok=True)
         branch_file: Path | None = None
         active_session_file = session_file
@@ -96,18 +124,34 @@ class PiRpcRunner:
                 branch_file.unlink(missing_ok=True)
                 raise
             active_session_file = str(branch_file)
-        child_env = {**os.environ, **(environment or {})}
+        if isolated_environment:
+            from app.services.sandbox_sessions import PI_HOST_ENVIRONMENT_KEYS
+
+            child_env = {
+                key: value for key, value in os.environ.items() if key in PI_HOST_ENVIRONMENT_KEYS
+            }
+            child_env.update(environment or {})
+            child_env["HOME"] = str(directory)
+        else:
+            child_env = {**os.environ, **(environment or {})}
         requested_level = (environment or {}).get("PSKIT_REASONING_EFFORT")
         gateway_url = self.model_gateway_base_url or self.new_api_base_url
-        gateway_model = (environment or {}).get("PSKIT_MODEL_ID") or self.model_gateway_model or self.new_api_model
+        gateway_model = (
+            (environment or {}).get("PSKIT_MODEL_ID")
+            or self.model_gateway_model
+            or self.new_api_model
+        )
         provider_name = "model-gateway" if self.model_gateway_base_url else "new-api"
         key_env = "MODEL_GATEWAY_API_KEY"
         config_dir = directory / ".pi-config"
         config_dir.mkdir(parents=True, exist_ok=True)
         retry_settings = {
             "retry": {
-                "enabled": True, "maxRetries": 3, "baseDelayMs": 2000,
-                "maxAgentDelayMs": 60000, "provider": {"maxRetries": 0},
+                "enabled": True,
+                "maxRetries": 3,
+                "baseDelayMs": 2000,
+                "maxAgentDelayMs": 60000,
+                "provider": {"maxRetries": 0},
             }
         }
         self._write_config(config_dir / "settings.json", retry_settings)
@@ -118,7 +162,8 @@ class PiRpcRunner:
             model_config = {
                 "id": gateway_model,
                 "input": ["text", "image"]
-                if child_env.get("PSKIT_MODEL_SUPPORTS_IMAGES") == "1" else ["text"],
+                if child_env.get("PSKIT_MODEL_SUPPORTS_IMAGES") == "1"
+                else ["text"],
             }
             if requested_level:
                 model_config["reasoning"] = True
@@ -138,11 +183,21 @@ class PiRpcRunner:
             }
             self._write_config(config_dir / "models.json", config)
         args = [
-            self.executable, "--mode", "rpc", "--no-builtin-tools", "--no-extensions",
-            "--no-skills", "--no-context-files", "--no-prompt-templates", "--offline",
+            self.executable,
+            "--mode",
+            "rpc",
+            "--no-builtin-tools",
+            "--no-extensions",
+            "--no-skills",
+            "--no-context-files",
+            "--no-prompt-templates",
+            "--offline",
         ]
-        args.extend(["--session", active_session_file] if active_session_file
-                    else ["--session-dir", str(directory)])
+        args.extend(
+            ["--session", active_session_file]
+            if active_session_file
+            else ["--session-dir", str(directory)]
+        )
         if self.extension:
             args.extend(["--extension", self.extension])
         if gateway_url:
@@ -152,7 +207,9 @@ class PiRpcRunner:
                 args.extend(["--provider", self.provider])
             if self.model:
                 args.extend(["--model", self.model])
-        full_system_prompt = "\n\n".join(part for part in (self.system_prompt, system_prompt_suffix) if part)
+        full_system_prompt = "\n\n".join(
+            part for part in (self.system_prompt, system_prompt_suffix) if part
+        )
         if full_system_prompt:
             args.extend(["--system-prompt", full_system_prompt])
         try:
@@ -162,7 +219,7 @@ class PiRpcRunner:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=child_env,
-                cwd=directory,
+                cwd=working_directory or directory,
             )
         except OSError as exc:
             if branch_file is not None:
@@ -184,7 +241,8 @@ class PiRpcRunner:
             line = await process.stdout.readline()
             if not line:
                 raise PiRpcError(
-                    f"Pi exited before settling (exit={await process.wait()})", retryable=True,
+                    f"Pi exited before settling (exit={await process.wait()})",
+                    retryable=True,
                 )
             try:
                 return json.loads(line)
@@ -213,17 +271,20 @@ class PiRpcRunner:
                 available_id = await write_command("get_available_thinking_levels")
                 available, _ = await read_response(available_id)
                 if requested_level not in available.get("levels", []):
-                    raise PiRpcError("Selected thinking level is unavailable",
-                                     code="MODEL_REASONING_UNAVAILABLE")
+                    raise PiRpcError(
+                        "Selected thinking level is unavailable", code="MODEL_REASONING_UNAVAILABLE"
+                    )
                 level_id = await write_command("set_thinking_level", level=requested_level)
                 try:
                     await read_response(level_id)
                 except PiRpcError as exc:
-                    raise PiRpcError("Pi rejected the selected thinking level",
-                                     code="MODEL_REASONING_UNAVAILABLE") from exc
-            prompt_id = await write_command("prompt", message=message, **(
-                {"images": images} if images else {}
-            ))
+                    raise PiRpcError(
+                        "Pi rejected the selected thinking level",
+                        code="MODEL_REASONING_UNAVAILABLE",
+                    ) from exc
+            prompt_id = await write_command(
+                "prompt", message=message, **({"images": images} if images else {})
+            )
             accepted, early_events = await read_response(prompt_id)
             if accepted.get("disposition") == "handled" and not allow_handled:
                 raise PiRpcError("Pi prompt was handled without an agent run")
@@ -244,12 +305,16 @@ class PiRpcRunner:
                     message_data = record.get("message") or {}
                     if message_data.get("role") == "assistant":
                         failed = message_data.get("stopReason") in {"error", "aborted"}
-                        failure_code = _provider_error_code(
-                            str(message_data.get("errorMessage") or "")
-                        ) if failed else "PI_RUN_FAILED"
+                        failure_code = (
+                            _provider_error_code(str(message_data.get("errorMessage") or ""))
+                            if failed
+                            else "PI_RUN_FAILED"
+                        )
                         content = message_data.get("content") or []
                         text = "".join(
-                            block.get("text", "") for block in content if block.get("type") == "text"
+                            block.get("text", "")
+                            for block in content
+                            if block.get("type") == "text"
                         )
                         if text:
                             final_text = text

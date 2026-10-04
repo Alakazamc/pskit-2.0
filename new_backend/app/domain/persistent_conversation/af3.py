@@ -4,6 +4,7 @@ import hashlib
 import json
 import secrets
 import uuid
+from copy import copy
 from datetime import datetime, timedelta
 
 from app.contracts.capabilities import (
@@ -605,7 +606,7 @@ class Af3Mixin:
                     ))
             return self.get_af3_job(user_id, job_id)
 
-    def cancel_af3_job(self, user_id: str, job_id: str) -> Af3Job | None:
+    def cancel_af3_job(self, user_id: str, job_id: str, *, connection=None) -> Af3Job | None:
         """Cancel an owned active AF3 job and update GPU accounting.
 
         Never-started jobs release their hold; started jobs await actual GPU
@@ -618,33 +619,42 @@ class Af3Mixin:
         Returns:
             Latest job snapshot, or ``None`` when unavailable.
         """
+        if connection is None:
+            with self._immediate_transaction():
+                return self._cancel_af3_job(user_id, job_id)
+        # Bind a local repository view to the caller's transaction, including events.
+        bound = copy(self)
+        bound.db = connection
+        return bound._cancel_af3_job(user_id, job_id)
+
+    def _cancel_af3_job(self, user_id: str, job_id: str) -> Af3Job | None:
+        """Apply cancellation on the current caller-owned transaction connection."""
         job = self.get_af3_job(user_id, job_id)
         if job is None:
             return None
         if job.status in {"queued", "running"}:
-            with self._immediate_transaction():
-                changed = self.db.execute(
-                    "UPDATE agent_jobs SET status='cancelled',worker_id=NULL,"
-                    "lease_expires_at=NULL,"
-                    "gpu_accounting_status=CASE WHEN attempts>0 "
-                    "THEN 'pending_reconciliation' ELSE 'released' END,"
-                    "actual_minutes=CASE WHEN attempts>0 THEN NULL ELSE 0 END "
-                    "WHERE id=? AND user_id=? "
-                    "AND status IN ('queued','running')", (job_id, user_id),
-                ).rowcount
-                if changed and job.run_id:
-                    self._append_event_in_transaction(job.run_id, TaskUpdatedEvent(
-                        run_id=job.run_id,
-                        data=TaskUpdatedData(job_id=job_id, label="AlphaFold 3",
-                                             status="cancelled", progress=job.progress),
-                    ))
-                    used, reserved = self._gpu_usage_values(user_id, _now().date().isoformat())
-                    self._append_event_in_transaction(job.run_id, UsageUpdatedEvent(
-                        run_id=job.run_id,
-                        data=UsageUpdatedData(
-                            gpu_remaining=max(0, self._gpu_limit_for(user_id)-used-reserved),
-                        ),
-                    ))
+            changed = self.db.execute(
+                "UPDATE agent_jobs SET status='cancelled',worker_id=NULL,"
+                "lease_expires_at=NULL,"
+                "gpu_accounting_status=CASE WHEN attempts>0 "
+                "THEN 'pending_reconciliation' ELSE 'released' END,"
+                "actual_minutes=CASE WHEN attempts>0 THEN NULL ELSE 0 END "
+                "WHERE id=? AND user_id=? "
+                "AND status IN ('queued','running')", (job_id, user_id),
+            ).rowcount
+            if changed and job.run_id:
+                self._append_event_in_transaction(job.run_id, TaskUpdatedEvent(
+                    run_id=job.run_id,
+                    data=TaskUpdatedData(job_id=job_id, label="AlphaFold 3",
+                                         status="cancelled", progress=job.progress),
+                ))
+                used, reserved = self._gpu_usage_values(user_id, _now().date().isoformat())
+                self._append_event_in_transaction(job.run_id, UsageUpdatedEvent(
+                    run_id=job.run_id,
+                    data=UsageUpdatedData(
+                        gpu_remaining=max(0, self._gpu_limit_for(user_id)-used-reserved),
+                    ),
+                ))
         return self.get_af3_job(user_id, job_id)
 
     def settle_af3_job(
@@ -792,7 +802,9 @@ class Af3Mixin:
         )
 
     def reconcile_af3_gpu_usage(
-        self, job_id: str, actual_minutes: int, reason: str,
+        self, job_id: str, actual_minutes: int, reason: str, *,
+        audit_callback=None, audit_actor: str = 'operator:legacy-admin-key', audit_request_id=None,
+        connection=None,
     ) -> Af3Job | None:
         """Set actual GPU minutes for a terminal AF3 job with an audit reason.
 
@@ -807,36 +819,55 @@ class Af3Mixin:
         Raises:
             ValueError: Inputs are invalid or the job is still active.
         """
+        options = {
+            "audit_callback": audit_callback, "audit_actor": audit_actor,
+            "audit_request_id": audit_request_id,
+        }
+        if connection is None:
+            with self._immediate_transaction():
+                return self._reconcile_af3_gpu_usage(job_id, actual_minutes, reason, **options)
+        bound = copy(self)
+        bound.db = connection
+        return bound._reconcile_af3_gpu_usage(job_id, actual_minutes, reason, **options)
+
+    def _reconcile_af3_gpu_usage(
+        self, job_id, actual_minutes, reason, *, audit_callback, audit_actor, audit_request_id,
+    ):
+        """Apply native-minute settlement and events on the current transaction."""
         if actual_minutes < 0 or not reason.strip():
             raise ValueError("GPU reconciliation requires nonnegative minutes and a reason")
-        with self._immediate_transaction():
-            row = self.db.execute(
-                "SELECT user_id,run_id,status,actual_minutes,gpu_accounting_status "
-                "FROM agent_jobs WHERE json_extract(resource_requirements_json, '$.capability')='af3' AND id=?", (job_id,),
-            ).fetchone()
-            if row is None:
-                return None
-            user_id, run_id, status, prior_minutes, accounting_status = row
-            if status in {"queued", "running"}:
-                raise ValueError("AF3 job is still active")
-            if accounting_status in {"settled", "reconciled"} and prior_minutes == actual_minutes:
-                return self.get_af3_job(user_id, job_id)
-            self.db.execute(
-                "UPDATE agent_jobs SET actual_minutes=?,gpu_accounting_status='reconciled' "
-                "WHERE id=?", (actual_minutes, job_id),
-            )
-            self._record_gpu_reconciliation(
-                job_id, user_id, "admin", prior_minutes, actual_minutes, reason.strip(),
-            )
-            if run_id:
-                used, reserved = self._gpu_usage_values(user_id, _now().date().isoformat())
-                self._append_event_in_transaction(run_id, UsageUpdatedEvent(
-                    run_id=run_id,
-                    data=UsageUpdatedData(gpu_remaining=max(
-                        0, self._gpu_limit_for(user_id)-used-reserved,
-                    )),
-                ))
+        row = self.db.execute(
+            "SELECT user_id,run_id,status,actual_minutes,gpu_accounting_status "
+            "FROM agent_jobs WHERE json_extract(resource_requirements_json, '$.capability')='af3' AND id=?", (job_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        user_id, run_id, status, prior_minutes, accounting_status = row
+        if status in {"queued", "running"}:
+            raise ValueError("AF3 job is still active")
+        if accounting_status in {"settled", "reconciled"} and prior_minutes == actual_minutes:
             return self.get_af3_job(user_id, job_id)
+        self.db.execute(
+            "UPDATE agent_jobs SET actual_minutes=?,gpu_accounting_status='reconciled' "
+            "WHERE id=?", (actual_minutes, job_id),
+        )
+        self._record_gpu_reconciliation(
+            job_id, user_id, "admin", prior_minutes, actual_minutes, reason.strip(),
+        )
+        if audit_callback:
+            audit_callback(audit_actor, 'usage:reconcile-af3', job_id, reason.strip(),
+                           {'actual_gpu_minutes': prior_minutes, 'accounting_status': accounting_status},
+                           {'actual_gpu_minutes': actual_minutes, 'accounting_status': 'reconciled'},
+                           audit_request_id, connection=self.db)
+        if run_id:
+            used, reserved = self._gpu_usage_values(user_id, _now().date().isoformat())
+            self._append_event_in_transaction(run_id, UsageUpdatedEvent(
+                run_id=run_id,
+                data=UsageUpdatedData(gpu_remaining=max(
+                    0, self._gpu_limit_for(user_id)-used-reserved,
+                )),
+            ))
+        return self.get_af3_job(user_id, job_id)
 
     def gpu_reconciliations_for(self, job_id: str) -> list[Af3GpuReconciliation]:
         """Read the ordered GPU accounting audit trail for one job.

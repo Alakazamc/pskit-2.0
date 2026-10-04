@@ -9,6 +9,8 @@ router = APIRouter(prefix="/api/v1", tags=["models"])
 
 
 @router.get("/models")
-async def list_models(_user: CurrentUserDep, request: Request) -> list[ModelOption]:
+async def list_models(user: CurrentUserDep, request: Request) -> list[ModelOption]:
     """Return gateway-visible model aliases with confirmed image support."""
-    return list(await request.app.state.model_catalog.list_models())
+    policy = getattr(request.app.state, 'model_policy', None)
+    return (await policy.visible_for(user.id, 'chat') if policy and policy.managed
+            else list(await request.app.state.model_catalog.list_models()))

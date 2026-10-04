@@ -190,7 +190,7 @@ def test_failed_import_keeps_active_schema(
         ).fetchone() == (0,)
         assert connection.execute(
             sql.SQL("SELECT COUNT(*) FROM {}.schema_migrations").format(sql.Identifier(target))
-        ).fetchone() == (4,)
+        ).fetchone() == (6,)
 
 
 def test_pi_copy_into_existing_empty_volume(tmp_path: Path) -> None:
@@ -231,6 +231,32 @@ def test_sqlite_export_refuses_to_drop_compute_catalog(pg_schema, tmp_path):
             capabilities=[CapabilityVersion(id="lab.inspect", version="1", input_schema={"type": "object"})]))
         destination = tmp_path/"rollback.sqlite3"
         with pytest.raises(ValueError, match="Compute state requires a PostgreSQL backup"):
+            agent_data_migrate.export_sqlite_snapshot(dsn, destination, schema=schema)
+        assert not destination.exists()
+    finally:
+        database.close()
+
+
+@pytest.mark.parametrize("kind", ["management", "sandbox"])
+def test_sqlite_export_preserves_new_control_plane_state(pg_schema, tmp_path, kind):
+    """Legacy export must refuse to omit grants, audits or sandbox ownership."""
+    from app.db.postgres import PostgresDatabase
+    from app.domain.admin.roles import AdminStore
+    from app.domain.sandboxes import SandboxActivityStore
+
+    dsn, schema = pg_schema
+    migrate_postgres(dsn, schema=schema)
+    database = PostgresDatabase(dsn, schema=schema)
+    try:
+        if kind == "management":
+            AdminStore(database).grant("alice", "auditor", actor="test-operator",
+                                       reason="Review experiment usage")
+        else:
+            SandboxActivityStore(database).ensure_owner(
+                "alice", "sandbox-test", "sandbox-volume-test", "image:fixed-test",
+            )
+        destination = tmp_path / "rollback.sqlite3"
+        with pytest.raises(ValueError, match="requires a PostgreSQL backup"):
             agent_data_migrate.export_sqlite_snapshot(dsn, destination, schema=schema)
         assert not destination.exists()
     finally:

@@ -1,5 +1,7 @@
 """Server-controlled, immutable computation versions; no client credentials."""
 
+import json
+
 from jsonschema import Draft202012Validator
 from psycopg.types.json import Jsonb
 
@@ -11,26 +13,28 @@ class ComputeCatalog:
     def __init__(self, database):
         self.database = database
 
-    def register(self, manifest: ComputeServiceManifest):
+    def register(self, manifest: ComputeServiceManifest, *, connection=None):
         """Import an approved manifest from server configuration, never from user input."""
-        with self.database.transaction() as connection:
-            for capability in manifest.capabilities:
-                Draft202012Validator.check_schema(capability.input_schema)
-                Draft202012Validator.check_schema(capability.output_schema)
-                data = manifest.model_copy(update={"capabilities": [capability]}).model_dump(mode="json")
-                digest = payload_hash(data)
-                row = connection.execute(
-                    "INSERT INTO compute_capability_versions VALUES (%s,%s,%s,%s,%s) "
-                    "ON CONFLICT(capability_id,version) DO NOTHING RETURNING manifest_hash",
-                    (capability.id, capability.version, manifest.service_id, Jsonb(data), digest),
+        if connection is None:
+            with self.database.transaction() as conn:
+                return self.register(manifest, connection=conn)
+        for capability in manifest.capabilities:
+            Draft202012Validator.check_schema(capability.input_schema)
+            Draft202012Validator.check_schema(capability.output_schema)
+            data = manifest.model_copy(update={"capabilities": [capability]}).model_dump(mode="json")
+            digest = payload_hash(data)
+            row = connection.execute(
+                "INSERT INTO compute_capability_versions VALUES (%s,%s,%s,%s,%s) "
+                "ON CONFLICT(capability_id,version) DO NOTHING RETURNING manifest_hash",
+                (capability.id, capability.version, manifest.service_id, Jsonb(data), digest),
+            ).fetchone()
+            if row is None:
+                stored = connection.execute(
+                    "SELECT manifest_hash FROM compute_capability_versions "
+                    "WHERE capability_id=%s AND version=%s", (capability.id, capability.version),
                 ).fetchone()
-                if row is None:
-                    stored = connection.execute(
-                        "SELECT manifest_hash FROM compute_capability_versions "
-                        "WHERE capability_id=%s AND version=%s", (capability.id, capability.version),
-                    ).fetchone()
-                    if stored[0] != digest:
-                        raise ValueError("IMMUTABLE_VERSION")
+                if stored[0] != digest:
+                    raise ValueError("IMMUTABLE_VERSION")
 
     def get(self, user_id, capability_id, version, *, connection=None):
         if connection is None:
@@ -44,6 +48,16 @@ class ComputeCatalog:
             return None
         manifest = ComputeServiceManifest.model_validate(row[0])
         capability = manifest.capabilities[0]
+        published = connection.execute(
+            "SELECT v.data_json FROM admin_services s JOIN admin_service_versions v "
+            "ON v.service_id=s.service_id AND v.revision=s.published_revision "
+            "WHERE s.service_id=%s", (manifest.service_id,),
+        ).fetchone()
+        if published and not any(
+            item['id'] == capability_id and item['version'] == version
+            for item in json.loads(published[0])['capabilities']
+        ):
+            return None
         if capability.visibility != "published" or (
             capability.allowed_users is not None and user_id not in capability.allowed_users
         ):

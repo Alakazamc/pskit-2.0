@@ -73,6 +73,9 @@ class Settings:
     model_gateway_image_models_json: str = "[]"
     user_token_limits_json: str = "{}"
     admin_api_key: str = ""
+    model_policy_mode: Literal["legacy", "managed"] = "legacy"
+    admin_service_endpoints_json: str = "{}"
+    admin_service_credentials_json: str = "{}"
     anonymous_enabled: bool | None = None
     anonymous_captcha_required: bool = False
     anonymous_rate_secret: str = ""
@@ -156,6 +159,9 @@ class Settings:
             model_gateway_image_models_json=os.getenv("MODEL_GATEWAY_IMAGE_MODELS_JSON", "[]"),
             user_token_limits_json=os.getenv("RESEARCH_AGENT_USER_TOKEN_LIMITS_JSON", "{}"),
             admin_api_key=os.getenv("RESEARCH_AGENT_ADMIN_API_KEY", ""),
+            model_policy_mode=os.getenv("RESEARCH_AGENT_MODEL_POLICY_MODE", "legacy"),
+            admin_service_endpoints_json=os.getenv("RESEARCH_AGENT_ADMIN_SERVICE_ENDPOINTS_JSON", "{}"),
+            admin_service_credentials_json=os.getenv("RESEARCH_AGENT_ADMIN_SERVICE_CREDENTIALS_JSON", "{}"),
             anonymous_enabled=(None if "RESEARCH_AGENT_ANONYMOUS_ENABLED" not in os.environ
                                else os.getenv("RESEARCH_AGENT_ANONYMOUS_ENABLED", "").lower()
                                in {"1", "true", "yes"}),
