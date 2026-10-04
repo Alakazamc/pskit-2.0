@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from "react";
-import { Bot, Check, ChevronDown, ChevronUp, Circle, FlaskConical, LoaderCircle } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Circle, FlaskConical, LoaderCircle, Sparkles } from "lucide-react";
 import type { Message } from "../../api/types";
 import type { RunView } from "./events";
 import { MessageParts } from "./MessageParts";
@@ -9,6 +9,17 @@ import { useLanguage } from "../../i18n/LanguageProvider";
 import { localizedRunError } from "./runErrors";
 import { RunControls } from "../mono/RunControls";
 import { useChatAutoscroll } from "./useChatAutoscroll";
+
+function AssistantResponseHeader({ generating = false }: { generating?: boolean }) {
+  const { t } = useLanguage();
+  return <div className="assistant-response-header">
+    <span className="assistant-response-mark" role={generating ? "status" : undefined}
+      aria-label={generating ? t("conversation.generating") : undefined} aria-hidden={generating ? undefined : true}>
+      {generating ? <LoaderCircle className="message-spinner" size={20} aria-hidden="true" /> : <Sparkles size={20} aria-hidden="true" />}
+    </span>
+    <span className="message-author">Research Agent</span>
+  </div>;
+}
 
 function UserMessage({ message }: { message: Message }) {
   const { t } = useLanguage();
@@ -61,23 +72,23 @@ function UserMessage({ message }: { message: Message }) {
   </article>;
 }
 
-export function Conversation({ messages, run, runId, onCancel, onApproval }: { messages: Message[]; run: RunView; runId?: string | null; onCancel?: () => Promise<void>; onApproval?: (approvalId: string, decision: "approved" | "rejected") => Promise<void> }) {
+export function Conversation({ messages, run, runId, awaitingEvents = false, onCancel, onApproval }: { messages: Message[]; run: RunView; runId?: string | null; awaitingEvents?: boolean; onCancel?: () => Promise<void>; onApproval?: (approvalId: string, decision: "approved" | "rejected") => Promise<void> }) {
   const { t } = useLanguage();
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   useChatAutoscroll(scrollRef, listRef, `${messages.length}:${run.text.length}:${run.status}:${run.tools.length}`, runId,
-    messages.length > 0 || run.status !== "idle");
+    messages.length > 0 || run.status !== "idle" || awaitingEvents);
   const runError = localizedRunError(run, t);
-  const runActive = (run.status === "running" || run.status === "waiting") && !run.approval;
+  const runActive = (run.status === "running" || run.status === "waiting" || awaitingEvents) && !run.approval;
   const lastUserIndex = messages.reduce((last, message, index) => message.role === "user" ? index : last, -1);
   const runStartedAt = run.events.find((event) => event.created_at)?.created_at;
   const savedReplyAvailable = messages.some((message, index) => message.role === "assistant"
     && index > lastUserIndex
     && (!runStartedAt || Date.parse(message.created_at) >= Date.parse(runStartedAt)));
-  const showRunReply = run.status !== "idle" && (run.status !== "completed"
+  const showRunReply = (run.status !== "idle" || awaitingEvents) && (run.status !== "completed"
     || (run.text.length > 0 && !savedReplyAvailable));
   return <div className="conversation-scroll" ref={scrollRef}>
-    {messages.length === 0 && run.status === "idle" ? <div className="empty-chat">
+    {messages.length === 0 && run.status === "idle" && !awaitingEvents ? <div className="empty-chat">
       <div className="empty-icon"><FlaskConical size={28} /></div>
       <span className="eyebrow">{t("workspace.eyebrow")}</span>
       <h2>{t("conversation.emptyTitle")}</h2>
@@ -93,10 +104,22 @@ export function Conversation({ messages, run, runId, onCancel, onApproval }: { m
         </li>)}</ol>
       </section>}
       {messages.map((message) => message.role === "user" ? <UserMessage message={message} key={message.id} /> : <article className={`message-row ${message.role}`} key={message.id}>
-        {message.role === "assistant" && <div className="assistant-avatar"><Bot size={17} /></div>}
-        <div className="message-body">{message.role === "assistant" && <span className="message-author">Research Agent</span>}<MessageParts parts={message.parts} markdown={message.role === "assistant"} />{message.role === "assistant" && <div className="message-actions"><ReplyCopyButton text={message.parts.filter((part) => part.type === "text").map((part) => part.text).join("\n\n")} /></div>}</div>
+        <div className="message-body">
+          {message.role === "assistant" && <AssistantResponseHeader />}
+          <MessageParts parts={message.parts} markdown={message.role === "assistant"} />
+          {message.role === "assistant" && <div className="message-actions"><ReplyCopyButton text={message.parts.filter((part) => part.type === "text").map((part) => part.text).join("\n\n")} /></div>}
+        </div>
       </article>)}
-      {showRunReply && <article className="message-row assistant"><div className="assistant-avatar"><Bot size={17} /></div><div className="message-body"><span className="message-author">Research Agent</span>{runError ? <p className="message-text">{runError}</p> : run.text && <LazyMarkdownContent text={run.text} streaming={runActive} />}{run.tools.filter((tool) => tool.status === "running").map((tool) => <div className="task-pill" key={tool.id}><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {tool.name}</div>)}{run.jobId && !["failed", "cancelled"].includes(run.status) && <div className="task-pill"><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {run.jobLabel || t("conversation.backgroundTask")}{Number.isFinite(run.progress) && ` · ${Math.round(run.progress)}%`}</div>}{run.approval && onCancel && onApproval && <RunControls key={runId ?? "approval"} run={run} onCancel={onCancel} onApproval={onApproval} />}<div className="message-actions"><ReplyCopyButton text={runError ?? run.text} />{runActive && <span className="message-generating" role="status" aria-label={t("conversation.generating")}><LoaderCircle className="message-spinner" size={16} aria-hidden="true" /></span>}</div></div></article>}
+      {showRunReply && <article className="message-row assistant">
+        <div className="message-body">
+          <AssistantResponseHeader generating={runActive} />
+          {runError ? <p className="message-text">{runError}</p> : run.text && <LazyMarkdownContent text={run.text} streaming={runActive} />}
+          {run.tools.filter((tool) => tool.status === "running").map((tool) => <div className="task-pill" key={tool.id}><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {tool.name}</div>)}
+          {run.jobId && !["failed", "cancelled"].includes(run.status) && <div className="task-pill"><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {run.jobLabel || t("conversation.backgroundTask")}{Number.isFinite(run.progress) && ` · ${Math.round(run.progress)}%`}</div>}
+          {run.approval && onCancel && onApproval && <RunControls key={runId ?? "approval"} run={run} onCancel={onCancel} onApproval={onApproval} />}
+          <div className="message-actions"><ReplyCopyButton text={runError ?? run.text} /></div>
+        </div>
+      </article>}
     </div>}
   </div>;
 }

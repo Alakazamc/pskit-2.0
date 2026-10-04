@@ -129,13 +129,16 @@ it("copies a Markdown table and opens its focused preview", async () => {
   await waitFor(() => expect(screen.queryByRole("dialog", { name: "表格预览" })).not.toBeInTheDocument());
 });
 
-it("renders incomplete streamed Markdown and shows a spinner without a progress bar", async () => {
+it("keeps the generating mark above streamed Markdown instead of in the reply actions", async () => {
   const first = projectEvents(emptyRun, [
     { id: "delta-1", run_id: "run-stream", type: "message.delta", data: { delta: "**部分" } },
   ]);
   const { rerender } = render(<LanguageProvider><Conversation messages={[]} run={first} /></LanguageProvider>);
   expect((await screen.findByText("部分")).closest("strong")).toBeInTheDocument();
-  expect(screen.getByRole("status", { name: "正在生成回复" })).toBeInTheDocument();
+  const generating = screen.getByRole("status", { name: "正在生成回复" });
+  const body = generating.closest(".message-body")!;
+  expect(body.firstElementChild).toContainElement(generating);
+  expect(generating.closest(".message-actions")).toBeNull();
   expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
 
   const second = projectEvents(first, [
@@ -143,6 +146,12 @@ it("renders incomplete streamed Markdown and shows a spinner without a progress 
   ]);
   rerender(<LanguageProvider><Conversation messages={[]} run={second} /></LanguageProvider>);
   expect((await screen.findByText("部分内容")).closest("strong")).toBeInTheDocument();
+  expect(screen.getByRole("status", { name: "正在生成回复" })).toBe(generating);
+
+  rerender(<LanguageProvider><Conversation messages={[]} run={{ ...second, status: "completed" }} /></LanguageProvider>);
+  expect(screen.queryByRole("status", { name: "正在生成回复" })).not.toBeInTheDocument();
+  expect(body.firstElementChild).toHaveClass("assistant-response-header");
+  expect(body.firstElementChild).toContainElement(body.querySelector(".assistant-response-mark"));
 });
 
 it("starts observing reply height when an empty chat receives its first message", () => {
@@ -151,6 +160,22 @@ it("starts observing reply height when an empty chat receives its first message"
   const { container, rerender } = render(<Conversation messages={[]} run={emptyRun} />);
   rerender(<Conversation messages={[]} run={{ ...emptyRun, status: "running", text: "First reply" }} />);
   expect(observe).toHaveBeenCalledWith(container.querySelector(".message-list"));
+});
+
+it.each(["completed", "failed", "cancelled", "approval"] as const)("stops the reply mark for %s while retaining its header slot", (state) => {
+  const run = state === "approval"
+    ? { ...emptyRun, status: "waiting" as const, approval: { id: "approval-1", capability: "submit_af3", estimatedMinutes: 10 } }
+    : { ...emptyRun, status: state, text: "Partial reply" };
+  const { container } = render(<LanguageProvider><Conversation messages={[]} run={run} /></LanguageProvider>);
+  expect(screen.queryByRole("status", { name: "正在生成回复" })).not.toBeInTheDocument();
+  const header = container.querySelector(".assistant-response-header")!;
+  expect(header).toContainElement(container.querySelector(".assistant-response-mark"));
+  expect(header.querySelector(".message-spinner")).toBeNull();
+});
+
+it("does not show a generating mark just because a historical run id exists", () => {
+  render(<LanguageProvider><Conversation messages={[]} run={emptyRun} runId="historical-run" /></LanguageProvider>);
+  expect(screen.queryByRole("status", { name: "正在生成回复" })).not.toBeInTheDocument();
 });
 
 it("follows streamed reply growth near the bottom and leaves manual reading position alone", () => {
@@ -200,6 +225,8 @@ it("keeps the streamed reply visible until the saved reply replaces it", async (
   };
   rerender(<LanguageProvider><Conversation messages={[user, saved]} run={run} /></LanguageProvider>);
   await waitFor(() => expect(screen.getAllByText("Ready to help")).toHaveLength(1));
+  expect(document.querySelectorAll(".assistant-response-header")).toHaveLength(1);
+  expect(screen.queryByRole("status", { name: "正在生成回复" })).not.toBeInTheDocument();
 });
 
 it("copies the raw text of each assistant reply from its lower-left action", async () => {

@@ -162,7 +162,7 @@ it("shows waiting inside the reply and cancels without a bar above the composer"
   )).toBe(true));
 });
 
-it("shows stop for a reloaded active run before the first event arrives", async () => {
+it("shows the reply loading mark and stop before a reloaded active run receives its first event", async () => {
   loggedIn("/session/session-1");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
@@ -175,6 +175,9 @@ it("shows stop for a reloaded active run before the first event arrives", async 
   render(<App />);
   expect(await screen.findByRole("button", { name: "取消运行" })).toBeEnabled();
   expect(screen.queryByRole("button", { name: "发送消息" })).not.toBeInTheDocument();
+  const generating = await screen.findByRole("status", { name: "正在生成回复" });
+  expect(generating.closest(".message-body")?.firstElementChild).toContainElement(generating);
+  expect(screen.queryByRole("region", { name: "当前运行" })).not.toBeInTheDocument();
 });
 
 it("switches the composer to stop after message submission while the reply is streaming", async () => {
