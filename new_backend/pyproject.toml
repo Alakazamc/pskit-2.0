@@ -15,7 +15,7 @@ dev = ["pytest>=8", "pytest-asyncio>=1", "ruff>=0.10", "fpdf2>=2.8.5"]
 entrypoint = "app.main:app"
 
 [tool.setuptools.packages.find]
-include = ["app*"]
+include = ["app*", "pskit_compute*"]
 
 [tool.setuptools.package-data]
 "app.db.postgres_migrations" = ["*.sql"]
