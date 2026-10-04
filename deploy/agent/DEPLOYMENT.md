@@ -24,6 +24,8 @@
 
 准备以下私有文件。所有文件权限为 `0600`。不要把文件内容打印到终端记录或提交到 Git。
 
+公开的源码脚本使用 `0644`，尤其是会直接挂载给容器的 `deploy/agent/scripts/provision_shared_postgres.py` 和 `deploy/agent/tests/mock_model_gateway.py`；后端镜像中的 `agent` 是 UID 10001，需要读取这些文件。不要把私有配置的 `0600` 权限统一套在公开源码上。Staging 启动中途失败后，先按手册停止其专属项目并保留卷，再重新启动，避免部分启动的服务占用预检端口。
+
 | 文件 | 作用 |
 | --- | --- |
 | `infra/supabase/.env` | Supabase、PostgreSQL 和邮件配置 |
