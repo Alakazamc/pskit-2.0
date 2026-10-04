@@ -21,13 +21,13 @@ class ToolRun(BaseModel):
 
 
 class ToolRunStore:
-    """Store tool history in SQLite or an isolated in-memory mock."""
+    """Store owned tool history in PostgreSQL, SQLite, or an in-memory mock."""
 
     def __init__(self, db_path: str | PostgresDatabase | None = None) -> None:
         """Open persistent history when a database path is supplied.
 
         Args:
-            db_path: Optional SQLite path; absence selects the mock store.
+            db_path: PostgreSQL adapter or SQLite path; absence selects the mock store.
         """
         self._runs: dict[str, dict[str, ToolRun]] = {}
         self.db = (PostgresStatements(db_path) if isinstance(db_path, PostgresDatabase)
@@ -70,11 +70,12 @@ class ToolRunStore:
             self._runs.setdefault(user_id, {})[run.id] = run
         return run
 
-    def list_for(self, user_id: str) -> list[ToolRun]:
+    def list_for(self, user_id: str, tool: str | None = None) -> list[ToolRun]:
         """List a user's tool records from newest to oldest.
 
         Args:
             user_id: Owner whose history is requested.
+            tool: Optional exact tool name, including its MCP namespace.
 
         Returns:
             Ordered tool execution records.
@@ -82,12 +83,16 @@ class ToolRunStore:
         if self.db:
             rows = self.db.execute(
                 "SELECT id,tool,title,arguments_json,result_json,created_at,project_id "
-                "FROM tool_runs WHERE user_id=? ORDER BY created_at DESC", (user_id,)
+                "FROM tool_runs WHERE user_id=?" + (" AND tool=?" if tool is not None else "")
+                + " ORDER BY created_at DESC", (user_id, tool) if tool is not None else (user_id,)
             ).fetchall()
             return [ToolRun(id=row[0], tool=row[1], title=row[2],
                             arguments=json.loads(row[3]), result=json.loads(row[4]),
                             created_at=datetime.fromisoformat(row[5]), project_id=row[6]) for row in rows]
-        return sorted(self._runs.get(user_id, {}).values(), key=lambda run: run.created_at, reverse=True)
+        return sorted(
+            (run for run in self._runs.get(user_id, {}).values() if tool is None or run.tool == tool),
+            key=lambda run: run.created_at, reverse=True,
+        )
 
     def set_project(self, user_id: str, run_id: str, project_id: str) -> ToolRun | None:
         """Associate an owned tool record with a project.

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from app.adapters.live.limited_mcp import McpCapacityExceeded
@@ -91,9 +91,13 @@ async def invoke_mcp_tool(
 
 
 @router.get("/tool-runs")
-async def list_tool_runs(user: CurrentUserDep, request: Request) -> list[ToolRun]:
-    """List the user's saved MCP tool invocation records."""
-    return request.app.state.tool_runs.list_for(user.id)
+def list_tool_runs(
+    user: CurrentUserDep, request: Request,
+    tool: Annotated[str | None, Query(min_length=1, max_length=256,
+                                     description="Exact tool name to filter invocation history")] = None,
+) -> list[ToolRun]:
+    """List owned MCP invocation records, optionally for one exact tool."""
+    return request.app.state.tool_runs.list_for(user.id, tool)
 
 
 class ToolRunMove(BaseModel):

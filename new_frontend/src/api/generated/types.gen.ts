@@ -3228,9 +3228,25 @@ export type InvokeMcpToolApiV1McpToolsNameInvokePostResponse = InvokeMcpToolApiV
 export type ListToolRunsApiV1ToolRunsGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Tool
+         *
+         * Exact tool name to filter invocation history
+         */
+        tool?: string | null;
+    };
     url: '/api/v1/tool-runs';
 };
+
+export type ListToolRunsApiV1ToolRunsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListToolRunsApiV1ToolRunsGetError = ListToolRunsApiV1ToolRunsGetErrors[keyof ListToolRunsApiV1ToolRunsGetErrors];
 
 export type ListToolRunsApiV1ToolRunsGetResponses = {
     /**

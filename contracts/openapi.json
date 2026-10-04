@@ -1206,29 +1206,61 @@
           "capabilities"
         ],
         "summary": "List Tool Runs",
-        "description": "List the user's saved MCP tool invocation records.",
+        "description": "List owned MCP invocation records, optionally for one exact tool.",
         "operationId": "list_tool_runs_api_v1_tool_runs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tool",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact tool name to filter invocation history",
+              "title": "Tool"
+            },
+            "description": "Exact tool name to filter invocation history"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
+                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/ToolRun"
                   },
-                  "type": "array",
                   "title": "Response List Tool Runs Api V1 Tool Runs Get"
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/tool-runs/{run_id}/project": {

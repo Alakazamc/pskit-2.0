@@ -5,6 +5,27 @@ from app.config import Settings
 from app.main import create_app
 
 
+@pytest.mark.parametrize("runtime", ["mock", "pi"])
+@pytest.mark.asyncio
+async def test_tool_history_filters_by_exact_tool_and_current_owner(runtime, tmp_path):
+    settings = Settings(agent_runtime=runtime, agent_db_path=str(tmp_path / "agent.sqlite3"))
+    app = create_app(settings, pi_runner=object())
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        alice = (await client.post("/api/v1/auth/demo", json={"email": "alice@example.org"})).json()
+        bob = (await client.post("/api/v1/auth/demo", json={"email": "bob@example.org"})).json()
+        headers = {"Authorization": f"Bearer {alice['access_token']}"}
+        first = app.state.tool_runs.add(alice["user"]["id"], "lab/search", {"query": "p53"}, {})
+        app.state.tool_runs.add(alice["user"]["id"], "lab/search_extra", {}, {})
+        latest = app.state.tool_runs.add(alice["user"]["id"], "lab/search", {"query": "rna"}, {})
+        app.state.tool_runs.add(bob["user"]["id"], "lab/search", {}, {"private": True})
+        response = await client.get("/api/v1/tool-runs", headers=headers, params={"tool": "lab/search"})
+        assert response.status_code == 200
+        assert [run["id"] for run in response.json()] == [latest.id, first.id]
+        assert (await client.get("/api/v1/tool-runs", headers=headers,
+                                 params={"tool": "missing"})).json() == []
+        assert len((await client.get("/api/v1/tool-runs", headers=headers)).json()) == 3
+
+
 @pytest.mark.asyncio
 async def test_mcp_run_starts_personal_and_can_be_saved_to_owned_project():
     app = create_app()
