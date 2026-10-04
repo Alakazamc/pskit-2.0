@@ -79,7 +79,7 @@ function AppContent() {
     <Route path="/admin/:section?" element={user ? <AdminShell api={api} user={user} onUnauthorized={() => { api.setAccessToken(null); window.localStorage.removeItem("research_access_token"); query.clear(); setUser(null); }} /> : <Navigate to="/login" replace />} />
     <Route path="/c/:sessionId" element={<LegacyPersonalChatRedirect />} />
     <Route path="/g/:projectKey/*" element={<LegacyProjectRedirect />} />
-    <Route path="/*" element={user ? <MonoWorkspace api={api} user={user} onSession={applySession} onLogout={() => {
+    <Route path="/*" element={user ? <MonoWorkspace api={api} user={user} onSession={applySession} onUserChange={(identity) => setUser((current) => current?.id === identity.id ? identity : current)} onLogout={() => {
       if (user.is_anonymous && !window.confirm(t("guest.signOutWarning"))) return;
       const clear = () => { api.setAccessToken(null); window.localStorage.removeItem("research_access_token"); query.clear(); setUser(null); };
       void api.logoutAuth().catch(() => undefined).finally(clear);

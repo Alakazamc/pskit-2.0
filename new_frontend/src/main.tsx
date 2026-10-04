@@ -20,5 +20,6 @@ import "./styles/mono-pages.css";
 import "./styles/catalog.css";
 import "./styles/scrollbars.css";
 import "./styles/admin.css";
+import "./styles/settings.css";
 
 createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);

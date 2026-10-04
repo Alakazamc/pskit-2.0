@@ -70,8 +70,19 @@ export function createHttpApi({ baseUrl = "/api/v1", token, fetcher = fetch, onU
     },
     googleLoginUrl: () => `${baseUrl}/auth/google/start`,
     getMe: () => request("/me"),
+    updateProfile: (name) => request("/me", { method: "PATCH", body: JSON.stringify({ name }) }),
+    uploadAvatar: (file) => request("/me/avatar", {
+      method: "PUT", body: file, headers: { "Content-Type": file.type },
+    }),
+    getAvatar: async () => {
+      const response = await send("/me/avatar");
+      if (!response.ok) throw new ApiError(response.status, response.statusText);
+      return response.blob();
+    },
+    deleteAvatar: () => request("/me/avatar", { method: "DELETE" }),
     getUsage: () => request("/usage"),
     getUsageEntries: () => request("/usage/entries"),
+    getUsageActivity: () => request("/usage/activity?days=365"),
     getProjects: () => request("/g"),
     createProject: (name, description = "", icon) => post("/g", { name, description, ...(icon ? { icon } : {}) }),
     renameProject: (id, name) => request(projectPath(id), { method: "PATCH", body: JSON.stringify({ name }) }),

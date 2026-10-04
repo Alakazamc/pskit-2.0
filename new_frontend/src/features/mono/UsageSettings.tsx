@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { UsageEntry, ResearchApi } from "../../api/types";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import type { TranslationKey } from "../../i18n/translations";
+import { UsageActivity } from "./UsageActivity";
 
 const statusKeys: Record<string, TranslationKey> = {
   pending_reconciliation: "usage.statusPending",
@@ -53,6 +54,7 @@ export function UsageSettings({ api, userId, isGuest = false }: { api: ResearchA
         <small>{t("usage.resetsAt", { date: date(usage.data.gpu.resets_at) })}</small>
       </div>
     </div>}
+    <UsageActivity key={userId} api={api} userId={userId} />
     <div className="mono-usage-history">
       <h3>{t("usage.recent")}</h3>
       {entries.isPending && <p role="status">{t("usage.loading")}</p>}

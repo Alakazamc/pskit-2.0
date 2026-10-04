@@ -12,18 +12,16 @@ import { Composer } from "../chat/Composer";
 import { completeComposerDraft, conversationDraftScope, moveComposerDraft, readComposerDraft } from "../chat/composerDrafts";
 import { Conversation } from "../chat/Conversation";
 import { useRunEvents } from "../chat/useRunEvents";
-import { LanguageSwitch } from "../../i18n/LanguageProvider";
 import { CreateProjectDialog, MoveChatDialog, ProjectDetail, ProjectIndex } from "./ProjectPages";
 import { personalSessionPath, projectPath, projectSessionPath, sessionPath } from "./sessionPaths";
 import { CatalogLibrary } from "../../components/catalog/CatalogLibrary";
 import { ToolDirectory } from "./ToolPages";
 import { ArtifactsPage } from "./ArtifactsPage";
-import { UsageSettings } from "./UsageSettings";
+import { SettingsPage } from "./SettingsPage";
+import { UserAvatar } from "../../components/UserAvatar";
 import { SearchDialog } from "./SearchDialog";
 import { SessionRenameDialog } from "./SessionRenameDialog";
-import { GuestUpgrade } from "../auth/GuestUpgrade";
 import { ProjectIconGlyph } from "./ProjectIcon";
-import { AdminEntry } from "../admin/AdminEntry";
 
 type Theme = "dark" | "light";
 
@@ -94,13 +92,13 @@ function Sidebar({
         {personalSessions.map((session) => <SidebarChatItem key={session.id} session={session} href={personalChatPath(session)} selected={activeSessionId === session.id && !activeProjectId} onClose={onClose} onRename={onRenameChat} portalContainer={portalContainer} />)}
         {personalSessions.length === 0 && <div className="mono-sidebar-hint">{t("mono.noChats")}</div>}
       </div>
-      <div className="mono-sidebar-footer"><div className="mono-avatar">{user.name.slice(0, 1).toUpperCase()}</div><div><b>{user.name}</b><small>{t("mono.personalSpace")}</small></div><button type="button" title={t("mono.signOut")} aria-label={t("mono.signOut")} onClick={onLogout}><LogOut size={17} /></button></div>
+      <div className="mono-sidebar-footer"><UserAvatar api={api} user={user} /><div><b>{user.name}</b><small>{t("mono.personalSpace")}</small></div><button type="button" title={t("mono.signOut")} aria-label={t("mono.signOut")} onClick={onLogout}><LogOut size={17} /></button></div>
     </>}
     <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} onNavigate={onClose} api={api} userId={user.id} projects={projects} personalSessions={personalSessions} />
   </aside>;
 }
 
-export function MonoWorkspace({ api, user, onLogout, onSession }: { api: ResearchApi; user: UserIdentity; onLogout: () => void; onSession?: (session: AuthSessionResponse) => void }) {
+export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = () => undefined }: { api: ResearchApi; user: UserIdentity; onLogout: () => void; onSession?: (session: AuthSessionResponse) => void; onUserChange?: (user: UserIdentity) => void }) {
   const { t } = useLanguage();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -147,6 +145,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
     void queryClient.invalidateQueries({ queryKey: ["sessions", user.id, activeProjectId ?? personalProjectId] });
     void queryClient.invalidateQueries({ queryKey: ["usage", user.id] });
     void queryClient.invalidateQueries({ queryKey: ["usage-entries", user.id] });
+    void queryClient.invalidateQueries({ queryKey: ["usage-activity", user.id] });
   }, [activeProjectId, activeSessionId, personalProjectId, queryClient, user.id]);
   const run = useRunEvents(api, visibleRunId, onRunCompleted);
   const runActive = (run.status === "running" || run.status === "waiting") ||
@@ -264,7 +263,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
     if (pathname === "/tools/runs") return <Navigate to="/tools" replace />;
     if (pathname === "/tools" || pathname === "/tools/pdb" || pathname === "/tools/structure" || /^\/tools\/run\/[^/]+$/.test(pathname)) return <ToolDirectory api={api} userId={user.id} projects={visibleProjects} theme={theme} viewer={pathname === "/tools/structure"} selectedName={pathname === "/tools/pdb" ? "search_pdb" : pathname.startsWith("/tools/run/") ? decodeURIComponent(pathname.split("/")[3]) : undefined} />;
     if (pathname === "/skills" || pathname === "/resources") return <div className="mono-page-scroll"><div className="mono-page-content"><CatalogLibrary key={pathname} kind={pathname === "/skills" ? "skills" : "resources"} items={(pathname === "/skills" ? skills.data : resources.data) ?? []} loading={pathname === "/skills" ? skills.isLoading : resources.isLoading} error={pathname === "/skills" ? skills.isError : resources.isError} /></div></div>;
-    if (pathname === "/settings") return <div className="mono-page-scroll"><div className="mono-page-content"><section className="mono-panel mono-settings-panel"><h2>{t("mono.appearance")}</h2><div className="mono-segmented"><button className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")}>{t("mono.light")}</button><button className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}>{t("mono.dark")}</button></div></section><section className="mono-panel mono-settings-panel"><h2>{t("mono.language")}</h2><LanguageSwitch /></section><UsageSettings api={api} userId={user.id} isGuest={user.is_anonymous} />{user.is_anonymous && onSession && <GuestUpgrade api={api} onSession={onSession} />}<section className="mono-panel mono-settings-panel"><h2>{t("mono.account")}</h2><p>{user.name} · {user.email}</p><AdminEntry api={api} userId={user.id} /><button className="mono-button" onClick={onLogout}>{t("mono.signOut")}</button></section></div></div>;
+    if (pathname === "/settings") return <SettingsPage api={api} user={user} theme={theme} onThemeChange={setTheme} onUserChange={onUserChange} onSession={onSession} onLogout={onLogout} />;
     return <div className="mono-page-scroll"><div className="mono-empty-panel"><Link to="/">{t("mono.backNewChat")}</Link></div></div>;
   };
   return <div className={`mono-app ${theme}`} data-theme={theme}>

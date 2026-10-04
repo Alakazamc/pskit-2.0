@@ -16,6 +16,8 @@ export type GpuQuota = Api.GpuQuota;
 
 export type UsageSnapshot = Api.UsageSnapshot;
 export type UsageEntry = Api.UsageEntry;
+export type UsageActivity = Api.UsageActivity;
+export type DailyUsage = Api.DailyUsage;
 
 export type Project = Api.Project;
 export type ProjectIcon = NonNullable<Project["icon"]>;
@@ -67,8 +69,13 @@ export interface ResearchApi extends AdminApi {
   logoutAuth(): Promise<void>;
   googleLoginUrl(): string;
   getMe(): Promise<UserIdentity>;
+  updateProfile(name: string): Promise<UserIdentity>;
+  uploadAvatar(file: File): Promise<UserIdentity>;
+  getAvatar(): Promise<Blob>;
+  deleteAvatar(): Promise<UserIdentity>;
   getUsage(): Promise<UsageSnapshot>;
   getUsageEntries(): Promise<UsageEntry[]>;
+  getUsageActivity(): Promise<UsageActivity>;
   getProjects(): Promise<Project[]>;
   createProject(name: string, description?: string, icon?: ProjectIcon): Promise<Project>;
   renameProject(id: string, name: string): Promise<Project>;
