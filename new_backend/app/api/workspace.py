@@ -294,8 +294,6 @@ async def send_message(
     if context.image_ids and not selected_model.supports_images:
         raise HTTPException(status_code=422,
                             detail={"code": "MODEL_DOES_NOT_SUPPORT_IMAGES"})
-    if len(context.image_ids) > 2:
-        raise HTTPException(status_code=422, detail={"code": "TOO_MANY_IMAGES"})
     payload = payload.model_copy(update={"attachments": list(context.attachments)})
     pi_mode = request.app.state.settings.agent_runtime == "pi"
     if pi_mode and request.app.state.agent_service is None:

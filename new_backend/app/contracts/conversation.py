@@ -132,7 +132,7 @@ class MessageRequest(BaseModel):
     content: str = Field(min_length=1)
     model: str | None = Field(default=None, min_length=1, max_length=200)
     reasoning_effort: Literal["off", "minimal", "low", "medium", "high", "xhigh", "max"] | None = None
-    attachments: list[ContextRef] = Field(default_factory=list)
+    attachments: list[ContextRef] = Field(default_factory=list, max_length=10)
     skills: list[ContextRef] = Field(default_factory=list)
     resources: list[ContextRef] = Field(default_factory=list)
 

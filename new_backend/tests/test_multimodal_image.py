@@ -88,3 +88,57 @@ async def test_image_is_rejected_for_text_model_and_forwarded_to_pi_for_vision(t
     assert vision_response.status_code == 200
     assert runner.images == [{"type": "image", "data": base64.b64encode(PNG).decode(),
                               "mimeType": "image/png"}]
+
+
+@pytest.mark.asyncio
+async def test_ten_images_reach_pi_and_next_turn_has_a_fresh_attachment_allowance(tmp_path):
+    class RecordingPi:
+        def __init__(self):
+            self.images = []
+
+        async def prompt(self, session_id, message, on_event, **kwargs):
+            self.images.append(kwargs.get("images"))
+            return {"session_file": f"/tmp/{session_id}.jsonl", "text": "Reviewed"}
+
+    runner = RecordingPi()
+    app = create_app(Settings(
+        agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3"),
+        model_gateway_model="vision-model", model_gateway_image_models_json='["vision-model"]',
+    ), pi_runner=runner)
+    async with app.router.lifespan_context(app):  # noqa: SIM117 - Start scheduler first.
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://backend",
+        ) as client:
+            login = await client.post("/api/v1/auth/demo", json={"email": "alice@example.org"})
+            headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+            session = (await client.post("/api/v1/c", headers=headers,
+                                         json={"title": "Image review"})).json()
+            path = f"/api/v1/c/{session['id']}/messages"
+            for turn in range(2):
+                attachments = []
+                for index in range(10):
+                    name = f"turn-{turn + 1}-image-{index + 1}.png"
+                    uploaded = await client.put("/api/v1/files/content", headers=headers,
+                                                params={"name": name}, content=PNG)
+                    assert uploaded.status_code == 200
+                    attachments.append({"id": uploaded.json()["id"], "name": name})
+                sent = await client.post(path, headers=headers, json={
+                    "content": "Review these images", "model": "vision-model",
+                    "attachments": attachments,
+                })
+                assert sent.status_code == 200, sent.text
+                for _ in range(100):
+                    status = (await client.get(f"/api/v1/runs/{sent.json()['run_id']}",
+                                               headers=headers)).json()["status"]
+                    if status == "completed":
+                        break
+                    await asyncio.sleep(0.01)
+                assert status == "completed"
+            messages = (await client.get(path, headers=headers)).json()
+
+    assert len(runner.images) == 2
+    expected = [{"type": "image", "data": base64.b64encode(PNG).decode(),
+                 "mimeType": "image/png"}] * 10
+    assert runner.images == [expected, expected]
+    assert [len([part for part in message["parts"] if part["type"] == "file"])
+            for message in messages if message["role"] == "user"] == [10, 10]

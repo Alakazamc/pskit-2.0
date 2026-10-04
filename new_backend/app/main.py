@@ -6,6 +6,8 @@ from shutil import which
 from time import monotonic
 
 from fastapi import FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.adapters.disabled import DisabledAf3, DisabledMcp
@@ -232,6 +234,17 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
                 database.close()
 
     app = FastAPI(title="PSKit Research Agent API", version="0.1.0", lifespan=lifespan)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(
+        request: Request, error: RequestValidationError,
+    ) -> JSONResponse:
+        """Return a translatable attachment-limit error, preserving other validation errors."""
+        if any(item["type"] == "too_long" and tuple(item["loc"]) == ("body", "attachments")
+               for item in error.errors()):
+            return JSONResponse(status_code=422,
+                                content={"detail": {"code": "TOO_MANY_ATTACHMENTS"}})
+        return await request_validation_exception_handler(request, error)
 
     @app.exception_handler(LoginRequired)
     async def login_required_handler(_request: Request, _error: LoginRequired) -> JSONResponse:

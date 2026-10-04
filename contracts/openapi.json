@@ -4439,6 +4439,7 @@
               "$ref": "#/components/schemas/ContextRef"
             },
             "type": "array",
+            "maxItems": 10,
             "title": "Attachments"
           },
           "skills": {
