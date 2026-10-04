@@ -38,3 +38,21 @@ it("uses the live stream and updates before it closes", async () => {
   expect(onCompleted).toHaveBeenCalledTimes(1);
   unmount();
 });
+
+it.each(["next-run", null])("never renders the previous reply while switching to %s", async (nextRun) => {
+  const api = { getRunEvents: async (id: string) => id === "old-run" ? [
+    { id: "1", run_id: id, type: "message.delta", data: { delta: "Previous reply" } },
+    { id: "2", run_id: id, type: "run.completed", data: { status: "completed" } },
+  ] : [] } as unknown as ResearchApi;
+  const onCompleted = vi.fn();
+  const rendered: { id: string | null; text: string }[] = [];
+  const { result, rerender, unmount } = renderHook(({ id }: { id: string | null }) => {
+    const view = useRunEvents(api, id, onCompleted);
+    rendered.push({ id, text: view.text });
+    return view;
+  }, { initialProps: { id: "old-run" as string | null } });
+  await waitFor(() => expect(result.current.status).toBe("completed"));
+  rerender({ id: nextRun });
+  expect(rendered.filter((frame) => frame.id === nextRun).every((frame) => frame.text === "")).toBe(true);
+  unmount();
+});

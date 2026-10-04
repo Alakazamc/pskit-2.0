@@ -20,6 +20,18 @@ window.fetch = async (input, init) => {
           created_at: '2026-10-04T08:00:00Z'}) + '\n\n'));
     }}), {headers: {'content-type': 'text/event-stream'}});
   }
+  if (/\/messages$/.test(String(input)) && init?.method === 'POST') {
+    await new Promise(resolve => {window.finishBrowserPost = resolve;});
+    delete window.finishBrowserPost;
+    const response = await originalFetch(input, init);
+    window.pauseBrowserHistory = true;
+    return response;
+  }
+  if (/\/messages$/.test(String(input)) && !init?.method && window.pauseBrowserHistory) {
+    window.pauseBrowserHistory = false;
+    await new Promise(resolve => {window.finishBrowserHistory = resolve;});
+    delete window.finishBrowserHistory;
+  }
   const response = await originalFetch(input, init);
   if (/\/runs\/run-browser-\d+$/.test(String(input)) && init?.method === 'DELETE') {
     window.emitBrowserEvent('run.cancelled', {});
@@ -45,7 +57,7 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
                 f"localStorage.setItem('research_language', '{language}');")
             page = await context.new_page()
             errors = []
-            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.on("pageerror", lambda error, errors=errors: errors.append(str(error)))
             state = {"run": 0, "status": "idle", "text": ""}
             identity = {"id": "browser-user", "name": "Browser test", "is_anonymous": False,
                         "email": "browser@example.invalid"}
@@ -55,7 +67,7 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
                         "\n\n".join(f"### Historical result {n}\nRead this earlier paragraph." for n in range(12))}],
                         "created_at": "2026-10-04T07:01:00Z"}]
 
-            async def api(route):
+            async def api(route, _request, *, state=state, identity=identity, history=history):
                 path = route.request.url.split("/api/v1", 1)[1].split("?")[0]
                 value = []
                 if path == "/auth/refresh":
@@ -91,39 +103,59 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             textarea = page.get_by_role("textbox", name="消息内容" if zh else "Message", exact=True)
             await textarea.fill("Explain Redis")
             await send.click()
+            await expect(page.locator(".message-row.user").last).to_contain_text("Explain Redis")
+            await expect(generating).to_have_count(0)
+            await page.wait_for_function("typeof window.finishBrowserPost === 'function'")
+            await page.evaluate("window.finishBrowserPost()")
             await expect(stop).to_be_enabled()
             await expect(generating).to_have_count(1)
             await page.wait_for_function("window.browserStreamUrl?.includes('run-browser-1/events')")
 
-            async def position():
+            async def position(generating=generating, page=page):
                 geometry = await generating.evaluate("""el => {
-                    const body = el.closest('.message-body'), header = body.firstElementChild;
-                    const b = body.getBoundingClientRect(), h = header.getBoundingClientRect(), m = el.getBoundingClientRect();
-                    return {first: header.contains(el), actions: !!el.closest('.message-actions'),
-                            x: m.left-b.left, y: h.top-b.top, width: m.width, height: h.height};
+                    const body = el.closest('.message-body');
+                    const b = body.getBoundingClientRect(), m = el.getBoundingClientRect();
+                    return {first: body.firstElementChild === el, actions: !!el.closest('.message-actions'),
+                            x: m.left-b.left, y: m.top-b.top, width: m.width, height: m.height};
                 }""")
                 assert geometry == {"first": True, "actions": False, "x": 0, "y": 0, "width": 28, "height": 28}, geometry
                 assert await page.locator(".mono-run-controls").count() == 0
                 return geometry
 
             initial = await position()
+            assert await page.locator(".message-row.assistant:last-child .message-copy-button").count() == 0
+            assert await page.locator(".message-row.user").last.evaluate("""el => !!(
+                el.compareDocumentPosition(document.querySelector('.assistant-response-waiting'))
+                & Node.DOCUMENT_POSITION_FOLLOWING)""")
             await page.screenshot(path=str(screenshots / f"{theme}-{language}-{width}-waiting.png"))
 
-            async def delta(text):
+            async def content_origin(page=page):
+                return await page.locator(".message-row.assistant:last-child .message-markdown").evaluate("""el => {
+                    const body = el.closest('.message-body'), b = body.getBoundingClientRect(), m = el.getBoundingClientRect();
+                    return {first: body.firstElementChild === el, x: m.left-b.left, y: m.top-b.top};
+                }""")
+
+            async def delta(text, state=state, page=page):
                 state["text"] += text
                 await page.evaluate("text => window.emitBrowserEvent('message.delta', {delta: text})", text)
                 await page.wait_for_function("text => document.querySelector('.message-row.assistant:last-child .message-markdown')?.textContent.includes(text)",
                                              arg=text.split("\n")[-1], timeout=10000)
 
             await delta("## Redis\n\nRedis stores data in memory.")
-            assert await position() == initial
+            await expect(generating).to_have_count(0)
+            assert await content_origin() == {"first": True, "x": initial["x"], "y": initial["y"]}
+            assert await page.locator(".message-row.assistant:last-child .message-copy-button").count() == 0
+            await page.wait_for_function("typeof window.finishBrowserHistory === 'function'")
+            await page.evaluate("window.finishBrowserHistory()")
+            await expect(page.locator(".message-row.user").filter(has_text="Explain Redis")).to_have_count(1)
             await page.screenshot(path=str(screenshots / f"{theme}-{language}-{width}-stream-start.png"))
             for n in range(8):
                 await delta(f"\n\n### Section {n}\nStreamed content expands the reply. 第 {n} 段内容逐步到达。")
             await delta("\n\n```python\n" + "\n".join(f"print('row {n}')" for n in range(18)) + "\n```\n\nCode ready.")
             bottom = "(() => {const el = document.querySelector('.conversation-scroll'); return el.scrollHeight-el.clientHeight-el.scrollTop < 5;})()"
             await page.wait_for_function(bottom)
-            assert await position() == initial
+            await expect(generating).to_have_count(0)
+            assert await content_origin() == {"first": True, "x": 0, "y": 0}
             assert await page.locator(".message-actions [role=status]").count() == 0
             await page.screenshot(path=str(screenshots / f"{theme}-{language}-{width}-long-stream.png"))
 
@@ -137,7 +169,7 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             await scroller.evaluate("el => el.scrollTop = el.scrollHeight")
             await delta("\n\nFinal streamed paragraph.")
             await page.wait_for_function(bottom)
-            header_size = await page.locator(".message-row.assistant:last-child .assistant-response-header").bounding_box()
+            streamed_origin = await content_origin()
 
             state["status"] = "completed"
             history.append({"id": "assistant-completed", "role": "assistant", "created_at": "2026-10-04T08:00:00Z",
@@ -147,21 +179,26 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             await expect(send).to_be_visible()
             await expect(page.locator(".message-row.assistant")).to_have_count(2)
             await expect(page.locator(".message-row.assistant:last-child .message-markdown")).to_contain_text("Final streamed paragraph.")
-            finished_size = await page.locator(".message-row.assistant:last-child .assistant-response-header").bounding_box()
-            assert finished_size["height"] == header_size["height"] == 28
-            assert await page.locator(".assistant-response-header .message-spinner").count() == 0
+            assert await content_origin() == streamed_origin
+            await expect(page.locator(".message-row.assistant:last-child .message-copy-button")).to_be_enabled()
+            assert await page.locator(".assistant-response-waiting").count() == 0
 
             await textarea.fill("Another question")
             await send.click()
+            await expect(page.locator(".message-row.user").last).to_contain_text("Another question")
+            await page.wait_for_function("typeof window.finishBrowserPost === 'function'")
+            await page.evaluate("window.finishBrowserPost()")
             await expect(generating).to_have_count(1)
             await expect(stop).to_be_enabled()
             await page.wait_for_function("window.browserStreamUrl?.includes('run-browser-2/events')")
+            await page.wait_for_function("typeof window.finishBrowserHistory === 'function'")
+            await page.evaluate("window.finishBrowserHistory()")
             await stop.click()
             await expect(generating).to_have_count(0)
             await expect(send).to_be_visible()
             await page.screenshot(path=str(screenshots / f"{theme}-{language}-{width}-cancelled.png"))
             assert not errors, errors
-            print(f"PASS {theme} {language} {width}x{height}: top-left loading, first-event wait, Markdown growth, autoscroll, completion, stop", flush=True)
+            print(f"PASS {theme} {language} {width}x{height}: user-first, in-place stream, copy-after-end, delayed history, autoscroll, stop", flush=True)
             await context.close()
         await browser.close()
 

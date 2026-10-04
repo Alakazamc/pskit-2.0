@@ -3,9 +3,9 @@ import type { ResearchApi } from "../../api/types";
 import { emptyRun, projectEvents, type RunView } from "./events";
 
 export function useRunEvents(api: ResearchApi, runId: string | null, onCompleted: () => void): RunView {
-  const [view, setView] = useState<RunView>(emptyRun);
+  const [state, setState] = useState<{ runId: string | null; view: RunView }>({ runId: null, view: emptyRun });
   useEffect(() => {
-    setView(emptyRun);
+    setState({ runId, view: emptyRun });
     if (!runId) return;
     let cancelled = false;
     let cursor: string | undefined;
@@ -15,7 +15,7 @@ export function useRunEvents(api: ResearchApi, runId: string | null, onCompleted
     const accept = (events: Awaited<ReturnType<ResearchApi["getRunEvents"]>>) => {
       if (cancelled || events.length === 0) return;
       cursor = events.at(-1)?.id;
-      setView((previous) => projectEvents(previous, events));
+      setState((previous) => ({ runId, view: projectEvents(previous.runId === runId ? previous.view : emptyRun, events) }));
       for (const event of events) {
         if (event.type === "run.completed" || event.type === "run.failed" || event.type === "run.cancelled") {
           terminal = true;
@@ -42,5 +42,5 @@ export function useRunEvents(api: ResearchApi, runId: string | null, onCompleted
     void tick();
     return () => { cancelled = true; controller.abort(); clearTimeout(timer); };
   }, [api, runId, onCompleted]);
-  return view;
+  return state.runId === runId ? state.view : emptyRun;
 }

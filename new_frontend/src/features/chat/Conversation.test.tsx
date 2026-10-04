@@ -129,29 +129,60 @@ it("copies a Markdown table and opens its focused preview", async () => {
   await waitFor(() => expect(screen.queryByRole("dialog", { name: "表格预览" })).not.toBeInTheDocument());
 });
 
-it("keeps the generating mark above streamed Markdown instead of in the reply actions", async () => {
-  const first = projectEvents(emptyRun, [
-    { id: "delta-1", run_id: "run-stream", type: "message.delta", data: { delta: "**部分" } },
-  ]);
-  const { rerender } = render(<LanguageProvider><Conversation messages={[]} run={first} /></LanguageProvider>);
-  expect((await screen.findByText("部分")).closest("strong")).toBeInTheDocument();
+it("replaces the waiting indicator with streamed text in the same content position", async () => {
+  const { container, rerender } = render(<LanguageProvider><Conversation messages={[longMessage]} run={emptyRun} awaitingEvents /></LanguageProvider>);
   const generating = screen.getByRole("status", { name: "正在生成回复" });
   const body = generating.closest(".message-body")!;
   expect(body.firstElementChild).toContainElement(generating);
-  expect(generating.closest(".message-actions")).toBeNull();
+  const first = projectEvents(emptyRun, [
+    { id: "delta-1", run_id: "run-stream", type: "message.delta", data: { delta: "**部分" } },
+  ]);
+  rerender(<LanguageProvider><Conversation messages={[longMessage]} run={first} /></LanguageProvider>);
+  expect((await screen.findByText("部分")).closest("strong")).toBeInTheDocument();
+  expect(screen.queryByRole("status", { name: "正在生成回复" })).not.toBeInTheDocument();
+  expect(body.firstElementChild).toContainElement(screen.getByText("部分"));
+  expect(container.querySelector(".message-row.assistant .message-spinner")).toBeNull();
   expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
 
   const second = projectEvents(first, [
     { id: "delta-2", run_id: "run-stream", type: "message.delta", data: { delta: "内容**" } },
   ]);
-  rerender(<LanguageProvider><Conversation messages={[]} run={second} /></LanguageProvider>);
+  rerender(<LanguageProvider><Conversation messages={[longMessage]} run={second} /></LanguageProvider>);
   expect((await screen.findByText("部分内容")).closest("strong")).toBeInTheDocument();
-  expect(screen.getByRole("status", { name: "正在生成回复" })).toBe(generating);
-
-  rerender(<LanguageProvider><Conversation messages={[]} run={{ ...second, status: "completed" }} /></LanguageProvider>);
   expect(screen.queryByRole("status", { name: "正在生成回复" })).not.toBeInTheDocument();
-  expect(body.firstElementChild).toHaveClass("assistant-response-header");
-  expect(body.firstElementChild).toContainElement(body.querySelector(".assistant-response-mark"));
+
+  rerender(<LanguageProvider><Conversation messages={[longMessage]} run={{ ...second, status: "completed" }} /></LanguageProvider>);
+  expect(screen.queryByRole("status", { name: "正在生成回复" })).not.toBeInTheDocument();
+  expect(body.firstElementChild).toContainElement(screen.getByText("部分内容"));
+});
+
+it("shows reply copy only after the run ends, including partial replies after stop", async () => {
+  const { rerender } = render(<LanguageProvider><Conversation messages={[longMessage]} run={emptyRun} awaitingEvents /></LanguageProvider>);
+  expect(screen.queryByRole("button", { name: "复制回复" })).not.toBeInTheDocument();
+  const streaming = { ...emptyRun, status: "running" as const, text: "A partial reply" };
+  rerender(<LanguageProvider><Conversation messages={[longMessage]} run={streaming} /></LanguageProvider>);
+  expect(await screen.findByText("A partial reply")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "复制回复" })).not.toBeInTheDocument();
+  rerender(<LanguageProvider><Conversation messages={[longMessage]} run={{ ...streaming, status: "waiting" }} /></LanguageProvider>);
+  expect(screen.queryByRole("button", { name: "复制回复" })).not.toBeInTheDocument();
+  rerender(<LanguageProvider><Conversation messages={[longMessage]} run={{ ...streaming, status: "cancelled" }} /></LanguageProvider>);
+  expect(screen.getByRole("button", { name: "复制回复" })).toBeEnabled();
+});
+
+it("keeps historical replies copyable without exposing unfinished history snapshots", async () => {
+  const oldReply: Message = { id: "old-reply", session_id: "session-1", role: "assistant",
+    created_at: "2026-10-01T00:00:01Z", parts: [{ type: "text", text: "Previous answer" }] };
+  const user: Message = { ...longMessage, id: "new-user", created_at: "2026-10-04T10:00:00Z",
+    parts: [{ type: "text", text: "Next question" }] };
+  const snapshot: Message = { ...oldReply, id: "unfinished-reply", created_at: "2026-10-04T10:00:01Z",
+    parts: [{ type: "text", text: "Partial snapshot" }] };
+  const run = { ...emptyRun, status: "running" as const, text: "Current live answer" };
+  render(<LanguageProvider><Conversation messages={[longMessage, oldReply, user, snapshot]} run={run} /></LanguageProvider>);
+  expect(await screen.findByText("Current live answer")).toBeVisible();
+  expect(screen.getByText("Previous answer")).toBeVisible();
+  expect(screen.getAllByRole("button", { name: "复制回复" })).toHaveLength(1);
+  expect(screen.getByRole("button", { name: "复制回复" }).closest(".message-row")).toContainElement(screen.getByText("Previous answer"));
+  expect(screen.queryByText("Partial snapshot")).not.toBeInTheDocument();
 });
 
 it("starts observing reply height when an empty chat receives its first message", () => {
@@ -162,15 +193,13 @@ it("starts observing reply height when an empty chat receives its first message"
   expect(observe).toHaveBeenCalledWith(container.querySelector(".message-list"));
 });
 
-it.each(["completed", "failed", "cancelled", "approval"] as const)("stops the reply mark for %s while retaining its header slot", (state) => {
+it.each(["completed", "failed", "cancelled", "approval"] as const)("leaves no waiting indicator for %s", (state) => {
   const run = state === "approval"
     ? { ...emptyRun, status: "waiting" as const, approval: { id: "approval-1", capability: "submit_af3", estimatedMinutes: 10 } }
     : { ...emptyRun, status: state, text: "Partial reply" };
   const { container } = render(<LanguageProvider><Conversation messages={[]} run={run} /></LanguageProvider>);
   expect(screen.queryByRole("status", { name: "正在生成回复" })).not.toBeInTheDocument();
-  const header = container.querySelector(".assistant-response-header")!;
-  expect(header).toContainElement(container.querySelector(".assistant-response-mark"));
-  expect(header.querySelector(".message-spinner")).toBeNull();
+  expect(container.querySelector(".message-spinner")).toBeNull();
 });
 
 it("does not show a generating mark just because a historical run id exists", () => {
@@ -225,7 +254,7 @@ it("keeps the streamed reply visible until the saved reply replaces it", async (
   };
   rerender(<LanguageProvider><Conversation messages={[user, saved]} run={run} /></LanguageProvider>);
   await waitFor(() => expect(screen.getAllByText("Ready to help")).toHaveLength(1));
-  expect(document.querySelectorAll(".assistant-response-header")).toHaveLength(1);
+  expect(document.querySelectorAll(".message-row.assistant")).toHaveLength(1);
   expect(screen.queryByRole("status", { name: "正在生成回复" })).not.toBeInTheDocument();
 });
 

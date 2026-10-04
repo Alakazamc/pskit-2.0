@@ -59,9 +59,7 @@
 .message-copy-button:hover:not(:disabled),.message-copy-button:focus-visible,.message-stop-button:hover:not(:disabled),.message-stop-button:focus-visible{background:var(--mono-subtle,var(--soft));color:var(--mono-text,var(--text))}
 .message-copy-button:disabled,.message-stop-button:disabled{opacity:.4;cursor:default}
 .message-stop-error{color:var(--mono-text,var(--text));font-size:12px}
-.assistant-response-header{display:flex;align-items:center;gap:8px;height:28px;margin-bottom:8px}
-.assistant-response-header .message-author{margin:0}
-.assistant-response-mark{width:28px;height:28px;display:grid;place-items:center;flex:none;color:var(--mono-text,var(--text))}
+.assistant-response-waiting{width:28px;height:28px;display:grid;place-items:center;color:var(--mono-text,var(--text))}
 .progress-inline{color:var(--mono-muted,var(--secondary))}
 .message-spinner{animation:message-spinner-turn .85s linear infinite}
 @keyframes message-spinner-turn{to{transform:rotate(360deg)}}

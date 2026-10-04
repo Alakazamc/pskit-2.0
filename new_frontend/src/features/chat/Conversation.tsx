@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronUp, Circle, FlaskConical, LoaderCircle, Sparkles } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Circle, FlaskConical, LoaderCircle } from "lucide-react";
 import type { Message } from "../../api/types";
 import type { RunView } from "./events";
 import { MessageParts } from "./MessageParts";
@@ -10,14 +10,10 @@ import { localizedRunError } from "./runErrors";
 import { RunControls } from "../mono/RunControls";
 import { useChatAutoscroll } from "./useChatAutoscroll";
 
-function AssistantResponseHeader({ generating = false }: { generating?: boolean }) {
+function AssistantWaitingIndicator() {
   const { t } = useLanguage();
-  return <div className="assistant-response-header">
-    <span className="assistant-response-mark" role={generating ? "status" : undefined}
-      aria-label={generating ? t("conversation.generating") : undefined} aria-hidden={generating ? undefined : true}>
-      {generating ? <LoaderCircle className="message-spinner" size={20} aria-hidden="true" /> : <Sparkles size={20} aria-hidden="true" />}
-    </span>
-    <span className="message-author">Research Agent</span>
+  return <div className="assistant-response-waiting" role="status" aria-label={t("conversation.generating")}>
+    <LoaderCircle className="message-spinner" size={20} aria-hidden="true" />
   </div>;
 }
 
@@ -80,6 +76,7 @@ export function Conversation({ messages, run, runId, awaitingEvents = false, onC
     messages.length > 0 || run.status !== "idle" || awaitingEvents);
   const runError = localizedRunError(run, t);
   const runActive = (run.status === "running" || run.status === "waiting" || awaitingEvents) && !run.approval;
+  const runFinished = ["completed", "failed", "cancelled"].includes(run.status);
   const lastUserIndex = messages.reduce((last, message, index) => message.role === "user" ? index : last, -1);
   const runStartedAt = run.events.find((event) => event.created_at)?.created_at;
   const savedReplyAvailable = messages.some((message, index) => message.role === "assistant"
@@ -103,21 +100,22 @@ export function Conversation({ messages, run, runId, awaitingEvents = false, onC
           <span>{step.title}</span>
         </li>)}</ol>
       </section>}
-      {messages.map((message) => message.role === "user" ? <UserMessage message={message} key={message.id} /> : <article className={`message-row ${message.role}`} key={message.id}>
+      {messages.map((message, index) => message.role === "user" ? <UserMessage message={message} key={message.id} />
+        : message.role === "assistant" && index > lastUserIndex && showRunReply && !runFinished ? null
+        : <article className={`message-row ${message.role}`} key={message.id}>
         <div className="message-body">
-          {message.role === "assistant" && <AssistantResponseHeader />}
           <MessageParts parts={message.parts} markdown={message.role === "assistant"} />
           {message.role === "assistant" && <div className="message-actions"><ReplyCopyButton text={message.parts.filter((part) => part.type === "text").map((part) => part.text).join("\n\n")} /></div>}
         </div>
       </article>)}
       {showRunReply && <article className="message-row assistant">
         <div className="message-body">
-          <AssistantResponseHeader generating={runActive} />
+          {runActive && !run.text.trim() && <AssistantWaitingIndicator />}
           {runError ? <p className="message-text">{runError}</p> : run.text && <LazyMarkdownContent text={run.text} streaming={runActive} />}
           {run.tools.filter((tool) => tool.status === "running").map((tool) => <div className="task-pill" key={tool.id}><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {tool.name}</div>)}
           {run.jobId && !["failed", "cancelled"].includes(run.status) && <div className="task-pill"><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {run.jobLabel || t("conversation.backgroundTask")}{Number.isFinite(run.progress) && ` · ${Math.round(run.progress)}%`}</div>}
           {run.approval && onCancel && onApproval && <RunControls key={runId ?? "approval"} run={run} onCancel={onCancel} onApproval={onApproval} />}
-          <div className="message-actions"><ReplyCopyButton text={runError ?? run.text} /></div>
+          {runFinished && (runError || run.text.trim()) && <div className="message-actions"><ReplyCopyButton text={runError ?? run.text} /></div>}
         </div>
       </article>}
     </div>}

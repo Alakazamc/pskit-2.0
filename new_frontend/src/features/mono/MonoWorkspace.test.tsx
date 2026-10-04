@@ -45,6 +45,7 @@ it("keeps a guest draft and offers upgrade when its Token allowance is exhausted
   await actor.click(screen.getByRole("button", { name: "发送消息" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("本月 Token 额度已用尽。");
   expect(screen.getByLabelText("消息内容")).toHaveValue("Analyze this dataset");
+  expect(document.querySelector(".message-row.user")).toBeNull();
   expect(screen.getByRole("link", { name: "升级账号以继续" })).toHaveAttribute("href", "/settings");
 });
 
@@ -204,6 +205,45 @@ it("switches the composer to stop after message submission while the reply is st
   expect(screen.getByRole("button", { name: "取消运行" })).toBeEnabled();
   expect(screen.queryByRole("button", { name: "发送消息" })).not.toBeInTheDocument();
   expect(screen.queryByRole("region", { name: "当前运行" })).not.toBeInTheDocument();
+});
+
+it.each(["/session/session-1", "/"])("shows the submitted user message before waiting with delayed POST/history from %s", async (route) => {
+  loggedIn(route);
+  let finishPost!: (response: Response) => void;
+  let finishHistory!: (response: Response) => void;
+  const post = new Promise<Response>((resolve) => { finishPost = resolve; });
+  const history = new Promise<Response>((resolve) => { finishHistory = resolve; });
+  let submitted = false;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
+    if (path.endsWith("/g")) return json([]);
+    if (path.endsWith("/c") && init?.method === "POST") return json({ id: "session-1", project_id: "project-alice", title: "Timing", status: "idle" });
+    if (path.endsWith("/c")) return json([{ id: "session-1", project_id: "project-alice", title: "Timing" }]);
+    if (path.endsWith("/c/session-1/messages") && init?.method === "POST") {
+      submitted = true;
+      return post;
+    }
+    if (path.endsWith("/messages")) return submitted ? history : json([]);
+    if (path.includes("/runs/run-delayed/events")) return runEvents();
+    return json([]);
+  }));
+  render(<App />);
+  const actor = userEvent.setup();
+  await actor.type(await screen.findByLabelText("消息内容"), "Ordering prompt");
+  await actor.click(screen.getByRole("button", { name: "发送消息" }));
+  // Creating a new session may still be pending after the click. Keep the
+  // message POST unresolved and require the user row before releasing it.
+  const prompt = await screen.findByText("Ordering prompt", { selector: ".message-row.user *" });
+  expect(prompt).toBeVisible();
+  expect(screen.queryByRole("status", { name: "正在生成回复" })).not.toBeInTheDocument();
+  finishPost(json({ run_id: "run-delayed" }));
+  const generating = await screen.findByRole("status", { name: "正在生成回复" });
+  expect(prompt.compareDocumentPosition(generating) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "复制回复" })).not.toBeInTheDocument();
+  finishHistory(json([{ id: "user-persisted", session_id: "session-1", role: "user",
+    created_at: "2026-10-04T10:00:00Z", parts: [{ type: "text", text: "Ordering prompt" }] }]));
+  await waitFor(() => expect(screen.getAllByText("Ordering prompt", { selector: ".message-row.user *" })).toHaveLength(1));
 });
 
 it("shows a quota rejection on approval and keeps the decision available", async () => {

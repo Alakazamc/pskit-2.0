@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ChevronDown, Clock3, FileText, FolderInput, LayoutGrid, LogOut, Menu, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PenLine, Plus, Search, Settings2, Sparkles, Sun } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import type { AuthSessionResponse, MessageRequest, Project, ResearchApi, Session, UserIdentity } from "../../api/types";
+import type { AuthSessionResponse, Message, MessageRequest, Project, ResearchApi, Session, UserIdentity } from "../../api/types";
 import { ApiError } from "../../api/http";
 import { useWorkspacePortalContainer } from "../../hooks/useWorkspacePortalContainer";
 import { errorTranslationKey } from "../../i18n/errors";
@@ -118,6 +118,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
   const [renameTarget, setRenameTarget] = useState<Session | null>(null);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [sending, setSending] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [currentRun, setCurrentRun] = useState<{ sessionId: string; runId: string } | null>(null);
@@ -138,7 +139,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
   const sessionListPending = activeProjectId ? projectSessions.isPending : personalSessions.isPending;
   const sessionLookup = useQuery({ queryKey: ["session", user.id, activeSessionId], queryFn: () => api.getSession(activeSessionId!, activeProjectId), enabled: !!activeSessionId && !listedSession && !sessionListPending });
   const currentSession = listedSession ?? (sessionLookup.data?.project_id === (activeProjectId ?? personalProjectId) ? sessionLookup.data : undefined);
-  const visibleRunId = currentRun?.sessionId === activeSessionId ? currentRun.runId : currentSession?.latest_run_id ?? null;
+  const visibleRunId = submitting ? null : currentRun?.sessionId === activeSessionId ? currentRun.runId : currentSession?.latest_run_id ?? null;
   const onRunCompleted = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["messages", user.id, activeSessionId] });
     void queryClient.invalidateQueries({ queryKey: ["sessions", user.id, activeProjectId ?? personalProjectId] });
@@ -166,26 +167,40 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
     if (sendGuard.current || !payload.content.trim()) return false;
     sendGuard.current = true;
     setSending(true);
+    setSubmitting(true);
     setSendError(null);
     setShowUpgradePrompt(false);
+    let optimistic: { queryKey: string[]; id: string } | undefined;
     try {
       const targetProjectId = activeProjectId ?? personalProjectId;
       let targetSessionId = activeSessionId;
+      let createdSession = false;
       if (!targetSessionId) {
         const title = payload.content.trim().replace(/\s+/g, " ").slice(0, 48);
         const created = await api.createSession(activeProjectId, title);
         targetSessionId = created.id;
+        createdSession = true;
         queryClient.setQueryData(["session", user.id, created.id], created);
-        navigate(sessionPath(targetProjectId, personalProjectId, created.id));
-        await queryClient.invalidateQueries({ queryKey: ["sessions", user.id, targetProjectId] });
       }
       const body = JSON.stringify(payload);
       if (pendingSend.current?.sessionId !== targetSessionId || pendingSend.current.body !== body) {
         pendingSend.current = { sessionId: targetSessionId, body, key: crypto.randomUUID() };
       }
+      const queryKey = ["messages", user.id, targetSessionId];
+      await queryClient.cancelQueries({ queryKey });
+      const message: Message = {
+        id: `pending-${pendingSend.current.key}`, session_id: targetSessionId, role: "user",
+        created_at: new Date().toISOString(),
+        parts: [{ type: "text", text: payload.content },
+          ...payload.attachments.map((file) => ({ type: "file" as const, id: file.id, name: file.name }))],
+      };
+      optimistic = { queryKey, id: message.id };
+      queryClient.setQueryData<Message[]>(queryKey, (previous = []) => [...previous, message]);
+      if (createdSession) navigate(sessionPath(targetProjectId, personalProjectId, targetSessionId));
       const result = await api.sendMessage(targetSessionId, payload, pendingSend.current.key, activeProjectId);
       pendingSend.current = null;
       setCurrentRun({ sessionId: targetSessionId, runId: result.run_id });
+      setSubmitting(false);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["messages", user.id, targetSessionId] }),
         queryClient.invalidateQueries({ queryKey: ["sessions", user.id, targetProjectId] }),
@@ -194,12 +209,17 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
       ]);
       return true;
     } catch (caught) {
+      if (optimistic) {
+        const id = optimistic.id;
+        queryClient.setQueryData<Message[]>(optimistic.queryKey, (previous) => previous?.filter((message) => message.id !== id));
+      }
       const key = errorTranslationKey(caught);
       setSendError(key ? t(key) : t("workspace.sendFailed"));
       setShowUpgradePrompt(Boolean(user.is_anonymous && caught instanceof ApiError
         && ["TOKEN_QUOTA_EXCEEDED", "LOGIN_REQUIRED"].includes(caught.code ?? "")));
       return false;
     } finally {
+      setSubmitting(false);
       setSending(false);
       sendGuard.current = false;
     }

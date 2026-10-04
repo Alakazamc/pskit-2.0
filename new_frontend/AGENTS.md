@@ -19,7 +19,7 @@
 
 ## Streaming replies
 
-- Put the generating indicator in a reserved icon slot at the top left of the assistant reply, before its content. Show it while awaiting the first event and while generating; replace it with a static icon when the run ends or waits for approval. Use the same slot for saved replies so completion does not shift the body. Never put the primary spinner in the bottom copy-action row or a bar above the composer.
+- Show the submitted user message immediately and keep it visible while POST/history refresh is pending; roll it back on rejection while retaining the composer draft. Place the waiting indicator at the assistant body's top-left content origin only until the first nonempty text arrives. Stream text at that same origin, replacing the indicator; use the same body layout for saved replies. Show reply copy actions only when the run completes, fails, or is cancelled, while keeping historical replies copyable. Keep each run's display isolated when switching runs or sessions.
 - Keep the composer stop action active until the run ends. Verify streamed Markdown growth follows the bottom automatically while preserving the position of a reader who scrolls upward, in both themes at desktop and mobile widths.
 
 ## Sidebar
