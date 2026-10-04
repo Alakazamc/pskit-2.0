@@ -30,7 +30,7 @@ export function ThinkingSlider({ levels, effort, onChange }: {
         <div className="composer-effort-face" aria-hidden="true">
           <span className="composer-effort-track"><span /></span>
           <span className="composer-effort-value">{label(steps[index])}</span>
-          <span className="composer-effort-grip"><Plane size={38} className="composer-plane-icon" fill="currentColor" strokeWidth={1.3} /></span>
+          <span className="composer-effort-grip"><Plane size={26} className="composer-plane-icon" fill="currentColor" strokeWidth={1.3} /></span>
         </div>
         <input type="range" min={0} max={steps.length - 1} step={1} value={index}
           aria-label={t("composer.thinkingLevel")} aria-orientation="vertical"

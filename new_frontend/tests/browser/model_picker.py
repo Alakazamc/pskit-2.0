@@ -90,6 +90,9 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             await trigger.click()
             panel = page.locator(".composer-settings-popover")
             assert await panel.get_attribute("data-side") == "top"
+            settings_box = await panel.bounding_box()
+            assert settings_box["width"] * settings_box["height"] <= 22000, settings_box
+            assert settings_box["height"] <= 176, settings_box
             assert await page.get_by_role("searchbox").count() == 0
             await page.get_by_role("button", name=switch_model, exact=False).click()
             search = page.get_by_role("searchbox", name=search_name)

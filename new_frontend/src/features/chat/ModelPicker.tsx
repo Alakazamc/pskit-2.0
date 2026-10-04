@@ -44,7 +44,7 @@ export function ModelPicker({ models, selected, effort, hasImages, selectionUnav
     <Popover.Portal container={portalContainer}><Popover.Content className="composer-settings-popover" aria-label={t("composer.modelSettings")} side="top" sideOffset={9} align="end" collisionPadding={12}>
       <Popover.Root open={modelsOpen} onOpenChange={(next) => { setModelsOpen(next); if (!next) setQuery(""); }}>
         <Popover.Trigger asChild><button type="button" className="composer-settings-model" aria-label={`${t("composer.switchModel")}: ${label}`} title={selected?.id}>
-          <Plane size={19} className="composer-plane-icon" fill="currentColor" strokeWidth={1.4} aria-hidden="true" /><span>{t("composer.model")}</span><ChevronDown size={16} aria-hidden="true" />
+          <Plane size={14} className="composer-plane-icon" fill="currentColor" strokeWidth={1.4} aria-hidden="true" /><span>{t("composer.model")}</span><ChevronDown size={12} aria-hidden="true" />
         </button></Popover.Trigger>
         <Popover.Portal container={portalContainer}><Popover.Content className="composer-model-popover" aria-label={t("composer.searchModels")} side="bottom" sideOffset={8} align="end" collisionPadding={12}>
           <div className="composer-model-search"><Search size={15} aria-hidden="true" /><input type="search" aria-label={t("composer.searchModels")} placeholder={t("composer.searchModels")} value={query} onChange={(event) => setQuery(event.target.value)} /></div>

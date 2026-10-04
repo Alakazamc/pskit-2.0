@@ -4,6 +4,7 @@
 
 - Text inputs use theme surface and border tokens. Keep composer and popover search inputs borderless in normal, focus, and focus-visible states; indicate keyboard focus through the containing row's theme background. Bright white rectangular input frames are prohibited. Scope these styles to the field so the shared focus rules cannot override them, while other controls retain visible keyboard focus.
 - Place the selected model name and thinking strength as plain text at the composer's bottom right, immediately beside Send/Stop. Open a narrow settings panel above that entry: a model dropdown at the top and an upright airplane grip on a vertical track below, with the current level beside the grip. Stronger levels sit at the top and default at the bottom; support mouse, touch, and keyboard. Keep searchable models inside the dropdown, show only advertised thinking levels, and reset to default when switching models.
+- Keep the thinking panel compact, approximately 128 × 166 px at normal zoom. Preserve a 44 px wide drag target and readable labels; the searchable model list opens separately at a readable width.
 - Verify rendered input focus and lever behavior in both themes at desktop and mobile widths; CSS declarations alone do not establish that the focus frame is gone.
 
 ## Page headings
