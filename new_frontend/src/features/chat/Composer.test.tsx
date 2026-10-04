@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Composer } from "./Composer";
@@ -17,7 +17,8 @@ describe("Composer file references", () => {
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(input, new File(["notes"], "notes.txt", { type: "text/plain" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "移除 notes.txt" })).toBeInTheDocument());
-    expect(screen.getByText(/文本最多 1 MiB/)).toBeInTheDocument();
+    expect(screen.queryByText(/文本最多 1 MiB/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("消息内容"), "Analyze this");
     await user.click(screen.getByRole("button", { name: "发送消息" }));
     expect(onSend).toHaveBeenCalledWith(expect.objectContaining({ attachments: [{ id: "file-1", name: "notes.txt" }] }));
@@ -58,7 +59,7 @@ describe("Composer file references", () => {
     finishUpload({ id: "file-1", name: "paper.pdf" });
     expect(await screen.findByRole("group", { name: "已上传 paper.pdf" })).toBeInTheDocument();
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
-    expect(screen.getByText(/文本最多 1 MiB/)).toBeInTheDocument();
+    expect(screen.queryByText(/文本最多 1 MiB/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "移除 paper.pdf" }));
     expect(screen.queryByRole("group", { name: "已上传 paper.pdf" })).not.toBeInTheDocument();
   });
@@ -78,6 +79,109 @@ describe("Composer file references", () => {
 
     finishUpload({ id: "file-1", name: "notes.txt" });
     expect(await screen.findByRole("group", { name: "已上传 notes.txt" })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["zh", "每轮对话最多只能上传 10 个文件，请在下一轮上传其余文件。"],
+    ["en", "Upload at most 10 files per turn. Upload the remaining files in your next turn."],
+  ])("keeps the first ten files and only warns on overflow in %s", async (language, warning) => {
+    window.localStorage.setItem("research_language", language);
+    const user = userEvent.setup();
+    const onUpload = vi.fn(async (file: File) => ({ id: file.name, name: file.name }));
+    const { container } = render(<LanguageProvider><Composer onSend={vi.fn()} onUpload={onUpload} skills={[]} resources={[]} /></LanguageProvider>);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    const files = Array.from({ length: 12 }, (_, index) => new File(["notes"], `notes-${index + 1}.txt`, { type: "text/plain" }));
+
+    await user.upload(container.querySelector('input[type="file"]') as HTMLInputElement, files);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(warning);
+    await waitFor(() => expect(screen.getAllByRole("group")).toHaveLength(10));
+    expect(screen.queryByText("notes-11.txt")).not.toBeInTheDocument();
+    expect(screen.queryByText("notes-12.txt")).not.toBeInTheDocument();
+    expect(onUpload.mock.calls.map(([file]) => file.name)).toEqual(files.slice(0, 10).map((file) => file.name));
+  });
+
+  it("counts separate uploads in the same turn and resets only after a successful send", async () => {
+    const user = userEvent.setup();
+    const onUpload = vi.fn(async (file: File) => ({ id: file.name, name: file.name }));
+    const onSend = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const { container } = render(<LanguageProvider><Composer onSend={onSend} onUpload={onUpload} skills={[]} resources={[]} /></LanguageProvider>);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const files = Array.from({ length: 11 }, (_, index) => new File(["notes"], `notes-${index + 1}.txt`, { type: "text/plain" }));
+
+    await user.upload(input, files.slice(0, 4));
+    await user.upload(input, files.slice(4, 10));
+    expect(screen.getAllByRole("group")).toHaveLength(10);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await user.upload(input, files[10]);
+    expect(screen.getByRole("alert")).toHaveTextContent("每轮对话最多只能上传 10 个文件");
+    expect(onUpload).toHaveBeenCalledTimes(10);
+
+    await user.type(screen.getByLabelText("消息内容"), "Read these");
+    await user.click(screen.getByRole("button", { name: "发送消息" }));
+    expect(screen.getAllByRole("group")).toHaveLength(10);
+    await user.upload(input, files[10]);
+    expect(onUpload).toHaveBeenCalledTimes(10);
+    await user.click(screen.getByRole("button", { name: "发送消息" }));
+    expect(onSend.mock.calls[1][0].attachments).toHaveLength(10);
+    expect(screen.queryByRole("group")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    await user.upload(input, files[10]);
+    expect(await screen.findByRole("group", { name: "已上传 notes-11.txt" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("reserves places for simultaneous drops while earlier files are still uploading", async () => {
+    const finishes: (() => void)[] = [];
+    let firstBatchStarted!: () => void;
+    const started = new Promise<void>((resolve) => { firstBatchStarted = resolve; });
+    const onUpload = vi.fn((file: File) => new Promise<{ id: string; name: string }>((resolve) => {
+      finishes.push(() => resolve({ id: file.name, name: file.name }));
+      if (finishes.length === 9) firstBatchStarted();
+    }));
+    const { container } = render(<LanguageProvider><Composer onSend={vi.fn()} onUpload={onUpload} skills={[]} resources={[]} /></LanguageProvider>);
+    const dropTarget = container.querySelector('[role="presentation"]') as HTMLElement;
+    const files = Array.from({ length: 11 }, (_, index) => new File(["notes"], `notes-${index + 1}.txt`, { type: "text/plain" }));
+    const dataTransfer = (files: File[]) => ({ files, types: ["Files"], items: files.map((file) => ({ kind: "file", type: file.type, getAsFile: () => file })) });
+
+    await act(async () => {
+      fireEvent.drop(dropTarget, { dataTransfer: dataTransfer(files.slice(0, 9)) });
+      await started;
+      fireEvent.drop(dropTarget, { dataTransfer: dataTransfer(files.slice(9)) });
+    });
+
+    expect(screen.getAllByRole("progressbar")).toHaveLength(10);
+    expect(screen.getByRole("alert")).toHaveTextContent("每轮对话最多只能上传 10 个文件");
+    expect(onUpload).toHaveBeenCalledTimes(10);
+    await act(async () => finishes.forEach((finish) => finish()));
+    expect(screen.getAllByRole("group")).toHaveLength(10);
+  });
+
+  it("releases a canceled upload's place and ignores its late completion", async () => {
+    const user = userEvent.setup();
+    const finishes = new Map<string, () => void>();
+    const onUpload = vi.fn((file: File) => new Promise<{ id: string; name: string }>((resolve) => {
+      finishes.set(file.name, () => resolve({ id: file.name, name: file.name }));
+    }));
+    const { container } = render(<LanguageProvider><Composer onSend={vi.fn()} onUpload={onUpload} skills={[]} resources={[]} /></LanguageProvider>);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const files = Array.from({ length: 11 }, (_, index) => new File(["notes"], `notes-${index + 1}.txt`, { type: "text/plain" }));
+    await user.upload(input, files.slice(0, 10));
+    await user.click(screen.getByRole("button", { name: "移除 notes-10.txt" }));
+    await user.upload(input, files[10]);
+
+    expect(screen.getAllByRole("progressbar")).toHaveLength(10);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await act(async () => finishes.forEach((finish) => finish()));
+    expect(screen.getAllByRole("group")).toHaveLength(10);
+    expect(screen.queryByRole("group", { name: "已上传 notes-10.txt" })).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "已上传 notes-11.txt" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "移除 notes-1.txt" }));
+    await user.upload(input, files[0]);
+    await act(async () => finishes.get("notes-1.txt")!());
+    expect(screen.getAllByRole("group")).toHaveLength(10);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("shows an empty state when the API has no skills or resources", async () => {
@@ -191,19 +295,17 @@ describe("Composer file references", () => {
     await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(1));
   });
 
-  it("limits a message to two images before uploading", async () => {
+  it("counts images toward the same ten-file limit", async () => {
     const user = userEvent.setup();
     const onUpload = vi.fn(async (file: File) => ({ id: file.name, name: file.name }));
     const { container } = render(<LanguageProvider><Composer onSend={vi.fn()} onUpload={onUpload}
       skills={[]} resources={[]} models={[{ id: "vision-model", supports_images: true }]} /></LanguageProvider>);
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    await user.upload(input, [
-      new File(["image"], "one.png", { type: "image/png" }),
-      new File(["image"], "two.png", { type: "image/png" }),
-    ]);
-    await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(2));
-    await user.upload(input, new File(["image"], "three.png", { type: "image/png" }));
-    expect(onUpload).toHaveBeenCalledTimes(2);
-    expect(screen.getByRole("alert")).toHaveTextContent("最多附加 2 张图片");
+    await user.upload(input, Array.from({ length: 10 }, (_, index) => new File(["image"], `image-${index + 1}.png`, { type: "image/png" })));
+    await waitFor(() => expect(screen.getAllByRole("group")).toHaveLength(10));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await user.upload(input, new File(["image"], "image-11.png", { type: "image/png" }));
+    expect(onUpload).toHaveBeenCalledTimes(10);
+    expect(screen.getByRole("alert")).toHaveTextContent("每轮对话最多只能上传 10 个文件");
   });
 });

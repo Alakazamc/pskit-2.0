@@ -55,7 +55,10 @@
   display:flex;
   flex-wrap:wrap;
   gap:8px;
-  padding:12px 14px 0
+  padding:12px 14px 0;
+  max-height:min(212px,30dvh);
+  overflow-y:auto;
+  overscroll-behavior:contain
 }
 .attachment-preview {
   position:relative;
@@ -338,9 +341,4 @@
   height:1px;
   background:var(--border);
   margin:5px
-}
-.upload-notice {
-  color:var(--secondary);
-  font-size:11px;
-  padding:0 16px 7px
 }

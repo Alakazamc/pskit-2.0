@@ -8,7 +8,7 @@ const codeKeys: Record<string, TranslationKey> = {
   MODEL_UNAVAILABLE: "error.modelUnavailable",
   MODEL_REASONING_UNAVAILABLE: "error.modelReasoningUnavailable",
   MODEL_DOES_NOT_SUPPORT_IMAGES: "error.modelNoImages",
-  TOO_MANY_IMAGES: "error.tooManyImages",
+  TOO_MANY_ATTACHMENTS: "error.tooManyAttachments",
   PI_NOT_CONFIGURED: "error.agentMissing",
   MCP_NOT_CONFIGURED: "error.mcpMissing",
   MCP_UPSTREAM_UNAVAILABLE: "error.mcpUnavailable",

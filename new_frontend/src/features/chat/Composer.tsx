@@ -21,6 +21,8 @@ type UploadTile = {
   refId?: string;
 };
 
+const MAX_ATTACHMENTS_PER_TURN = 10;
+
 function fileKind(file: File | string): UploadTile["kind"] {
   const name = typeof file === "string" ? file : file.name;
   if (typeof file !== "string" && file.type.startsWith("image/")) return "image";
@@ -37,6 +39,7 @@ export function Composer({ onSend, onUpload, onStop, runActive = false, skills, 
   const [stopError, setStopError] = useState<string | null>(null);
   const objectUrls = useRef(new Set<string>());
   const canceledUploads = useRef(new Set<string>());
+  const pendingUploads = useRef(new Set<string>());
   const portalContainer = useWorkspacePortalContainer();
   const content = useComposerStore((state) => state.content);
   const attachments = useComposerStore((state) => state.attachments);
@@ -70,7 +73,10 @@ export function Composer({ onSend, onUpload, onStop, runActive = false, skills, 
     if (tile.previewUrl && objectUrls.current.delete(tile.previewUrl)) URL.revokeObjectURL(tile.previewUrl);
   };
   const removeUpload = (tile: UploadTile) => {
-    if (tile.status === "uploading") canceledUploads.current.add(tile.key);
+    if (tile.status === "uploading") {
+      canceledUploads.current.add(tile.key);
+      pendingUploads.current.delete(tile.key);
+    }
     if (tile.refId) removeRef("attachments", tile.refId);
     revokePreview(tile);
     setUploadTiles((current) => current.filter((item) => item.key !== tile.key));
@@ -79,23 +85,24 @@ export function Composer({ onSend, onUpload, onStop, runActive = false, skills, 
     noClick: true, noKeyboard: true,
     onDrop: async (files) => {
       setUploadError(null);
-      if (files.some((file) => fileKind(file) === "image") && !selectedModel?.supports_images) {
+      const currentCount = useComposerStore.getState().attachments.length + pendingUploads.current.size;
+      const acceptedFiles = files.slice(0, Math.max(0, MAX_ATTACHMENTS_PER_TURN - currentCount));
+      if (acceptedFiles.length < files.length) setUploadError("error.tooManyAttachments");
+      if (!acceptedFiles.length) {
+        if (inputRef.current) inputRef.current.value = "";
+        return;
+      }
+      if (acceptedFiles.some((file) => fileKind(file) === "image") && !selectedModel?.supports_images) {
         setUploadError("composer.imageRequiresVisionModel");
         if (inputRef.current) inputRef.current.value = "";
         return;
       }
-      const currentImageCount = attachments.filter((item) => fileKind(item.name) === "image").length
-        + uploadTiles.filter((item) => item.kind === "image" && item.status === "uploading").length;
-      if (currentImageCount + files.filter((file) => fileKind(file) === "image").length > 2) {
-        setUploadError("error.tooManyImages");
-        if (inputRef.current) inputRef.current.value = "";
-        return;
-      }
-      const entries = files.map((file): { file: File; tile: UploadTile } => {
+      const entries = acceptedFiles.map((file): { file: File; tile: UploadTile } => {
         const previewUrl = fileKind(file) === "image" && typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : undefined;
         if (previewUrl) objectUrls.current.add(previewUrl);
         return { file, tile: { key: crypto.randomUUID(), name: file.name, kind: fileKind(file), previewUrl, progress: null, status: "uploading" } };
       });
+      entries.forEach(({ tile }) => pendingUploads.current.add(tile.key));
       setUploadTiles((current) => [...current, ...entries.map(({ tile }) => tile)]);
       await Promise.all(entries.map(async ({ file, tile }) => {
         try {
@@ -107,6 +114,8 @@ export function Composer({ onSend, onUpload, onStop, runActive = false, skills, 
           if (!canceledUploads.current.delete(tile.key)) setUploadError(errorTranslationKey(caught) ?? "composer.uploadFailed");
           revokePreview(tile);
           setUploadTiles((current) => current.filter((item) => item.key !== tile.key));
+        } finally {
+          pendingUploads.current.delete(tile.key);
         }
       }));
     },
@@ -125,19 +134,21 @@ export function Composer({ onSend, onUpload, onStop, runActive = false, skills, 
       clearAfterSend();
       uploadTiles.forEach(revokePreview);
       setUploadTiles([]);
+      setUploadError(null);
+      if (inputRef.current) inputRef.current.value = "";
     }
   };
   const visibleUploads = [
     ...uploadTiles.filter((tile) => tile.status === "uploading" || attachments.some((ref) => ref.id === tile.refId)),
     ...attachments.filter((ref) => !uploadTiles.some((tile) => tile.refId === ref.id)).map((ref): UploadTile => ({ key: ref.id, refId: ref.id, name: ref.name, kind: fileKind(ref.name), progress: 100, status: "ready" })),
   ];
-  const uploadErrorToast = uploadError && <div className="upload-error-toast" role="alert"><CircleAlert size={18} aria-hidden="true" /><span><strong>{t("composer.uploadFailed")}</strong>{uploadError !== "composer.uploadFailed" && <> · {t(uploadError)}</>}</span><button type="button" aria-label={t("composer.dismissUploadError")} onClick={() => setUploadError(null)}><X size={16} aria-hidden="true" /></button></div>;
+  const uploadErrorToast = uploadError && <div className="upload-error-toast" role="alert"><CircleAlert size={18} aria-hidden="true" /><span>{uploadError === "error.tooManyAttachments" ? t(uploadError) : <><strong>{t("composer.uploadFailed")}</strong>{uploadError !== "composer.uploadFailed" && <> · {t(uploadError)}</>}</>}</span><button type="button" aria-label={t("composer.dismissUploadError")} onClick={() => setUploadError(null)}><X size={16} aria-hidden="true" /></button></div>;
   const toastHost = uploadErrorToast && typeof document !== "undefined" ? document.querySelector<HTMLElement>(".mono-main") : null;
   return <div className={`composer-wrap ${isDragActive ? "drag-active" : ""}`} {...getRootProps()}>
     <input {...getInputProps()} />
     {toastHost ? createPortal(uploadErrorToast, toastHost) : uploadErrorToast}
     <div className="composer-surface">
-      {visibleUploads.length > 0 && <div className="attachment-previews">{visibleUploads.map((tile) => <div className={`attachment-preview ${tile.kind}`} key={tile.key} role="group" aria-label={t(tile.status === "uploading" ? tile.progress === null ? "composer.uploadingNamedUnknown" : "composer.uploadingNamed" : "composer.uploadedNamed", { name: tile.name, progress: tile.progress ?? 0 })}>
+      {visibleUploads.length > 0 && <div className="attachment-previews" role="region" aria-label={t("composer.attachments")} tabIndex={0}>{visibleUploads.map((tile) => <div className={`attachment-preview ${tile.kind}`} key={tile.key} role="group" aria-label={t(tile.status === "uploading" ? tile.progress === null ? "composer.uploadingNamedUnknown" : "composer.uploadingNamed" : "composer.uploadedNamed", { name: tile.name, progress: tile.progress ?? 0 })}>
         {tile.previewUrl ? <img src={tile.previewUrl} alt="" /> : <div className="attachment-preview-glyph">{tile.kind === "pdf" ? <FileText size={25} /> : tile.kind === "html" ? <Globe2 size={25} /> : <File size={25} />}</div>}
         {tile.status === "uploading" && <div className={`attachment-preview-progress ${tile.progress === null ? "indeterminate" : ""}`} role="progressbar" aria-label={t(tile.progress === null ? "composer.uploadingNamedUnknown" : "composer.uploadingNamed", { name: tile.name, progress: tile.progress ?? 0 })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={tile.progress ?? undefined}><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="14" className="track" /><circle cx="18" cy="18" r="14" className="value" strokeDasharray={88} strokeDashoffset={tile.progress === null ? 66 : 88 * (1 - tile.progress / 100)} /></svg><span>{tile.progress === null ? "…" : `${tile.progress}%`}</span></div>}
         <div className="attachment-preview-name">{tile.kind === "pdf" && <span className="attachment-pdf-tag">PDF</span>}{tile.name}</div>
@@ -149,7 +160,6 @@ export function Composer({ onSend, onUpload, onStop, runActive = false, skills, 
           return refs.map((ref) => <span className={`context-chip ${kind}`} key={`${kind}-${ref.id}`}><span>{kind === "skills" ? "✦" : kind === "resources" ? "@" : "▦"} {ref.name}</span><button type="button" aria-label={t("composer.remove", { name: ref.name })} onClick={() => removeRef(kind, ref.id)}><X size={13} /></button></span>);
         })}
       </div>}
-      {attachments.length > 0 && <div className="upload-notice">{t("composer.uploadNotice")}</div>}
       <div className="composer-input-area">
         <textarea aria-label={t("composer.messageLabel")} value={content} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} placeholder={t("composer.placeholder")} rows={3} />
         {picker && <div className="inline-picker" role="listbox">

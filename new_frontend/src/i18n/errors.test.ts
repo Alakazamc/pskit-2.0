@@ -2,6 +2,11 @@ import { expect, it } from "vitest";
 import { ApiError } from "../api/http";
 import { errorTranslationKey } from "./errors";
 
+it("explains the per-turn attachment limit from the server", () => {
+  expect(errorTranslationKey(new ApiError(422, { code: "TOO_MANY_ATTACHMENTS" })))
+    .toBe("error.tooManyAttachments");
+});
+
 it("maps remote MCP failures to a user-facing message key", () => {
   expect(errorTranslationKey(new ApiError(503, { code: "MCP_UPSTREAM_UNAVAILABLE" })))
     .toBe("error.mcpUnavailable");

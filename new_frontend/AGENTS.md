@@ -12,6 +12,11 @@
 
 - Use one clear page title. Keep page-level descriptions only when they add information needed to act; do not repeat the navigation label or describe obvious page functions. Preserve user-written project descriptions and tool-specific guidance.
 
+## Attachments
+
+- Keep upload guidance out of the composer until a limit is exceeded. Count ready and pending attachments together, including images, against ten files per turn. Accept files up to the remaining capacity and show a bilingual overflow alert only for the excess; the user can select the remaining files next turn. Release places on removal, cancellation, or failure, and reset the allowance after a successful send. Keep per-file size and format validation in upload errors.
+- Keep attachment previews in a bounded, keyboard-accessible scrolling region so ten files leave the input and send action visible on small screens. Use the shared theme scrollbar styles.
+
 ## Streaming replies
 
 - Put the generating indicator in a reserved icon slot at the top left of the assistant reply, before its content. Show it while awaiting the first event and while generating; replace it with a static icon when the run ends or waits for approval. Use the same slot for saved replies so completion does not shift the body. Never put the primary spinner in the bottom copy-action row or a bar above the composer.
