@@ -2,14 +2,58 @@
 
 from datetime import UTC, datetime, timedelta
 
-from app.contracts.models import GpuQuota, QuotaCounter, UsageEntry, UsageSnapshot
+from app.contracts.models import GpuQuota, QuotaCounter, UsageActivity, UsageEntry, UsageSnapshot
 from app.domain.quota import TokenQuotaExceeded
+from app.domain.usage_activity import build_activity
 
 from .common import current_time as _now
 
 
 class UsageMixin:
     """Account for monthly Tokens and daily AF3 GPU minutes durably."""
+
+    def activity_for(self, user_id: str, days: int = 365) -> UsageActivity:
+        """Sum measured usage across the full UTC range without counting admission holds.
+
+        Model-attempt rows include both successful and failed billed attempts.
+        Their reservation adjustments are accounting transfers, not extra usage.
+        Legacy AF3 usage follows its original quota admission day; generic jobs
+        use the per-day usage reported by their compute provider.
+        """
+        end = _now().date()
+        start = (end - timedelta(days=days - 1)).isoformat()
+        until = (end + timedelta(days=1)).isoformat()
+        token_rows = self.db.execute(
+            "SELECT substr(created_at,1,10),SUM(amount) FROM agent_token_entries "
+            "WHERE user_id=? AND created_at>=? AND created_at<? AND ("
+            "(kind='model_attempt' AND status IN ('completed','error')) OR "
+            "(kind='charge' AND status='posted') OR "
+            "(kind='adjustment' AND run_id IS NULL AND status='posted')) "
+            "GROUP BY substr(created_at,1,10)", (user_id, start, until),
+        ).fetchall()
+        totals = {day: (int(tokens), 0) for day, tokens in token_rows}
+        generic = getattr(self, "database", None) is not None
+        exclude_generic = (
+            " AND NOT EXISTS (SELECT 1 FROM compute_job_data c WHERE c.job_id=agent_jobs.id)"
+            if generic else ""
+        )
+        gpu_rows = self.db.execute(
+            "SELECT substr(created_at,1,10),COALESCE(SUM(actual_minutes),0) FROM agent_jobs "
+            "WHERE user_id=? AND created_at>=? AND created_at<? "
+            "AND gpu_accounting_status IN ('settled','reconciled')" + exclude_generic +
+            " GROUP BY substr(created_at,1,10)", (user_id, start, until),
+        ).fetchall()
+        for day, minutes in gpu_rows:
+            totals[day] = totals.get(day, (0, 0))[0], int(minutes) * 60_000
+        if generic:
+            measured = self.db.execute(
+                "SELECT day,COALESCE(SUM(gpu_ms),0) FROM compute_usage_daily "
+                "WHERE user_id=? AND day>=? AND day<? GROUP BY day", (user_id, start, until),
+            ).fetchall()
+            for day, gpu_ms in measured:
+                tokens, legacy_ms = totals.get(day, (0, 0))
+                totals[day] = tokens, legacy_ms + int(gpu_ms)
+        return build_activity(end, days, totals)
 
     def _append_token_entry(
         self, user_id: str, period: str, kind: str, amount: int, run_id: str | None,

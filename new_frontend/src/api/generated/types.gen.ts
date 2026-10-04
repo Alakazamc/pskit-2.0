@@ -1022,6 +1022,24 @@ export type ContextRef = {
 };
 
 /**
+ * DailyUsage
+ */
+export type DailyUsage = {
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Tokens
+     */
+    tokens: number;
+    /**
+     * Gpu Ms
+     */
+    gpu_ms: number;
+};
+
+/**
  * DemoLoginRequest
  */
 export type DemoLoginRequest = {
@@ -1663,6 +1681,16 @@ export type PrepareFiles = {
 };
 
 /**
+ * ProfileUpdateRequest
+ */
+export type ProfileUpdateRequest = {
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
  * ProgressPart
  */
 export type ProgressPart = {
@@ -2287,6 +2315,28 @@ export type ToolRunMove = {
 };
 
 /**
+ * UsageActivity
+ */
+export type UsageActivity = {
+    /**
+     * Start Date
+     */
+    start_date: string;
+    /**
+     * End Date
+     */
+    end_date: string;
+    /**
+     * Timezone
+     */
+    timezone?: 'UTC';
+    /**
+     * Days
+     */
+    days: Array<DailyUsage>;
+};
+
+/**
  * UsageEntry
  */
 export type UsageEntry = {
@@ -2435,6 +2485,10 @@ export type UserIdentity = {
      * Is Anonymous
      */
     is_anonymous?: boolean;
+    /**
+     * Avatar Revision
+     */
+    avatar_revision?: string | null;
 };
 
 /**
@@ -2785,6 +2839,77 @@ export type GetMeApiV1MeGetResponses = {
 
 export type GetMeApiV1MeGetResponse = GetMeApiV1MeGetResponses[keyof GetMeApiV1MeGetResponses];
 
+export type UpdateProfileApiV1MePatchData = {
+    body: ProfileUpdateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/me';
+};
+
+export type UpdateProfileApiV1MePatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateProfileApiV1MePatchError = UpdateProfileApiV1MePatchErrors[keyof UpdateProfileApiV1MePatchErrors];
+
+export type UpdateProfileApiV1MePatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: UserIdentity;
+};
+
+export type UpdateProfileApiV1MePatchResponse = UpdateProfileApiV1MePatchResponses[keyof UpdateProfileApiV1MePatchResponses];
+
+export type DeleteAvatarApiV1MeAvatarDeleteData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/me/avatar';
+};
+
+export type DeleteAvatarApiV1MeAvatarDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: UserIdentity;
+};
+
+export type DeleteAvatarApiV1MeAvatarDeleteResponse = DeleteAvatarApiV1MeAvatarDeleteResponses[keyof DeleteAvatarApiV1MeAvatarDeleteResponses];
+
+export type GetAvatarApiV1MeAvatarGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/me/avatar';
+};
+
+export type GetAvatarApiV1MeAvatarGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type UploadAvatarApiV1MeAvatarPutData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/me/avatar';
+};
+
+export type UploadAvatarApiV1MeAvatarPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: UserIdentity;
+};
+
+export type UploadAvatarApiV1MeAvatarPutResponse = UploadAvatarApiV1MeAvatarPutResponses[keyof UploadAvatarApiV1MeAvatarPutResponses];
+
 export type AnonymousLoginApiV1AuthAnonymousPostData = {
     body: AnonymousLoginRequest;
     path?: never;
@@ -2909,6 +3034,36 @@ export type GetUsageEntriesApiV1UsageEntriesGetResponses = {
 };
 
 export type GetUsageEntriesApiV1UsageEntriesGetResponse = GetUsageEntriesApiV1UsageEntriesGetResponses[keyof GetUsageEntriesApiV1UsageEntriesGetResponses];
+
+export type GetUsageActivityApiV1UsageActivityGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Days
+         */
+        days?: number;
+    };
+    url: '/api/v1/usage/activity';
+};
+
+export type GetUsageActivityApiV1UsageActivityGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetUsageActivityApiV1UsageActivityGetError = GetUsageActivityApiV1UsageActivityGetErrors[keyof GetUsageActivityApiV1UsageActivityGetErrors];
+
+export type GetUsageActivityApiV1UsageActivityGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: UsageActivity;
+};
+
+export type GetUsageActivityApiV1UsageActivityGetResponse = GetUsageActivityApiV1UsageActivityGetResponses[keyof GetUsageActivityApiV1UsageActivityGetResponses];
 
 export type CapabilitiesApiV1ComputeCapabilitiesGetData = {
     body?: never;

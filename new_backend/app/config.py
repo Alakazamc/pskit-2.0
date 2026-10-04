@@ -60,6 +60,7 @@ class Settings:
     supabase_url: str = ""
     supabase_public_url: str = ""
     supabase_publishable_key: str = ""
+    supabase_secret_key: str = field(default="", repr=False)
     auth_cookie_secure: bool = False
     frontend_url: str = "http://localhost:5174"
     public_api_url: str = "http://localhost:18080"
@@ -146,6 +147,7 @@ class Settings:
             supabase_url=os.getenv("SUPABASE_URL", ""),
             supabase_public_url=os.getenv("SUPABASE_PUBLIC_URL", ""),
             supabase_publishable_key=os.getenv("SUPABASE_PUBLISHABLE_KEY", ""),
+            supabase_secret_key=os.getenv("SUPABASE_SECRET_KEY", ""),
             auth_cookie_secure=os.getenv("RESEARCH_AGENT_AUTH_COOKIE_SECURE", "false").lower() == "true",
             frontend_url=os.getenv("RESEARCH_AGENT_FRONTEND_URL", "http://localhost:5174"),
             public_api_url=os.getenv("RESEARCH_AGENT_PUBLIC_API_URL", "http://localhost:18080"),

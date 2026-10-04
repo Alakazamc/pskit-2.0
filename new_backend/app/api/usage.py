@@ -1,9 +1,9 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.api.auth import CurrentUserDep
-from app.contracts.models import StorageQuota, UsageEntry, UsageSnapshot
+from app.contracts.models import StorageQuota, UsageActivity, UsageEntry, UsageSnapshot
 from app.domain.quota import QuotaLedger
 
 router = APIRouter(prefix="/api/v1", tags=["usage"])
@@ -34,3 +34,11 @@ async def get_usage(user: CurrentUserDep, quotas: QuotaDep, request: Request) ->
 async def get_usage_entries(user: CurrentUserDep, quotas: QuotaDep) -> list[UsageEntry]:
     """List the user's recorded quota usage entries."""
     return quotas.usage_entries_for(user.id)
+
+
+@router.get("/usage/activity")
+def get_usage_activity(
+    user: CurrentUserDep, quotas: QuotaDep, days: Annotated[int, Query(ge=1, le=366)] = 365,
+) -> UsageActivity:
+    """Return owner-scoped daily actual usage, zero-filled across a bounded UTC range."""
+    return quotas.activity_for(user.id, days)

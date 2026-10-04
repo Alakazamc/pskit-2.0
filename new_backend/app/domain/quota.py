@@ -1,17 +1,16 @@
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 
-from app.contracts.models import GpuQuota, QuotaCounter, UsageEntry, UsageSnapshot
+from app.contracts.models import GpuQuota, QuotaCounter, UsageActivity, UsageEntry, UsageSnapshot
+from app.domain.usage_activity import build_activity
 
 
 class GpuQuotaExceeded(Exception):
     """A GPU reservation exceeds the user's daily allowance."""
-    pass
 
 
 class TokenQuotaExceeded(Exception):
     """A Token charge exceeds the user's monthly allowance."""
-    pass
 
 
 @dataclass
@@ -124,6 +123,19 @@ class QuotaLedger:
         if limit <= 0:
             return []
         return [entry.model_copy(deep=True) for entry in self._entries.get(user_id, [])[-limit:]]
+
+    def activity_for(self, user_id: str, days: int = 365) -> UsageActivity:
+        """Aggregate actual mock ledger entries, excluding queued GPU reservations."""
+        totals: dict[str, tuple[int, int]] = {}
+        for entry in self._entries.get(user_id, []):
+            day = entry.created_at.astimezone(UTC).date().isoformat()
+            tokens, gpu_ms = totals.get(day, (0, 0))
+            if entry.resource == "tokens" and entry.kind in {"charge", "adjustment"}:
+                tokens += entry.amount
+            elif entry.resource == "gpu_minutes" and entry.status in {"completed", "reconciled"}:
+                gpu_ms += entry.amount * 60_000
+            totals[day] = tokens, gpu_ms
+        return build_activity(self._today(), days, totals)
 
     def set_token_limit(self, user_id: str, limit: int) -> None:
         """Replace a mock user's monthly Token limit.

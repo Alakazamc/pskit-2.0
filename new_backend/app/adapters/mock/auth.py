@@ -14,3 +14,9 @@ class MockIdentityProvider:
     async def verify(self, access_token: str) -> UserIdentity | None:
         """Resolve a demo access token to its user, if present."""
         return self.store.user_for_token(access_token)
+
+    async def update_profile(
+        self, access_token: str, metadata: dict[str, object],
+    ) -> UserIdentity | None:
+        """Persist profile metadata in the demo identity store."""
+        return self.store.update_profile(access_token, metadata)

@@ -18,8 +18,10 @@ from app.adapters.live.pi_rpc import PiRpcRunner
 from app.adapters.live.remote_mcp import RemoteMcp
 from app.adapters.live.sandbox_pi import SandboxPiRunner
 from app.adapters.live.supabase_auth import SupabaseIdentityAdapter
+from app.adapters.live.supabase_storage import SupabaseAvatarStorage
 from app.adapters.mock.af3 import MockAf3
 from app.adapters.mock.auth import MockIdentityProvider
+from app.adapters.mock.avatars import MockAvatarStorage
 from app.adapters.mock.mcp import MockMcp
 from app.adapters.mock.persistent_af3 import PersistentMockAf3
 from app.api import (
@@ -38,6 +40,7 @@ from app.api import (
     internal_compute,
     metrics,
     models,
+    profile,
     runs,
     sandbox_files,
     usage,
@@ -62,6 +65,7 @@ from app.domain.quota import QuotaLedger
 from app.domain.sandboxes import SandboxArtifactStore
 from app.domain.store import DemoStore
 from app.domain.tool_runs import ToolRunStore
+from app.ports.avatars import AvatarStorage
 from app.ports.providers import ProviderUnavailable
 from app.services.agent import AgentService
 from app.services.model_catalog import ModelCatalog
@@ -71,13 +75,17 @@ from app.services.sandbox_operations import SandboxOperations
 from app.services.workspace_transfer import WorkspaceTransfer
 
 
-def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider=None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None, *, pi_runner=None, mcp_provider=None,
+    avatar_storage: AvatarStorage | None = None,
+) -> FastAPI:
     """Build the API with validated mock or live adapters.
 
     Args:
         settings: Explicit runtime settings; environment settings when absent.
         pi_runner: Optional injected Pi RPC runner for integration tests.
         mcp_provider: Optional injected MCP provider.
+        avatar_storage: Optional private object-storage adapter for integration tests.
 
     Returns:
         Configured FastAPI app with stateful stores and routes.
@@ -382,6 +390,11 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
         if settings.mode == "mock"
         else SupabaseIdentityAdapter(settings.supabase_url, settings.supabase_publishable_key)
     )
+    app.state.avatar_storage = avatar_storage or (
+        MockAvatarStorage() if settings.mode == "mock"
+        else SupabaseAvatarStorage(settings.supabase_url, settings.supabase_secret_key)
+    )
+    app.state.avatar_processing = asyncio.Semaphore(2)
     if settings.agent_runtime not in {"mock", "pi"}:
         raise ValueError("RESEARCH_AGENT_RUNTIME must be mock or pi")
     app.state.conversations = (
@@ -576,6 +589,7 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
         else PersistentMockAf3(app.state.conversations, simulation=af3_executor == "mock")
     )
     app.include_router(auth.router)
+    app.include_router(profile.router)
     app.include_router(guest_auth.router)
     app.include_router(usage.router)
     app.include_router(compute.router)

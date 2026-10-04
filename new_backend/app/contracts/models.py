@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class UserIdentity(BaseModel):
@@ -9,6 +9,33 @@ class UserIdentity(BaseModel):
     email: str
     name: str
     is_anonymous: bool = False
+    avatar_revision: str | None = None
+
+
+class ProfileUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        """Keep display names nonempty, single-line and bounded."""
+        value = value.strip()
+        if not value or any(ord(char) < 32 or ord(char) == 127 for char in value):
+            raise ValueError("Display name must contain visible text on one line")
+        return value
+
+
+class DailyUsage(BaseModel):
+    date: date
+    tokens: int = Field(ge=0)
+    gpu_ms: int = Field(ge=0)
+
+
+class UsageActivity(BaseModel):
+    start_date: date
+    end_date: date
+    timezone: Literal["UTC"] = "UTC"
+    days: list[DailyUsage]
 
 
 class DemoLoginRequest(BaseModel):

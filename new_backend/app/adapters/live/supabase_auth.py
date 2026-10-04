@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -297,6 +298,36 @@ class SupabaseIdentityAdapter:
                 return await self._verify(client, access_token)
         return await self._verify(self.client, access_token)
 
+    async def update_profile(
+        self, access_token: str, metadata: dict[str, object],
+    ) -> UserIdentity | None:
+        """Merge display metadata through the current user's Supabase Auth JWT."""
+        async def update(client: httpx.AsyncClient) -> UserIdentity | None:
+            try:
+                response = await client.put(
+                    f"{self.base_url}/auth/v1/user",
+                    headers={"apikey": self.publishable_key,
+                             "Authorization": f"Bearer {access_token}"},
+                    json={"data": metadata},
+                )
+            except httpx.HTTPError as exc:
+                raise ProviderUnavailable("Supabase Auth unavailable") from exc
+            if response.status_code == 429:
+                raise AuthRateLimited(response.headers.get("Retry-After"))
+            if response.status_code in {401, 403}:
+                raise InvalidCredentials
+            if response.status_code != 200:
+                raise ProviderUnavailable("Supabase profile update unavailable")
+            try:
+                return self._identity(response.json())
+            except ValueError as exc:
+                raise ProviderUnavailable("Supabase Auth returned invalid JSON") from exc
+
+        if self.client is not None:
+            return await update(self.client)
+        async with httpx.AsyncClient(timeout=10) as client:
+            return await update(client)
+
     async def _verify(self, client: httpx.AsyncClient, access_token: str) -> UserIdentity | None:
         """Read the user profile; return None for invalid or expired tokens."""
         try:
@@ -316,6 +347,11 @@ class SupabaseIdentityAdapter:
             data = response.json()
         except ValueError as exc:
             raise ProviderUnavailable("Supabase Auth returned invalid JSON") from exc
+        return self._identity(data)
+
+    @staticmethod
+    def _identity(data: object) -> UserIdentity:
+        """Expose only validated display metadata from a provider user record."""
         if not isinstance(data, dict) or not isinstance(data.get("id"), str) or not data["id"]:
             raise ProviderUnavailable("Supabase Auth returned an invalid user")
         email = data.get("email") if isinstance(data.get("email"), str) else ""
@@ -323,9 +359,12 @@ class SupabaseIdentityAdapter:
         metadata = metadata if isinstance(metadata, dict) else {}
         full_name = metadata.get("full_name")
         name = full_name if isinstance(full_name, str) and full_name else email.split("@")[0]
+        revision = metadata.get("pskit_avatar_revision")
+        revision = revision if isinstance(revision, str) and re.fullmatch(r"[a-f0-9]{32}", revision) else None
         return UserIdentity(
             id=str(data["id"]), email=email, name=name,
             is_anonymous=data.get("is_anonymous") is not False,
+            avatar_revision=revision,
         )
 
 

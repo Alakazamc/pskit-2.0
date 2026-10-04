@@ -55,6 +55,24 @@ class DemoStore:
         """Invalidate a demo bearer token if it is present."""
         self._users_by_token.pop(token, None)
 
+    def update_profile(self, token: str, metadata: dict[str, object]) -> UserIdentity | None:
+        """Replace public profile fields across this mock user's active sessions."""
+        previous = self.user_for_token(token)
+        if previous is None:
+            return None
+        changes = {}
+        if "full_name" in metadata:
+            changes["name"] = metadata["full_name"]
+        if "pskit_avatar_revision" in metadata:
+            changes["avatar_revision"] = metadata["pskit_avatar_revision"]
+        user = previous.model_copy(update=changes)
+        for access_token, identity in self._users_by_token.items():
+            if identity.id == user.id:
+                self._users_by_token[access_token] = user
+        if user.email:
+            self._users_by_email[user.email] = user
+        return user
+
     def email_is_used(self, email: str) -> bool:
         """Check whether a normalized email is already a demo member."""
         return email.strip().lower() in self._users_by_email
@@ -75,8 +93,10 @@ class DemoStore:
         if previous is None or not previous.is_anonymous or normalized in self._users_by_email:
             return None
         member = UserIdentity(
-            id=previous.id, email=normalized, name=normalized.split("@")[0],
+            id=previous.id, email=normalized,
+            name=previous.name if previous.name != "Guest" else normalized.split("@")[0],
             is_anonymous=False,
+            avatar_revision=previous.avatar_revision,
         )
         new_token = secrets.token_urlsafe(32)
         self._users_by_token.pop(access_token)

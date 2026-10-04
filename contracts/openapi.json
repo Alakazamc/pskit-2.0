@@ -426,6 +426,124 @@
             "HTTPBearer": []
           }
         ]
+      },
+      "patch": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Update Profile",
+        "description": "Change only the authenticated user's nickname, preserving identity and quota.",
+        "operationId": "update_profile_api_v1_me_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserIdentity"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/avatar": {
+      "get": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Get Avatar",
+        "description": "Return only the authenticated user's private image through Python.",
+        "operationId": "get_avatar_api_v1_me_avatar_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "image/webp": {}
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Upload Avatar",
+        "description": "Validate and normalize a bounded raster image before saving the user's avatar.",
+        "operationId": "upload_avatar_api_v1_me_avatar_put",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserIdentity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Delete Avatar",
+        "description": "Remove the profile reference first, then discard its obsolete object.",
+        "operationId": "delete_avatar_api_v1_me_avatar_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserIdentity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/auth/anonymous": {
@@ -647,6 +765,57 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/api/v1/usage/activity": {
+      "get": {
+        "tags": [
+          "usage"
+        ],
+        "summary": "Get Usage Activity",
+        "description": "Return owner-scoped daily actual usage, zero-filled across a bounded UTC range.",
+        "operationId": "get_usage_activity_api_v1_usage_activity_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 366,
+              "minimum": 1,
+              "default": 365,
+              "title": "Days"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageActivity"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/compute/capabilities": {
@@ -7080,6 +7249,32 @@
         ],
         "title": "ContextRef"
       },
+      "DailyUsage": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "tokens": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Tokens"
+          },
+          "gpu_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Gpu Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "tokens",
+          "gpu_ms"
+        ],
+        "title": "DailyUsage"
+      },
       "DemoLoginRequest": {
         "properties": {
           "email": {
@@ -8170,6 +8365,21 @@
         ],
         "title": "PrepareFiles"
       },
+      "ProfileUpdateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ProfileUpdateRequest"
+      },
       "ProgressPart": {
         "properties": {
           "type": {
@@ -9251,6 +9461,40 @@
         ],
         "title": "ToolRunMove"
       },
+      "UsageActivity": {
+        "properties": {
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Start Date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "title": "End Date"
+          },
+          "timezone": {
+            "type": "string",
+            "const": "UTC",
+            "title": "Timezone",
+            "default": "UTC"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/DailyUsage"
+            },
+            "type": "array",
+            "title": "Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_date",
+          "end_date",
+          "days"
+        ],
+        "title": "UsageActivity"
+      },
       "UsageEntry": {
         "properties": {
           "id": {
@@ -9532,6 +9776,17 @@
             "type": "boolean",
             "title": "Is Anonymous",
             "default": false
+          },
+          "avatar_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Revision"
           }
         },
         "type": "object",
