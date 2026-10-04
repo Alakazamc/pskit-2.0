@@ -164,7 +164,7 @@ export function createHttpApi({ baseUrl = "/api/v1", token, fetcher = fetch, onU
       { method: "POST", body: JSON.stringify(args),
         headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {} },
     ),
-    getToolRuns: () => request("/tool-runs"),
+    getToolRuns: (tool) => request(`/tool-runs${tool ? `?tool=${encodeURIComponent(tool)}` : ""}`),
     saveToolRunToProject: (id, projectId) => request(`/tool-runs/${encodeURIComponent(id)}/project`, { method: "PATCH", body: JSON.stringify({ project_id: projectId }) }),
     submitAf3: (payload, idempotencyKey) => request("/af3/jobs", {
       method: "POST",

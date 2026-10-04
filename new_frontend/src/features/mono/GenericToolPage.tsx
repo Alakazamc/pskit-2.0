@@ -34,7 +34,7 @@ function argumentsFromFields(tool: McpTool, values: Record<string, string>): Rec
 export function GenericToolPage({ api, userId, name }: { api: ResearchApi; userId: string; name: string }) {
   const { t } = useLanguage();
   const queryClient = useQueryClient();
-  const catalog = useQuery({ queryKey: ["mcp-tools"], queryFn: api.getMcpTools });
+  const catalog = useQuery({ queryKey: ["mcp-tools", userId], queryFn: api.getMcpTools });
   const tool = catalog.data?.find((item) => item.name === name);
   const properties = (tool?.input_schema.properties ?? {}) as Record<string, PropertySchema>;
   const required = new Set(Array.isArray(tool?.input_schema.required) ? tool.input_schema.required : []);

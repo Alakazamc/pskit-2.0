@@ -43,32 +43,6 @@
   margin-bottom:50px;
   padding:0
 }
-.catalog-grid {
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
-  gap:13px;
-  margin-top:35px
-}
-.catalog-card {
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-  background:#fff;
-  border:1px solid var(--border);
-  border-radius:11px;
-  padding:17px;
-  min-height:135px
-}
-.catalog-icon {
-  color:var(--primary)
-}
-.catalog-card b {
-  font-size:12px
-}
-.catalog-card span {
-  font-size:10px;
-  color:var(--muted)
-}
 .settings-card {
   display:flex;
   align-items:center;

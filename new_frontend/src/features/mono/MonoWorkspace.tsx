@@ -1,8 +1,8 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ChevronDown, Clock3, FileText, FolderInput, LayoutGrid, LogOut, Menu, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PenLine, Plus, Search, Settings2, Sparkles, Sun } from "lucide-react";
+import { ChevronDown, FileText, FolderInput, LayoutGrid, LogOut, Menu, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PenLine, Plus, Search, Settings2, Sparkles, Sun } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import type { AuthSessionResponse, Message, MessageRequest, Project, ResearchApi, Session, UserIdentity } from "../../api/types";
 import { ApiError } from "../../api/http";
 import { useWorkspacePortalContainer } from "../../hooks/useWorkspacePortalContainer";
@@ -15,13 +15,12 @@ import { useRunEvents } from "../chat/useRunEvents";
 import { LanguageSwitch } from "../../i18n/LanguageProvider";
 import { CreateProjectDialog, MoveChatDialog, ProjectDetail, ProjectIndex } from "./ProjectPages";
 import { personalSessionPath, projectPath, projectSessionPath, sessionPath } from "./sessionPaths";
-import { MyRuns, PdbWorkspace, ToolDirectory } from "./ToolPages";
+import { CatalogLibrary } from "../../components/catalog/CatalogLibrary";
+import { ToolDirectory } from "./ToolPages";
 import { ArtifactsPage } from "./ArtifactsPage";
 import { UsageSettings } from "./UsageSettings";
-import { GenericToolPage } from "./GenericToolPage";
 import { SearchDialog } from "./SearchDialog";
 import { SessionRenameDialog } from "./SessionRenameDialog";
-import { StructureViewerPage } from "./StructureViewerPage";
 import { GuestUpgrade } from "../auth/GuestUpgrade";
 import { ProjectIconGlyph } from "./ProjectIcon";
 import { AdminEntry } from "../admin/AdminEntry";
@@ -245,11 +244,8 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
     if (pathname === "/g") return t("project.title");
     if (pathname === "/artifacts") return t("artifact.title");
     if (pathname === "/skills") return t("mono.skills");
-    if (pathname === "/tools") return t("tools.title");
-    if (pathname === "/tools/runs") return t("tools.myRuns");
-    if (pathname === "/tools/pdb") return t("tools.pdbTitle");
-    if (pathname === "/tools/structure") return t("tools.viewerTitle");
-    if (/^\/tools\/run\/[^/]+$/.test(pathname)) return decodeURIComponent(pathname.split("/")[3]);
+    if (pathname === "/resources") return t("workspace.resourcesTitle");
+    if (/^\/tools(?:\/(?:pdb|structure|runs|run\/[^/]+))?$/.test(pathname)) return t("tools.title");
     if (currentProject && pathname === projectPath(currentProject.id)) return currentProject.name;
     return t("mono.pageNotFound");
   })();
@@ -265,12 +261,9 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
     if (pathname === "/artifacts") return <ArtifactsPage api={api} userId={user.id} />;
     if (currentProject && pathname === projectPath(currentProject.id)) return <ProjectDetail api={api} project={currentProject} sessions={projectSessions.data ?? []} skills={skills.data ?? []} userId={user.id} />;
     if (activeProjectId && projects.isLoading) return <div className="mono-loading-page" role="status">{t("mono.openingProject")}</div>;
-    if (pathname === "/tools") return <ToolDirectory api={api} />;
-    if (pathname === "/tools/runs") return <MyRuns api={api} projects={visibleProjects} userId={user.id} />;
-    if (/^\/tools\/run\/[^/]+$/.test(pathname)) return <GenericToolPage api={api} userId={user.id} name={decodeURIComponent(pathname.split("/")[3])} />;
-    if (pathname === "/tools/pdb") return <PdbWorkspace api={api} userId={user.id} />;
-    if (pathname === "/tools/structure") return <StructureViewerPage theme={theme} />;
-    if (pathname === "/skills") return <div className="mono-page-scroll"><div className="mono-page-content"><div className="mono-card-grid">{(skills.data ?? []).map((skill) => <div className="mono-card" key={skill.id}><Sparkles size={21} /><h2>{skill.name}</h2><p>{skill.description}</p><span>{t("mono.globalSkill", { version: skill.version ?? 1 })}</span></div>)}</div>{skills.data?.length === 0 && <div className="mono-empty-panel"><Sparkles size={24} /><h2>{t("mono.noSkills")}</h2><p>{t("mono.noSkillsDescription")}</p></div>}</div></div>;
+    if (pathname === "/tools/runs") return <Navigate to="/tools" replace />;
+    if (pathname === "/tools" || pathname === "/tools/pdb" || pathname === "/tools/structure" || /^\/tools\/run\/[^/]+$/.test(pathname)) return <ToolDirectory api={api} userId={user.id} projects={visibleProjects} theme={theme} viewer={pathname === "/tools/structure"} selectedName={pathname === "/tools/pdb" ? "search_pdb" : pathname.startsWith("/tools/run/") ? decodeURIComponent(pathname.split("/")[3]) : undefined} />;
+    if (pathname === "/skills" || pathname === "/resources") return <div className="mono-page-scroll"><div className="mono-page-content"><CatalogLibrary key={pathname} kind={pathname === "/skills" ? "skills" : "resources"} items={(pathname === "/skills" ? skills.data : resources.data) ?? []} loading={pathname === "/skills" ? skills.isLoading : resources.isLoading} error={pathname === "/skills" ? skills.isError : resources.isError} /></div></div>;
     if (pathname === "/settings") return <div className="mono-page-scroll"><div className="mono-page-content"><section className="mono-panel mono-settings-panel"><h2>{t("mono.appearance")}</h2><div className="mono-segmented"><button className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")}>{t("mono.light")}</button><button className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}>{t("mono.dark")}</button></div></section><section className="mono-panel mono-settings-panel"><h2>{t("mono.language")}</h2><LanguageSwitch /></section><UsageSettings api={api} userId={user.id} isGuest={user.is_anonymous} />{user.is_anonymous && onSession && <GuestUpgrade api={api} onSession={onSession} />}<section className="mono-panel mono-settings-panel"><h2>{t("mono.account")}</h2><p>{user.name} · {user.email}</p><AdminEntry api={api} userId={user.id} /><button className="mono-button" onClick={onLogout}>{t("mono.signOut")}</button></section></div></div>;
     return <div className="mono-page-scroll"><div className="mono-empty-panel"><Link to="/">{t("mono.backNewChat")}</Link></div></div>;
   };
@@ -278,7 +271,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
     <div className="mono-desktop-sidebar">{sidebar}</div>
     {mobileOpen && <div className="mono-mobile-overlay"><button type="button" aria-label={t("mono.closeSidebar")} onClick={() => setMobileOpen(false)} className="mono-mobile-backdrop" />{sidebar}</div>}
     <main className="mono-main">
-      <header className="mono-topbar"><div className="mono-topbar-left"><button type="button" className="mono-mobile-menu" aria-label={t("mono.openSidebar")} onClick={() => setMobileOpen(true)}><Menu size={19} /></button>{isChat ? <span>{headerTitle}</span> : <h1>{headerTitle}</h1>}{isChat && <ChevronDown size={15} />}{currentSession && <small>{currentSession.title}</small>}</div><div className="mono-topbar-right">{currentSession && <button className="mono-header-action" onClick={() => setMoveOpen(true)}><FolderInput size={16} /><span>{t("mono.moveToProject")}</span></button>}{pathname === "/g" && <button type="button" className="mono-header-action" onClick={() => setCreateProjectOpen(true)}><Plus size={16} /><span>{t("project.new")}</span></button>}{pathname === "/tools" && <Link className="mono-header-action" to="/tools/runs"><Clock3 size={16} /><span>{t("tools.myRuns")}</span></Link>}{pathname === "/tools/runs" && <Link className="mono-header-action" to="/tools"><ArrowLeft size={16} /><span>{t("tools.back")}</span></Link>}<Link className="mono-header-link" to="/settings" aria-label={t("mono.settings")}><Settings2 size={18} /></Link><button type="button" className="mono-theme-toggle" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} title={t(theme === "dark" ? "theme.switchToLight" : "theme.switchToDark")} aria-label={t(theme === "dark" ? "theme.switchToLight" : "theme.switchToDark")}>{theme === "dark" ? <Sun size={19} aria-hidden="true" /> : <Moon size={19} aria-hidden="true" />}</button></div></header>
+      <header className="mono-topbar"><div className="mono-topbar-left"><button type="button" className="mono-mobile-menu" aria-label={t("mono.openSidebar")} onClick={() => setMobileOpen(true)}><Menu size={19} /></button>{isChat ? <span>{headerTitle}</span> : <h1>{headerTitle}</h1>}{isChat && <ChevronDown size={15} />}{currentSession && <small>{currentSession.title}</small>}</div><div className="mono-topbar-right">{currentSession && <button className="mono-header-action" onClick={() => setMoveOpen(true)}><FolderInput size={16} /><span>{t("mono.moveToProject")}</span></button>}{pathname === "/g" && <button type="button" className="mono-header-action" onClick={() => setCreateProjectOpen(true)}><Plus size={16} /><span>{t("project.new")}</span></button>}<Link className="mono-header-link" to="/settings" aria-label={t("mono.settings")}><Settings2 size={18} /></Link><button type="button" className="mono-theme-toggle" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} title={t(theme === "dark" ? "theme.switchToLight" : "theme.switchToDark")} aria-label={t(theme === "dark" ? "theme.switchToLight" : "theme.switchToDark")}>{theme === "dark" ? <Sun size={19} aria-hidden="true" /> : <Moon size={19} aria-hidden="true" />}</button></div></header>
       {renderPage()}
     </main>
     {currentSession && <MoveChatDialog open={moveOpen} onOpenChange={setMoveOpen} api={api} session={currentSession} projects={[{ id: personalProjectId, name: t("mono.personalChats"), description: "" }, ...visibleProjects]} userId={user.id} onMoved={(projectId) => navigate(sessionPath(projectId, personalProjectId, currentSession.id), { replace: true })} />}

@@ -595,7 +595,7 @@ it("runs a PDB search and shows the returned record with a source link", async (
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([{ id: "project-alice", name: "我的科研项目", description: "" }, { id: "project-new", name: "蛋白设计", description: "" }]);
     if (path.endsWith("/c") || path.endsWith("/skills") || path.endsWith("/resources")) return json([]);
-    if (path.endsWith("/tool-runs")) return json(toolRun ? [toolRun] : []);
+    if (path.endsWith("/tool-runs?tool=search_pdb")) return json(toolRun ? [toolRun] : []);
     if (path.endsWith("/tool-runs/toolrun-1/project")) {
       toolRun = { ...toolRun!, project_id: JSON.parse(String(init?.body)).project_id };
       return json(toolRun);
@@ -617,8 +617,7 @@ it("runs a PDB search and shows the returned record with a source link", async (
   expect(screen.getByRole("link", { name: /查看三维结构/ })).toHaveAttribute("href", "/tools/structure?pdb=1A9N");
   expect(invoked).toEqual([{ query: "p53" }]);
   expect(invocationKey ?? "").toMatch(/^[0-9a-f-]{36}$/);
-  await actor.click(within(screen.getByRole("navigation", { name: "主导航" })).getByRole("link", { name: "工具集" }));
-  await actor.click(await screen.findByRole("link", { name: "我的运行" }));
+  await actor.click(screen.getByRole("tab", { name: "运行历史" }));
   expect(await screen.findByText("search_pdb: p53")).toBeInTheDocument();
   await actor.selectOptions(screen.getByRole("combobox", { name: "保存 search_pdb: p53 到项目" }), "project-new");
   await waitFor(() => expect(toolRun?.project_id).toBe("project-new"));
@@ -666,7 +665,7 @@ it("lists the structure viewer in the toolbox even without an MCP connection", a
   const viewer = await screen.findByRole("link", { name: /结构查看器/ });
   expect(viewer).toHaveAttribute("href", "/tools/structure");
   await actor.click(viewer);
-  expect(await screen.findByRole("heading", { name: "结构查看器", level: 1 })).toBeInTheDocument();
+  expect(await screen.findByRole("dialog", { name: "结构查看器" })).toBeInTheDocument();
   expect(screen.getByRole("textbox", { name: "PDB ID" })).toBeInTheDocument();
 });
 
@@ -706,7 +705,9 @@ it("shows the artifacts route in English when that language is selected", async 
   expect(await screen.findByRole("heading", { name: "Artifacts", level: 1 })).toBeInTheDocument();
   expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("Artifacts");
   expect(within(screen.getByRole("main")).getAllByRole("heading", { level: 1 })).toHaveLength(1);
-  expect(await screen.findByRole("button", { name: "Download demo.cif" })).toBeDisabled();
+  const actor = userEvent.setup();
+  await actor.click(await screen.findByRole("button", { name: "demo.cif" }));
+  expect(screen.getByRole("button", { name: "Download demo.cif" })).toBeDisabled();
 }, 10_000);
 
 it("translates the active workspace navigation and settings page", async () => {
@@ -755,28 +756,30 @@ it("translates project creation and the project Skill dialog", async () => {
   expect(screen.getByRole("dialog", { name: "Project Skills" })).toBeInTheDocument();
 }, 10_000);
 
-it("translates the PDB search workspace and tool run history", async () => {
+it("translates tool parameters and their scoped history inside the detail panel", async () => {
   loggedIn("/tools/pdb");
   window.localStorage.setItem("research_language", "en");
   const actor = userEvent.setup();
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
-    const path = String(input);
+    const url = new URL(String(input), "http://test");
+    const path = url.pathname;
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g") || path.endsWith("/c") || path.endsWith("/skills")
-      || path.endsWith("/resources") || path.endsWith("/tool-runs")) return json([]);
+      || path.endsWith("/resources")) return json([]);
+    if (path.endsWith("/tool-runs") && url.searchParams.get("tool") === "search_pdb") return json([]);
     if (path.endsWith("/mcp/tools")) return json([{ name: "search_pdb", description: "Search PDB" }]);
     return json({ detail: "Not found" }, 404);
   }));
   render(<App />);
-  expect(await screen.findByRole("heading", { name: "PDB structure search", level: 1 })).toBeInTheDocument();
-  expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("PDB structure search");
-  expect(within(screen.getByRole("main")).getAllByRole("heading", { level: 1 })).toHaveLength(1);
-  expect(screen.getByRole("textbox", { name: "Protein name, UniProt or PDB ID" })).toBeInTheDocument();
-  await actor.click(within(screen.getByRole("navigation", { name: "Main navigation" })).getByRole("link", { name: "Tools" }));
-  await actor.click(await screen.findByRole("link", { name: "My runs" }));
-  expect(await screen.findByRole("heading", { name: "My runs", level: 1 })).toBeInTheDocument();
-  expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("My runs");
-  expect(within(screen.getByRole("main")).getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  const panel = await screen.findByRole("dialog", { name: "search_pdb" });
+  expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("Tools");
+  expect(within(panel).getByRole("textbox", { name: "Protein name, UniProt or PDB ID" })).toBeInTheDocument();
+  await actor.click(within(panel).getByRole("tab", { name: "Run history" }));
+  expect(await within(panel).findByText("No runs yet")).toBeInTheDocument();
+  expect(within(panel).getByText("Run this tool to see its history here.")).toBeInTheDocument();
+  await actor.keyboard("{Escape}");
+  expect(screen.getByRole("heading", { name: "Tools", level: 1 })).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "My runs" })).not.toBeInTheDocument();
 }, 10_000);
 
 it("builds the tool directory from the MCP catalog instead of fixed prediction cards", async () => {
@@ -825,8 +828,8 @@ it("uses a published MCP tool schema to invoke a newly listed tool", async () =>
   }));
   render(<App />);
   await actor.type(await screen.findByRole("textbox", { name: "accession" }), "P12345");
-  expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("fetch_uniprot");
-  expect(within(screen.getByRole("main")).getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("工具集");
+  expect(screen.getByRole("dialog", { name: "fetch_uniprot" })).toBeInTheDocument();
   await actor.click(screen.getByRole("button", { name: "运行工具" }));
   expect(await screen.findByText(/"accession": "P12345"/)).toBeInTheDocument();
   expect(invoked).toEqual([{ accession: "P12345" }]);
@@ -911,16 +914,16 @@ it("lists owned artifacts and downloads only those with stored bytes", async () 
   vi.stubGlobal("fetch", fetcher);
   render(<App />);
 
-  expect(await screen.findByText("result.cif")).toBeInTheDocument();
-  expect(screen.getByText("demo.cif")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "下载 result.cif" })).toBeEnabled();
+  const available = await screen.findByRole("button", { name: "result.cif" });
+  const unavailable = screen.getByRole("button", { name: "demo.cif" });
+  expect(available).toHaveClass("catalog-entry-card");
+  await actor.click(unavailable);
   expect(screen.getByRole("button", { name: "下载 demo.cif" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "预览 result.cif" })).toBeEnabled();
-  expect(screen.getByRole("button", { name: "预览 demo.cif" })).toBeDisabled();
-  await actor.click(screen.getByRole("button", { name: "预览 result.cif" }));
+  expect(fetcher).not.toHaveBeenCalledWith("/api/v1/artifacts/demo-1/preview", expect.anything());
+  await actor.keyboard("{Escape}");
+  await actor.click(available);
   expect(await screen.findByText("CIF!")).toBeInTheDocument();
   expect(fetcher).toHaveBeenCalledWith("/api/v1/artifacts/result-1/preview", expect.anything());
-  await actor.click(screen.getByRole("button", { name: "关闭预览" }));
   await actor.click(screen.getByRole("button", { name: "下载 result.cif" }));
   await waitFor(() => expect(fetcher).toHaveBeenCalledWith(
     "/api/v1/artifacts/result-1/download", expect.anything(),

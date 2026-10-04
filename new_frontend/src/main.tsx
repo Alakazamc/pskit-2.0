@@ -17,6 +17,7 @@ import "./styles/mobile.css";
 import "./styles/monochrome.css";
 import "./styles/markdown.css";
 import "./styles/mono-pages.css";
+import "./styles/catalog.css";
 import "./styles/scrollbars.css";
 import "./styles/admin.css";
 

@@ -100,7 +100,7 @@ export interface ResearchApi extends AdminApi {
   streamRunEvents(runId: string, after: string | undefined, onEvent: (event: RunEvent) => void, signal: AbortSignal): Promise<void>;
   getMcpTools(): Promise<McpTool[]>;
   invokeMcpTool(name: string, args: Record<string, unknown>, idempotencyKey?: string): Promise<McpResult>;
-  getToolRuns(): Promise<ToolRun[]>;
+  getToolRuns(tool?: string): Promise<ToolRun[]>;
   saveToolRunToProject(id: string, projectId: string): Promise<ToolRun>;
   submitAf3(payload: Af3JobRequest, idempotencyKey: string): Promise<Af3Job>;
   getAf3Job(id: string): Promise<Af3Job>;

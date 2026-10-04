@@ -14,6 +14,15 @@
 - On accepted sends, clear the submitted content while preserving model preferences and any newer typing. Retain rejected submissions. Bind asynchronous uploads and send completion to their originating draft; reset transient controls on conversation changes.
 - Cache only the necessary draft fields. Keep file contents, temporary blob URLs and credentials out of draft storage, and keep preference persistence entirely in the browser. Verify switching, refresh, account isolation and late completions through the UI; unavailable storage must leave the current composer usable.
 
+## Catalog cards and detail panels
+
+- Sidebar destinations with catalogs (Tools, Skills, resources, projects and artifacts; future MCP catalogs) reuse `src/components/catalog/CatalogCard.tsx` and `src/styles/catalog.css`. At normal zoom, use a 100 px wide grid with cards approximately 80 px tall and 10 px gaps. Keep entries compact as the viewport grows; allow height to grow for text scaling. Show only an icon, name (up to two lines) and one short description; keep full content and actions in the detail panel.
+- Add a borderless search field for large catalogs, filtering names and descriptions. Use theme tokens in both themes and show loading, empty, no-match and error states. Keep each card one keyboard-accessible action with its full name and a visible focus state.
+- Open details using the shared `DetailPanel.tsx`, centered over the retained directory. Keep long content scrollable within the viewport, support Escape/Close and return focus to the opening card. Project cards may open their existing project workspace. Chat messages, usage summaries and form sections retain their purpose-specific layouts.
+- Put the slanted pencil at the detail panel's top right when the user has an authorized edit operation. Editing exposes actual editable fields (or a file tree and content editor for Skill packages when supported); save/cancel actions must follow a real write contract. Tool pencils focus editable invocation parameters. Public read-only catalogs show details without a pretend save action.
+- Keep tool run history inside that tool's details alongside its invocation parameters. Request history with the exact tool name and authenticated user; scope query caches by both. Fetch history when its tab opens, retain entered parameters when switching tabs, and preserve project assignment. The Tools directory has no aggregate history entry.
+- Verify compact rendered dimensions, search focus, panel scrolling, edit focus and per-tool history isolation at desktop and mobile widths in both themes.
+
 ## Page headings
 
 - Use one clear page title. Keep page-level descriptions only when they add information needed to act; do not repeat the navigation label or describe obvious page functions. Preserve user-written project descriptions and tool-specific guidance.
