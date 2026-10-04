@@ -31,18 +31,12 @@ def _production_psql(database: str, query: str) -> str:
                     "-c", f"BEGIN READ ONLY; {query}; COMMIT"])
 
 
-def _legacy_litellm_psql(query: str) -> str:
-    return _docker(["docker", "exec", "pskit-agent-litellm-db-1", "psql", "-XqAt", "-v",
-                    "ON_ERROR_STOP=1", "-U", "litellm", "-d", "litellm",
-                    "-c", f"BEGIN READ ONLY; {query}; COMMIT"])
-
-
-def _ledger_digest(database: str, schema: str, table: str, *, legacy: bool = False) -> str:
+def _ledger_digest(database: str, schema: str, table: str) -> str:
     safe = table.replace('"', '""')
     query = ("SELECT md5(COALESCE(string_agg(row_to_json(t)::text, '' "
              "ORDER BY row_to_json(t)::text), '')) "
              f'FROM "{schema}"."{safe}" t')
-    return (_legacy_litellm_psql(query) if legacy else _production_psql(database, query))
+    return _production_psql(database, query)
 
 
 def snapshot_production() -> dict[str, int | str]:
@@ -68,19 +62,6 @@ def snapshot_production() -> dict[str, int | str]:
             if database == "litellm" and any(term in table for term in
                                                ("Spend", "Budget", "TeamTable", "UserTable", "VerificationToken")):
                 result[f"{prefix}.{table}.digest"] = _ledger_digest(database, schema, table)
-    active_tables = _legacy_litellm_psql(
-        "SELECT tablename FROM pg_catalog.pg_tables "
-        "WHERE schemaname='public' ORDER BY tablename")
-    if not active_tables:
-        raise SmokeFailure("Active production LiteLLM schema is unavailable")
-    for table in active_tables.splitlines():
-        safe = table.replace('"', '""')
-        result[f"active_litellm.{table}"] = int(_legacy_litellm_psql(
-            f'SELECT count(*) FROM "public"."{safe}"'))
-        if any(term in table for term in
-               ("Spend", "Budget", "TeamTable", "UserTable", "VerificationToken")):
-            result[f"active_litellm.{table}.digest"] = _ledger_digest(
-                "litellm", "public", table, legacy=True)
     return result
 
 

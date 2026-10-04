@@ -34,7 +34,14 @@ def test_smoke_rejects_real_af3_and_never_calls_a6000():
 
 
 def test_production_snapshot_records_unmigrated_pskit_schema_as_empty(monkeypatch):
-    monkeypatch.setattr(smoke_staging, "_docker", lambda command: "pskit-agent-supabase")
+    commands = []
+
+    def docker(command):
+        commands.append(command)
+        assert command[:3] == ["docker", "inspect", "supabase-db"]
+        return "pskit-agent-supabase"
+
+    monkeypatch.setattr(smoke_staging, "_docker", docker)
 
     def psql(database, query):
         if "auth.users" in query:
@@ -50,15 +57,11 @@ def test_production_snapshot_records_unmigrated_pskit_schema_as_empty(monkeypatc
         raise AssertionError(query)
 
     monkeypatch.setattr(smoke_staging, "_production_psql", psql)
-    monkeypatch.setattr(smoke_staging, "_legacy_litellm_psql", lambda query: (
-        "LiteLLM_SpendLogs" if "pg_catalog.pg_tables" in query else
-        "ledger-digest" if "md5(" in query else "3"))
     assert smoke_staging.snapshot_production() == {
         "auth.users": 2, "pskit.__tables__": 0, "litellm.LiteLLM_SpendLogs": 0,
         "litellm.LiteLLM_SpendLogs.digest": "candidate-digest",
-        "active_litellm.LiteLLM_SpendLogs": 3,
-        "active_litellm.LiteLLM_SpendLogs.digest": "ledger-digest",
     }
+    assert len(commands) == 1
 
 
 def test_smoke_requires_seeded_quota_and_metering():

@@ -51,11 +51,25 @@ STAGING_CONFIG_DIR=/home/ecs-user/pskit-agent-staging-private \
 
 然后从可访问 WireGuard 的浏览器打开 `http://10.9.8.1:18132/login`，并重复上面的 smoke 容器命令，删去末尾的 `--private-api`，以验证私网 Nginx 入口。
 
-验收包括登录、文件上传、Agent SSE、Token/GPU 额度及用量记录、Token/GPU 超额拒绝、AF3 `simulation=true` 和私有路径拒绝。Token 超额探测只临时修改合成账号额度，并在 `finally` 中恢复 20,000。脚本在前后只读采集生产 `auth.users`、`pskit` 表、候选单库及当前运行中的 LiteLLM 表计数，并校验 LiteLLM 计费相关表内容摘要；任何变化都报错。它不访问 `10.9.8.2`，不提交真实 AF3 任务。阿里云宿主机不要求安装 `httpx`；上述验收命令使用固定后端镜像，Docker socket 只供读取生产容器计数和摘要，运行结束即卸载。
+验收包括登录、文件上传、Agent SSE、Token/GPU 额度及用量记录、Token/GPU 超额拒绝、AF3 `simulation=true` 和私有路径拒绝。Token 超额探测只临时修改合成账号额度，并在 `finally` 中恢复 20,000。脚本在前后只读采集生产 `auth.users`、`pskit` 表和同一 PostgreSQL 中 `litellm` 数据库的表计数，并校验 LiteLLM 计费相关表内容摘要；任何变化都报错。它不访问 `10.9.8.2`，不提交真实 AF3 任务。阿里云宿主机不要求安装 `httpx`；上述验收命令使用固定后端镜像，Docker socket 只供读取生产容器计数和摘要，运行结束即卸载。
 
 ## 日常发布与停止
 
 一次构建的固定后端镜像 ID 和前端 `dist` 先在 Staging 验收，再把**同一制品**发布到 Production。数据库只做兼容的**结构迁移**；若新旧程序不能同时读写该结构，先采用 expand/contract。旧 SQLite→PostgreSQL 历史数据迁移仅在首次正式切换时按既有手册执行一次，日常发布不复制测试数据或生产用户数据。
+
+已有 Staging 复用原有私有配置与卷，先停止三个项目，再更新制品锁定信息：
+
+```bash
+export STAGING_CONFIG_DIR=/home/ecs-user/pskit-agent-staging-private
+bash deploy/agent/staging.sh down
+PYTHONPATH="$PWD" python -m deploy.agent.scripts.pin_staging_release \
+  --config-dir "$STAGING_CONFIG_DIR" \
+  --backend-image pskit-agent-backend:<固定发布标签> \
+  --frontend-dist /home/ecs-user/pskit-agent-releases/<发布版本>/frontend-dist
+bash deploy/agent/staging.sh up
+```
+
+更新器拒绝仍在运行的 Staging 项目，备份原 `cloud.env` 和 manifest，仅改变镜像与前端路径/哈希，不生成或修改密钥。现有 Nginx root 可写且路由不变时，先复制新 assets、再原子替换 index，保留旧 assets，即可继续使用私网入口；不需重新安装 Nginx。默认模型 smoke 使用替身，真实供应商联调应单独记录受限测试 key、预算和结果，不能把替身结果当成真实调用证据。
 
 ```bash
 bash deploy/agent/staging.sh status
