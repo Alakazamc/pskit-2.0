@@ -107,7 +107,7 @@ it("restores the rotated mock session after a Google upgrade callback", async ()
 
   render(<App />);
   await waitFor(() => expect(window.localStorage.getItem("research_access_token")).toBe("linked-jwt"));
-  expect(window.location.pathname).toBe("/");
+  await waitFor(() => expect(window.location.pathname).toBe("/"));
 });
 
 it("keeps a guest signed in and explains a Google identity conflict", async () => {
