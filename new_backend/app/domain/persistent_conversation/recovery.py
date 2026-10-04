@@ -35,7 +35,8 @@ class RecoveryMixin:
 
         rows = self.db.execute(
             "SELECT id,user_id,run_id,status,progress,estimated_minutes,created_at FROM agent_jobs "
-            "WHERE status IN ('queued','running')"
+            "WHERE json_extract(resource_requirements_json, '$.capability')='af3' "
+            "AND status IN ('queued','running')"
         ).fetchall()
         for job_id, user_id, run_id, status, progress, estimate, created_at in rows:
             elapsed = (_now() - datetime.fromisoformat(created_at)).total_seconds()

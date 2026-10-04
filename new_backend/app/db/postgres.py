@@ -128,6 +128,7 @@ class PostgresStatements:
             return QueryResult([], 0)
         statement = re.sub(r"\browid\b", "ordinal", statement)
         statement = statement.replace("json_extract(e.payload, '$.type')", "(e.payload::jsonb ->> 'type')")
+        statement = statement.replace("json_extract(resource_requirements_json, '$.capability')", "(resource_requirements_json::jsonb ->> 'capability')")
         statement = statement.replace("json_extract(payload, '$.type')", "(payload::jsonb ->> 'type')")
         statement = statement.replace("?", "%s")
         stack = getattr(self._local, "stack", ())

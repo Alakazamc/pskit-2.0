@@ -26,6 +26,7 @@ from app.api import (
     auth,
     capabilities,
     catalog,
+    compute,
     guest_auth,
     health,
     internal,
@@ -261,6 +262,17 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
     app.add_middleware(ObservabilityMiddleware, metrics=app.state.metrics)
     app.state.settings = settings
     app.state.database = database
+    app.state.compute_jobs = None
+    if settings.compute_enabled:
+        if database is None:
+            raise ValueError("Generic compute requires live PostgreSQL mode")
+        import json
+
+        from app.contracts.compute import ComputeServiceManifest
+        from app.domain.compute.jobs import ComputeJobs
+        app.state.compute_jobs = ComputeJobs(database)
+        for manifest in json.loads(settings.compute_services_json):
+            app.state.compute_jobs.catalog.register(ComputeServiceManifest.model_validate(manifest))
     app.state.pdf_processor = PdfProcessingPool(
         max_concurrent=settings.pdf_max_concurrent_parses,
         queue_timeout_seconds=settings.pdf_queue_timeout_seconds,
@@ -393,6 +405,7 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
     app.include_router(auth.router)
     app.include_router(guest_auth.router)
     app.include_router(usage.router)
+    app.include_router(compute.router)
     app.include_router(runs.router)
     app.include_router(capabilities.router)
     app.include_router(catalog.router)

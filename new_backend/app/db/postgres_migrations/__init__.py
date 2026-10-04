@@ -5,7 +5,7 @@ from importlib.resources import files
 import psycopg
 from psycopg import sql
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 def migrate_postgres(dsn: str, *, schema: str = "pskit") -> None:
@@ -38,6 +38,7 @@ def migrate_postgres(dsn: str, *, schema: str = "pskit") -> None:
             raise RuntimeError("PostgreSQL schema is newer than this application")
         for version, filename in (
             (1, "001_core.sql"), (2, "002_components.sql"), (3, "003_quotas.sql"),
+            (4, "004_compute.sql"),
         ):
             if version in applied:
                 continue

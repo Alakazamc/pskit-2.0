@@ -38,6 +38,10 @@ class Settings:
     mcp_queue_timeout_seconds: float = 10
     mcp_allowed_tools_json: str = "[]"
     mcp_servers_json: str = "[]"
+    compute_enabled: bool = False
+    compute_services_json: str = "[]"
+    compute_service_keys_json: str = "{}"
+    compute_cpu_daily_limit_ms: int = 0
     compute_callback_key: str = ""
     af3_approval_threshold: int = 30
     af3_queue_timeout_seconds: int = 3600
@@ -113,6 +117,10 @@ class Settings:
             mcp_queue_timeout_seconds=float(os.getenv("RESEARCH_AGENT_MCP_QUEUE_TIMEOUT_SECONDS", "10")),
             mcp_allowed_tools_json=os.getenv("RESEARCH_AGENT_MCP_ALLOWED_TOOLS_JSON", "[]"),
             mcp_servers_json=os.getenv("RESEARCH_AGENT_MCP_SERVERS_JSON", "[]"),
+            compute_enabled=os.getenv("RESEARCH_AGENT_COMPUTE_ENABLED", "false").lower() == "true",
+            compute_services_json=os.getenv("RESEARCH_AGENT_COMPUTE_SERVICES_JSON", "[]"),
+            compute_service_keys_json=os.getenv("RESEARCH_AGENT_COMPUTE_SERVICE_KEYS_JSON", "{}"),
+            compute_cpu_daily_limit_ms=int(os.getenv("RESEARCH_AGENT_COMPUTE_CPU_DAILY_LIMIT_MS", "0")),
             compute_callback_key=os.getenv("RESEARCH_AGENT_COMPUTE_CALLBACK_KEY", ""),
             af3_approval_threshold=int(os.getenv("RESEARCH_AGENT_AF3_APPROVAL_THRESHOLD", "30")),
             af3_queue_timeout_seconds=int(os.getenv("RESEARCH_AGENT_AF3_QUEUE_TIMEOUT_SECONDS", "3600")),

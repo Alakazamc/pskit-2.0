@@ -310,7 +310,7 @@ class Af3Mixin:
         row = self.db.execute(
             "SELECT id,status,progress,estimated_minutes,actual_minutes,run_id,artifacts,"
             "input_json,simulation,resource_requirements_json,gpu_accounting_status "
-            "FROM agent_jobs WHERE id=? AND user_id=?", (job_id, user_id),
+            "FROM agent_jobs WHERE json_extract(resource_requirements_json, '$.capability')='af3' AND id=? AND user_id=?", (job_id, user_id),
         ).fetchone()
         if row is None:
             return None
@@ -332,7 +332,7 @@ class Af3Mixin:
         Returns:
             Job snapshot, or ``None`` when absent.
         """
-        row = self.db.execute("SELECT user_id FROM agent_jobs WHERE id=?", (job_id,)).fetchone()
+        row = self.db.execute("SELECT user_id FROM agent_jobs WHERE json_extract(resource_requirements_json, '$.capability')='af3' AND id=?", (job_id,)).fetchone()
         return self.get_af3_job(row[0], job_id) if row else None
 
     def claim_compute_jobs(
@@ -370,7 +370,7 @@ class Af3Mixin:
                 )
             active_requirements = self.db.execute(
                 "SELECT resource_requirements_json FROM agent_jobs "
-                "WHERE worker_id=? AND status='running'",
+                "WHERE json_extract(resource_requirements_json, '$.capability')='af3' AND worker_id=? AND status='running'",
                 (worker_id,),
             ).fetchall()
             available_gpus = resources.gpu_count - sum(
@@ -379,7 +379,7 @@ class Af3Mixin:
             )
             rows = self.db.execute(
                 "SELECT id,user_id,run_id,attempts,resource_requirements_json FROM agent_jobs "
-                "WHERE input_json IS NOT NULL AND status='queued' "
+                "WHERE json_extract(resource_requirements_json, '$.capability')='af3' AND input_json IS NOT NULL AND status='queued' "
                 "ORDER BY created_at,rowid",
             ).fetchall()
             for job_id, user_id, run_id, attempts, requirements_json in rows:
@@ -390,7 +390,7 @@ class Af3Mixin:
                         or required.min_gpu_memory_mb > resources.gpu_memory_mb):
                     continue
                 if postgres and self.db.execute(
-                    "SELECT id FROM agent_jobs WHERE id=? AND status='queued' "
+                    "SELECT id FROM agent_jobs WHERE json_extract(resource_requirements_json, '$.capability')='af3' AND id=? AND status='queued' "
                     "FOR UPDATE SKIP LOCKED",
                     (job_id,),
                 ).fetchone() is None:
@@ -424,7 +424,7 @@ class Af3Mixin:
         """Recover active claims after a worker lost its HTTP response or journal write."""
         rows = self.db.execute(
             "SELECT id,user_id,attempts,lease_token FROM agent_jobs "
-            "WHERE worker_id=? AND status='running' ORDER BY created_at,rowid",
+            "WHERE json_extract(resource_requirements_json, '$.capability')='af3' AND worker_id=? AND status='running' ORDER BY created_at,rowid",
             (worker_id,),
         ).fetchall()
         claims = []
@@ -449,7 +449,7 @@ class Af3Mixin:
         expired = 0
         with self._immediate_transaction():
             rows = self.db.execute(
-                "SELECT id,user_id,run_id FROM agent_jobs WHERE input_json IS NOT NULL "
+                "SELECT id,user_id,run_id FROM agent_jobs WHERE json_extract(resource_requirements_json, '$.capability')='af3' AND input_json IS NOT NULL "
                 "AND status='queued' AND created_at<=?", (cutoff,),
             ).fetchall()
             for job_id, user_id, run_id in rows:
@@ -505,7 +505,7 @@ class Af3Mixin:
         expired = 0
         with self._immediate_transaction():
             rows = self.db.execute(
-                "SELECT id,user_id,run_id FROM agent_jobs WHERE input_json IS NOT NULL "
+                "SELECT id,user_id,run_id FROM agent_jobs WHERE json_extract(resource_requirements_json, '$.capability')='af3' AND input_json IS NOT NULL "
                 "AND status='running' AND first_claimed_at<=?", (cutoff,),
             ).fetchall()
             for job_id, user_id, run_id in rows:
@@ -583,7 +583,7 @@ class Af3Mixin:
         with self._immediate_transaction():
             row = self.db.execute(
                 "SELECT user_id,run_id,status,worker_id,lease_token,attempts,"
-                "first_claimed_at,progress FROM agent_jobs WHERE id=?", (job_id,),
+                "first_claimed_at,progress FROM agent_jobs WHERE json_extract(resource_requirements_json, '$.capability')='af3' AND id=?", (job_id,),
             ).fetchone()
             if row is None:
                 return None
@@ -683,7 +683,7 @@ class Af3Mixin:
             row = self.db.execute(
                 "SELECT user_id,run_id,status,worker_id,lease_expires_at,attempts,lease_token,"
                 "first_claimed_at,gpu_accounting_status,actual_minutes "
-                "FROM agent_jobs WHERE id=?", (job_id,)
+                "FROM agent_jobs WHERE json_extract(resource_requirements_json, '$.capability')='af3' AND id=?", (job_id,)
             ).fetchone()
             if row is None:
                 return None
@@ -812,7 +812,7 @@ class Af3Mixin:
         with self._immediate_transaction():
             row = self.db.execute(
                 "SELECT user_id,run_id,status,actual_minutes,gpu_accounting_status "
-                "FROM agent_jobs WHERE id=?", (job_id,),
+                "FROM agent_jobs WHERE json_extract(resource_requirements_json, '$.capability')='af3' AND id=?", (job_id,),
             ).fetchone()
             if row is None:
                 return None
