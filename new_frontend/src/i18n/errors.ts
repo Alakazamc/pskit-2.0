@@ -6,6 +6,7 @@ const codeKeys: Record<string, TranslationKey> = {
   GPU_DAILY_QUOTA_EXCEEDED: "error.gpuQuota",
   MODEL_NOT_CONFIGURED: "error.modelMissing",
   MODEL_UNAVAILABLE: "error.modelUnavailable",
+  MODEL_REASONING_UNAVAILABLE: "error.modelReasoningUnavailable",
   MODEL_DOES_NOT_SUPPORT_IMAGES: "error.modelNoImages",
   TOO_MANY_IMAGES: "error.tooManyImages",
   PI_NOT_CONFIGURED: "error.agentMissing",

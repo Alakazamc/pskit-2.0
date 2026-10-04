@@ -167,16 +167,17 @@
 }
 .composer-input-area {
   position:relative;
+  padding-block-start:15px;
   padding-inline-end:16px
 }
 .composer-input-area textarea {
   width:100%;
-  min-height:87px;
+  min-height:72px;
   max-height:200px;
   resize:none;
   border:0;
   outline:none;
-  padding:15px 16px 6px;
+  padding:0 16px 6px;
   background:transparent;
   font-size:13px;
   color:var(--text);
@@ -191,19 +192,31 @@
   gap:10px;
   padding:0 10px 10px
 }
-.composer-model-select {
-  min-width:0;
-  max-width:min(45vw, 210px);
-  height:31px;
-  padding:0 9px;
-  border:1px solid var(--border);
-  border-radius:8px;
-  background:var(--surface, #fff);
-  color:var(--text);
-  font:inherit;
-  font-size:12px;
-}
-.composer-model-select:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
+.composer-model-trigger{min-width:0;max-width:min(62vw,260px);height:31px;display:flex;align-items:center;gap:6px;padding:0 9px;border:1px solid var(--mono-border,var(--border));border-radius:9px;background:var(--mono-surface,var(--surface));color:var(--mono-text,var(--text));font:inherit;font-size:12px;cursor:pointer}
+.composer-model-trigger>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.composer-model-trigger>svg{flex:none;color:var(--mono-muted,var(--secondary))}
+.composer-model-effort{flex:none;padding-left:6px;border-left:1px solid var(--mono-border,var(--border));color:var(--mono-muted,var(--secondary))}
+.composer-model-popover{z-index:220;width:min(410px,calc(100vw - 24px));max-height:min(70dvh,560px);display:flex;flex-direction:column;overflow:hidden;padding:9px;border:1px solid var(--mono-border,var(--border));border-radius:16px;background:var(--mono-surface,var(--surface));color:var(--mono-text,var(--text));box-shadow:0 18px 50px #0003}
+.composer-model-search{height:38px;display:flex;align-items:center;gap:8px;padding:0 10px;border:1px solid var(--mono-border,var(--border));border-radius:9px;color:var(--mono-muted,var(--secondary))}
+.composer-model-search input{width:100%;height:100%;border:0;outline:0;background:transparent;color:var(--mono-text,var(--text));font:inherit;font-size:13px}
+.composer-model-list{min-height:0;max-height:235px;overflow:auto;padding:7px 0}
+.composer-model-group-label,.composer-model-section-title{padding:7px 8px;color:var(--mono-muted,var(--secondary));font-size:11px;font-weight:650}
+.composer-model-option{width:100%;min-height:48px;display:flex;align-items:center;gap:10px;padding:6px 9px;border:0;border-radius:9px;background:transparent;color:var(--mono-text,var(--text));text-align:left;cursor:pointer}
+.composer-model-option:hover:not(:disabled),.composer-model-option:focus-visible{background:var(--mono-subtle,var(--soft))}
+.composer-model-option:disabled{opacity:.45;cursor:not-allowed}
+.composer-model-option-text{min-width:0;flex:1;display:grid;gap:2px}
+.composer-model-option-text strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:620}
+.composer-model-option-text small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mono-muted,var(--secondary));font-size:10px}
+.composer-model-option>svg{flex:none;color:var(--mono-text,var(--text))}
+.composer-model-empty{margin:12px 8px;color:var(--mono-muted,var(--secondary));font-size:12px}
+.composer-model-thinking{border-top:1px solid var(--mono-border,var(--border));padding:3px 0 2px}
+.composer-model-thinking>p{margin:5px 8px;color:var(--mono-muted,var(--secondary));font-size:11px}
+.composer-effort-options{display:flex;flex-wrap:wrap;gap:6px;padding:3px 8px}
+.composer-effort-options label{min-width:44px;min-height:34px;display:flex;align-items:center;justify-content:center;padding:0 9px;border:1px solid var(--mono-border,var(--border));border-radius:8px;color:var(--mono-muted,var(--secondary));font-size:12px;cursor:pointer}
+.composer-effort-options label:has(input:checked){border-color:var(--mono-text,var(--text));background:var(--mono-subtle,var(--soft));color:var(--mono-text,var(--text))}
+.composer-effort-options input{position:absolute;width:1px;height:1px;opacity:0}
+.composer-effort-options label:focus-within{outline:2px solid var(--mono-text,var(--text));outline-offset:2px}
+@media(max-width:500px){.composer-model-trigger{max-width:min(57vw,230px)}.composer-model-popover{max-height:68dvh}.composer-model-list{max-height:30dvh}}
 .add-button {
   height:31px;
   width:31px;
@@ -246,6 +259,7 @@
   color:#a9b6ae;
   margin-top:9px
 }
+.composer-stop-error{max-width:760px;margin:7px auto 0;color:#bd4747;font-size:12px}
 .inline-picker,.add-menu {
   background:#fff;
   border:1px solid var(--border);

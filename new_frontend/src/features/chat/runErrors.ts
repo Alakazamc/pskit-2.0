@@ -12,6 +12,7 @@ const errorKeys: Record<string, TranslationKey> = {
   MODEL_GATEWAY_QUOTA_EXHAUSTED: "agent.modelQuotaExhausted",
   MODEL_GATEWAY_AUTH_FAILED: "agent.modelAuthFailed",
   MODEL_GATEWAY_RATE_LIMITED: "agent.modelRateLimited",
+  MODEL_REASONING_UNAVAILABLE: "error.modelReasoningUnavailable",
   TOKEN_QUOTA_EXCEEDED: "agent.tokenQuotaResume",
 };
 

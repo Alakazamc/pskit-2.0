@@ -1,5 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ArrowUp, AtSign, CircleAlert, File, FilePlus2, FileText, Globe2, Plus, Sparkles, X } from "lucide-react";
+import { ArrowUp, AtSign, CircleAlert, File, FilePlus2, FileText, Globe2, Plus, Sparkles, Square, X } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -9,6 +9,7 @@ import { useLanguage } from "../../i18n/LanguageProvider";
 import { errorTranslationKey } from "../../i18n/errors";
 import type { TranslationKey } from "../../i18n/translations";
 import { useWorkspacePortalContainer } from "../../hooks/useWorkspacePortalContainer";
+import { ModelPicker } from "./ModelPicker";
 
 type UploadTile = {
   key: string;
@@ -29,10 +30,11 @@ function fileKind(file: File | string): UploadTile["kind"] {
   return "file";
 }
 
-export function Composer({ onSend, onUpload, skills, projectSkillIds = [], resources, models = [], disabled = false }: { onSend: (message: MessageRequest) => Promise<boolean>; onUpload: (file: File, onProgress: (value: number) => void) => Promise<ContextRef>; skills: CatalogItem[]; projectSkillIds?: string[]; resources: CatalogItem[]; models?: ModelOption[]; disabled?: boolean }) {
+export function Composer({ onSend, onUpload, onStop, runActive = false, skills, projectSkillIds = [], resources, models = [], disabled = false }: { onSend: (message: MessageRequest) => Promise<boolean>; onUpload: (file: File, onProgress: (value: number) => void) => Promise<ContextRef>; onStop?: () => Promise<void>; runActive?: boolean; skills: CatalogItem[]; projectSkillIds?: string[]; resources: CatalogItem[]; models?: ModelOption[]; disabled?: boolean }) {
   const { t } = useLanguage();
   const [uploadTiles, setUploadTiles] = useState<UploadTile[]>([]);
   const [uploadError, setUploadError] = useState<TranslationKey | null>(null);
+  const [stopError, setStopError] = useState<string | null>(null);
   const objectUrls = useRef(new Set<string>());
   const canceledUploads = useRef(new Set<string>());
   const portalContainer = useWorkspacePortalContainer();
@@ -41,15 +43,19 @@ export function Composer({ onSend, onUpload, skills, projectSkillIds = [], resou
   const selectedSkills = useComposerStore((state) => state.skills);
   const selectedResources = useComposerStore((state) => state.resources);
   const model = useComposerStore((state) => state.model);
+  const reasoningEffort = useComposerStore((state) => state.reasoning_effort);
   const setModel = useComposerStore((state) => state.setModel);
+  const setReasoningEffort = useComposerStore((state) => state.setReasoningEffort);
   const availableModels = Array.isArray(models) ? models : [];
-  const selectedModel = availableModels.find((option) => option.id === model) ?? availableModels[0];
+  const selectedModel = model ? availableModels.find((option) => option.id === model) : availableModels[0];
+  const modelUnavailable = Boolean(model && !selectedModel);
   const setText = useComposerStore((state) => state.setText);
   const addSkill = useComposerStore((state) => state.addSkill);
   const addResource = useComposerStore((state) => state.addResource);
   const addAttachment = useComposerStore((state) => state.addAttachment);
   const removeRef = useComposerStore((state) => state.removeRef);
-  const clear = useComposerStore((state) => state.clear);
+  const clearAfterSend = useComposerStore((state) => state.clearAfterSend);
+  const [stopping, setStopping] = useState(false);
   const picker = content.endsWith("/") ? "skill" : content.endsWith("@") ? "resource" : null;
   const projectSkillSet = new Set(projectSkillIds);
   const groupedSkills = [
@@ -108,15 +114,15 @@ export function Composer({ onSend, onUpload, skills, projectSkillIds = [], resou
   const selectSkill = (ref: CatalogItem) => { addSkill(ref); setText(content.slice(0, -1)); };
   const selectResource = (ref: CatalogItem) => { addResource(ref); setText(content.slice(0, -1)); };
   const send = async () => {
-    if (!content.trim() || disabled || uploadTiles.some((tile) => tile.status === "uploading")) return;
+    if (!content.trim() || disabled || runActive || modelUnavailable || uploadTiles.some((tile) => tile.status === "uploading")) return;
     if (attachments.some((item) => fileKind(item.name) === "image") && !selectedModel?.supports_images) {
       setUploadError("composer.imageRequiresVisionModel");
       return;
     }
     const refs = (items: ContextRef[]) => items.map(({ id, name }) => ({ id, name }));
-    if (await onSend({ content: content.trim(), model: selectedModel?.id, attachments: refs(attachments), skills: refs(selectedSkills), resources: refs(selectedResources) })) {
-      clear();
-      setModel(selectedModel?.id);
+    const effort = reasoningEffort && selectedModel?.reasoning_levels?.includes(reasoningEffort) ? reasoningEffort : undefined;
+    if (await onSend({ content: content.trim(), model: selectedModel?.id, ...(effort ? { reasoning_effort: effort } : {}), attachments: refs(attachments), skills: refs(selectedSkills), resources: refs(selectedResources) })) {
+      clearAfterSend();
       uploadTiles.forEach(revokePreview);
       setUploadTiles([]);
     }
@@ -155,7 +161,7 @@ export function Composer({ onSend, onUpload, skills, projectSkillIds = [], resou
         </div>}
       </div>
       <div className="composer-toolbar">
-        {availableModels.length > 0 && <select className="composer-model-select" aria-label={t("composer.model")} value={selectedModel?.id ?? ""} onChange={(event) => setModel(event.target.value)}>{availableModels.map((option) => <option value={option.id} key={option.id}>{option.id}{option.supports_images ? ` · ${t("composer.supportsImages")}` : ""}</option>)}</select>}
+        <ModelPicker models={availableModels} selected={selectedModel} selectionUnavailable={modelUnavailable} effort={reasoningEffort} hasImages={attachments.some((item) => fileKind(item.name) === "image")} onModelChange={setModel} onEffortChange={setReasoningEffort} />
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild><button className="add-button" type="button" aria-label={t("composer.addContext")}><Plus size={19} /></button></DropdownMenu.Trigger>
           <DropdownMenu.Portal container={portalContainer}><DropdownMenu.Content className="add-menu" side="top" sideOffset={8} align="start">
@@ -166,9 +172,11 @@ export function Composer({ onSend, onUpload, skills, projectSkillIds = [], resou
             <DropdownMenu.Item onSelect={() => setText(`${content}@`)}><AtSign size={16} /> {t("composer.resources")}</DropdownMenu.Item>
           </DropdownMenu.Content></DropdownMenu.Portal>
         </DropdownMenu.Root>
-        <button type="button" className="send-button" aria-label={t("composer.send")} disabled={!content.trim() || disabled || uploadTiles.some((tile) => tile.status === "uploading")} onClick={() => void send()}><ArrowUp size={19} /></button>
+        {runActive && onStop ? <button type="button" className="send-button" aria-label={t("agent.cancel")} disabled={stopping} onClick={() => { setStopping(true); setStopError(null); void onStop().catch((caught) => { const key = errorTranslationKey(caught); setStopError(key ? t(key) : t("workspace.cancelFailed")); }).finally(() => setStopping(false)); }}><Square size={14} fill="currentColor" /></button>
+          : <button type="button" className="send-button" aria-label={t("composer.send")} disabled={!content.trim() || disabled || runActive || modelUnavailable || uploadTiles.some((tile) => tile.status === "uploading")} onClick={() => void send()}><ArrowUp size={19} /></button>}
       </div>
     </div>
+    {stopError && <div className="composer-stop-error" role="alert">{stopError}</div>}
     <div className="composer-footer">{t("composer.disclaimer")}</div>
   </div>;
 }

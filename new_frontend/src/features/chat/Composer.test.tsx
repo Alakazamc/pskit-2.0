@@ -110,16 +110,40 @@ describe("Composer file references", () => {
     expect(screen.getByText("Global Skills")).toBeInTheDocument();
   });
 
-  it("offers gateway models and sends the selected model with the message", async () => {
+  it("searches gateway models and sends the selected model and thinking level", async () => {
     const user = userEvent.setup();
     const onSend = vi.fn().mockResolvedValue(true);
     render(<LanguageProvider><Composer onSend={onSend} onUpload={vi.fn()} skills={[]} resources={[]}
-      models={[{ id: "text-model", supports_images: false },
-        { id: "vision-model", supports_images: true }]} /></LanguageProvider>);
-    await user.selectOptions(screen.getByRole("combobox", { name: "模型" }), "vision-model");
+      models={[{ id: "text-model", supports_images: false, reasoning_levels: [] },
+        { id: "anthropic/claude-opus-4-8", supports_images: true, reasoning_levels: ["medium", "high", "xhigh"] }]} /></LanguageProvider>);
+    await user.click(screen.getByRole("button", { name: /选择模型/ }));
+    await user.type(screen.getByRole("searchbox", { name: "搜索模型" }), "opus");
+    await user.click(screen.getByRole("button", { name: /claude-opus-4-8/ }));
+    await user.click(screen.getByRole("radio", { name: "高" }));
     await user.type(screen.getByLabelText("消息内容"), "解释一下");
     await user.click(screen.getByRole("button", { name: "发送消息" }));
-    expect(onSend).toHaveBeenCalledWith(expect.objectContaining({ model: "vision-model" }));
+    expect(onSend).toHaveBeenCalledWith(expect.objectContaining({
+      model: "anthropic/claude-opus-4-8", reasoning_effort: "high",
+    }));
+    expect(screen.getByRole("button", { name: /选择模型/ })).toHaveTextContent("高");
+  });
+
+  it("shows an empty model catalog and asks to reselect a removed model", async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn().mockResolvedValue(true);
+    useComposerStore.getState().setModel("removed-model");
+    const { rerender } = render(<LanguageProvider><Composer onSend={onSend} onUpload={vi.fn()} skills={[]} resources={[]} models={[]} /></LanguageProvider>);
+    await user.click(screen.getByRole("button", { name: /选择模型/ }));
+    expect(screen.getByText("暂无可用模型")).toBeInTheDocument();
+    rerender(<LanguageProvider><Composer onSend={onSend} onUpload={vi.fn()} skills={[]} resources={[]}
+      models={[{ id: "available-model", supports_images: false, reasoning_levels: [] }]} /></LanguageProvider>);
+    expect(screen.getByText("之前选择的模型已不可用，请重新选择")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("消息内容"), "hello");
+    expect(screen.getByRole("button", { name: "发送消息" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: /选择模型/ }));
+    await user.click(screen.getByRole("button", { name: "available-model" }));
+    await user.click(screen.getByRole("button", { name: "发送消息" }));
+    expect(onSend).toHaveBeenCalledWith(expect.objectContaining({ model: "available-model" }));
   });
 
   it("accepts image files only when the selected model supports images", async () => {
@@ -133,7 +157,8 @@ describe("Composer file references", () => {
     await user.upload(input, image);
     expect(onUpload).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("支持图片的模型");
-    await user.selectOptions(screen.getByRole("combobox", { name: "模型" }), "vision-model");
+    await user.click(screen.getByRole("button", { name: /选择模型/ }));
+    await user.click(screen.getByRole("button", { name: /vision-model/ }));
     await user.upload(input, image);
     await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(1));
   });
