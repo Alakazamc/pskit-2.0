@@ -14,7 +14,6 @@ import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
-
 ROOT = Path(__file__).resolve().parents[3]
 TEMPLATE = ROOT / "infra/supabase/.env.example"
 KEY_SCRIPT = Path(__file__).with_name("staging_auth_keys.mjs")
@@ -178,6 +177,7 @@ def prepare_staging(target_dir: Path, *, backend_image: str, frontend_dist: Path
             f"RESEARCH_AGENT_ADMIN_API_KEY={_secret(32)}",
             f"RESEARCH_AGENT_DATABASE_URL={app_dsn}",
             f"SUPABASE_PUBLISHABLE_KEY={auth['SUPABASE_PUBLISHABLE_KEY']}",
+            f"SUPABASE_SECRET_KEY={auth['SUPABASE_SECRET_KEY']}",
             "MODEL_GATEWAY_BASE_URL=http://gateway:4000/v1",
             "MODEL_GATEWAY_MODEL=claude-opus-4-8",
             "MODEL_GATEWAY_KIND=litellm",

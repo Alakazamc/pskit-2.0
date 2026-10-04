@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from deploy.agent.scripts.prepare_staging import prepare_staging
 
 
@@ -48,6 +47,7 @@ def test_generates_distinct_private_staging_secrets(release, monkeypatch):
     assert len({supabase["POSTGRES_PASSWORD"], supabase["JWT_SECRET"],
                 litellm["LITELLM_MASTER_KEY"], litellm["LITELLM_SALT_KEY"]}) == 4
     assert supabase["SUPABASE_PUBLISHABLE_KEY"].startswith("sb_publishable_")
+    assert backend["SUPABASE_SECRET_KEY"] == supabase["SUPABASE_SECRET_KEY"]
     assert supabase["SUPABASE_SECRET_KEY"].startswith("sb_secret_")
     private_keys = json.loads(supabase["JWT_KEYS"])
     public_keys = json.loads(supabase["JWT_JWKS"])["keys"]

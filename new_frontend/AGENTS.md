@@ -27,6 +27,13 @@
 
 - Use one clear page title. Keep page-level descriptions only when they add information needed to act; do not repeat the navigation label or describe obvious page functions. Preserve user-written project descriptions and tool-specific guidance.
 
+## Profile and usage settings
+
+- Center settings within a bounded content width. Use quiet section dividers, theme surfaces and compact form controls; account forms and usage charts retain their purpose-specific layouts instead of catalog cards. Keep nickname saving and avatar upload/removal in the Profile section, and update the sidebar after a successful Python API response. Preserve unsaved input on failure.
+- Account profiles come from the server. Fetch private avatars through the authenticated Python API and use temporary blob URLs only for rendering; revoke them on replacement/unmount. Scope avatar and usage caches by user ID, and avatar images by revision. Keep Supabase service credentials out of React and browser storage.
+- Display actual daily usage as a seven-row calendar of small blue squares, with month labels, a low-to-high legend and exact date/value details on hover or keyboard focus. Token and GPU are separate selectable metrics; dates use the API's UTC calendar. Show real zero-usage days without generating sample activity. Provide loading/error/empty states, a single Tab entry with arrow-key navigation, and horizontal chart scrolling on narrow screens without overflowing the page.
+- Verify nickname persistence, sidebar synchronization, upload/removal, calendar details, keyboard focus and page/chart scrolling in both themes at desktop and mobile widths.
+
 ## Attachments
 
 - Keep upload guidance out of the composer until a limit is exceeded. Count ready and pending attachments together, including images, against ten files per turn. Accept files up to the remaining capacity and show a bilingual overflow alert only for the excess; the user can select the remaining files next turn. Release places on removal, cancellation, or failure, and reset the allowance after a successful send. Keep per-file size and format validation in upload errors.
