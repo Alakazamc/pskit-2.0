@@ -103,3 +103,28 @@ def test_internal_submission_binds_agent_owner_and_independent_jobs_do_not_creat
     with database.connection() as connection:
         assert connection.execute("SELECT COUNT(*) FROM agent_runs WHERE user_id='bob'").fetchone()[0] == 0
         assert connection.execute("SELECT COUNT(*) FROM agent_messages WHERE user_id='bob'").fetchone()[0] == 0
+
+
+@pytest.mark.asyncio
+async def test_scheduler_marks_disconnected_generic_worker_for_reconciliation(ledger_system):
+    database, ledger, jobs = ledger_system
+    store = PersistentConversationStore(database)
+    job = jobs.submit("alice", request(), "disconnected")
+    leases = ComputeLeases(database, ledger)
+    leases.claim(ComputeClaimRequest(service_id="gpu", worker_id="gpu-worker",
+                                    resources=WorkerResources(gpu_uuids=["GPU-1"])))
+    with database.transaction() as connection:
+        connection.execute("UPDATE agent_jobs SET lease_expires_at='2000-01-01T00:00:00+00:00' "
+                           "WHERE id=%s", (job.id,))
+    service = AgentService(store, None, "http://internal", 1, 0.01, af3_executor="disabled")
+    service.compute_jobs, service.compute_leases = jobs, leases
+    await service.start()
+    try:
+        for _ in range(25):
+            if jobs.get("alice", job.id).accounting_status == "pending_reconciliation":
+                break
+            await asyncio.sleep(0.02)
+        assert jobs.get("alice", job.id).accounting_status == "pending_reconciliation"
+        assert ledger.usage_for("alice").gpu.reserved == 40000
+    finally:
+        await service.stop()

@@ -89,6 +89,8 @@ class CapabilityVersion(Contract):
             raise ValueError("Hard limits require an independently stoppable executor")
         if self.gpu_count and "gpu_device_ms" not in self.required_usage:
             raise ValueError("GPU capabilities must require gpu_device_ms")
+        if self.max_budget.gpu_device_ms and "gpu_device_ms" not in self.required_usage:
+            raise ValueError("GPU budgets must require gpu_device_ms")
         if self.max_budget.cpu_core_ms and "cpu_core_ms" not in self.required_usage:
             raise ValueError("CPU budgets must require cpu_core_ms")
         return self

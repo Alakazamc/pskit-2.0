@@ -99,7 +99,9 @@ class ComputeService:
         if arguments is not None and arguments != grant.job.arguments:
             raise ProtocolError("ARGUMENTS_MISMATCH")
         try:
-            inputs = model.model_validate(grant.job.arguments).model_dump()
+            validated = model.model_validate(grant.job.arguments)
+            # Keep typed model/container values for the original function signature.
+            inputs = {name: getattr(validated, name) for name in model.model_fields}
         except ValidationError as exc:
             raise ProtocolError("INVALID_ARGUMENTS") from exc
         ctx = context or ExecutionContext(grant)

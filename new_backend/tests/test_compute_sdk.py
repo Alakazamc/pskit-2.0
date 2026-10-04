@@ -3,6 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from pydantic import BaseModel
 
 from app.contracts.compute import ComputeBudget, ComputeJob, ExecutionGrant
 from pskit_compute import (
@@ -15,6 +16,10 @@ from pskit_compute import (
     ProtocolError,
     UsageReport,
 )
+
+
+class SequenceInput(BaseModel):
+    sequence: str
 
 
 def grant_for(service, arguments):
@@ -85,3 +90,20 @@ async def test_missing_required_usage_is_rejected_and_unexpected_exception_stays
     assert result.usage.gpu_device_ms is None
     assert result.usage.source == "unknown"
     assert "private service details" not in result.error.message
+
+
+@pytest.mark.asyncio
+async def test_typed_model_arguments_reach_function_as_models():
+    service = ComputeService("lab", "v1")
+
+    @service.compute_tool(name="inspect")
+    def inspect(sample: SequenceInput, samples: list[SequenceInput]):
+        return Completed(result={"sequence": sample.sequence,
+            "sequences": [item.sequence for item in samples]},
+            usage=UsageReport(source="service_reported"))
+
+    report = await service.execute(grant_for(service, {
+        "sample": {"sequence": "ACG"}, "samples": [{"sequence": "UGA"}],
+    }))
+    assert isinstance(report, Completed)
+    assert report.result == {"sequence": "ACG", "sequences": ["UGA"]}

@@ -91,3 +91,21 @@ def test_af3_and_generic_admission_share_gpu_budget(ledger_system):
     legacy.create_af3_job("alice", 1)
     assert ledger.usage_for("alice").gpu.reserved == 60000
     assert "legacy_wall" in ledger.usage_for("alice").sources
+
+
+@pytest.mark.parametrize("accounting", ["reserved", "pending_reconciliation"])
+def test_legacy_cross_day_hold_still_blocks_af3_admission(ledger_system, accounting):
+    from app.domain.persistent_conversation import PersistentConversationStore
+    from app.domain.quota import GpuQuotaExceeded
+
+    database, ledger, _jobs = ledger_system
+    legacy = PersistentConversationStore(database)
+    legacy.set_gpu_limit("alice", 1)
+    old_job = legacy.create_af3_job("alice", 1)
+    with database.transaction() as connection:
+        connection.execute("UPDATE agent_jobs SET created_at='2000-01-01T00:00:00+00:00',"
+            "gpu_accounting_status=%s WHERE id=%s", (accounting, old_job.id))
+    assert ledger.usage_for("alice").gpu.reserved == 60000
+    assert legacy.usage_for("alice").gpu.reserved == 1
+    with pytest.raises(GpuQuotaExceeded):
+        legacy.create_af3_job("alice", 1)

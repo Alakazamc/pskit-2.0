@@ -3,7 +3,7 @@
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from app.contracts.compute import ExecutionReport, UsageReport
+from app.contracts.compute import CapabilityVersion, ComputeBudget, ExecutionReport, UsageReport
 
 
 def test_unknown_usage_is_not_converted_to_zero():
@@ -27,3 +27,9 @@ def test_pending_has_no_final_usage():
         TypeAdapter(ExecutionReport).validate_python({
             "status": "pending", "job_id": "remote-1", "usage": {"source": "unknown"},
         })
+
+
+def test_remote_gpu_budget_requires_gpu_usage_without_local_devices():
+    with pytest.raises(ValidationError, match="GPU budgets must require gpu_device_ms"):
+        CapabilityVersion(id="remote.predict", version="1", input_schema={"type": "object"},
+                          gpu_count=0, max_budget=ComputeBudget(gpu_device_ms=60000))

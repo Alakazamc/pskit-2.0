@@ -94,6 +94,59 @@ def test_service_identity_cannot_read_or_settle_another_service_job(ledger_syste
         leases.complete("other-service", job.id, report(grant))
 
 
+def test_expired_generic_lease_keeps_ownership_hold_and_accepts_late_result(ledger_system):
+    database, ledger, jobs = ledger_system
+    job = jobs.submit("alice", request(), "one")
+    leases = ComputeLeases(database, ledger)
+    grant = claim(leases)
+    with database.transaction() as connection:
+        connection.execute("UPDATE agent_jobs SET lease_expires_at='2000-01-01T00:00:00+00:00' "
+                           "WHERE id=%s", (job.id,))
+    assert leases.recover_expired() == 1
+    assert jobs.get("alice", job.id).accounting_status == "pending_reconciliation"
+    assert ledger.usage_for("alice").gpu.reserved == 40000
+    assert leases.recover_expired() == 0
+    jobs.submit("bob", request(), "two")
+    assert claim(leases, "worker-b") is None
+    recovered = claim(leases)
+    assert recovered.attempt == grant.attempt
+    assert recovered.fencing_token == grant.fencing_token
+    assert recovered.stop_at == grant.stop_at
+    assert leases.complete("gpu", job.id, report(grant)).status == "completed"
+    assert ledger.usage_for("alice").gpu.used == 23000
+    assert claim(leases, "worker-b").job.user_id == "bob"
+
+
+def test_remote_gpu_report_without_usage_cannot_release_reservation(ledger_system):
+    from app.contracts.compute import (
+        CapabilityVersion,
+        ComputeBudget,
+        ComputeJobRequest,
+        ComputeServiceManifest,
+    )
+    from app.domain.compute.catalog import ComputeCatalog
+
+    database, ledger, jobs = ledger_system
+    ComputeCatalog(database).register(ComputeServiceManifest(service_id="remote", model_version="1",
+        capabilities=[CapabilityVersion(id="remote.predict", version="1", visibility="published",
+            input_schema={"type": "object"}, required_usage=["gpu_device_ms"],
+            max_budget=ComputeBudget(gpu_device_ms=60000))]))
+    with pytest.raises(ValueError, match="GPU_BUDGET_REQUIRED"):
+        jobs.submit("alice", ComputeJobRequest(capability_id="remote.predict", version="1",
+            arguments={}), "zero-remote-budget")
+    job = jobs.submit("alice", ComputeJobRequest(capability_id="remote.predict", version="1",
+        arguments={}, budget=ComputeBudget(gpu_device_ms=40000)), "remote")
+    leases = ComputeLeases(database, ledger)
+    grant = leases.claim(ComputeClaimRequest(service_id="remote", worker_id="remote-worker"))
+    payload = ComputeResultRequest(worker_id=grant.worker_id, attempt=grant.attempt,
+        fencing_token=grant.fencing_token, seq=1, stopped=True,
+        report=Completed(result={}, usage=UsageReport(source="service_reported")))
+    with pytest.raises(ValueError, match="REQUIRED_USAGE_MISSING"):
+        leases.complete("remote", job.id, payload)
+    assert ledger.usage_for("alice").gpu.reserved == 40000
+    assert jobs.get("alice", job.id).accounting_status == "reserved"
+
+
 def test_worker_http_requires_service_specific_credential(ledger_system):
     from types import SimpleNamespace
 

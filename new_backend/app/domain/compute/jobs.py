@@ -46,7 +46,7 @@ class ComputeJobs:
             for metric in ("cpu_core_ms", "gpu_device_ms"):
                 if getattr(request.budget, metric) > getattr(capability.max_budget, metric):
                     raise ValueError("CAPABILITY_BUDGET_EXCEEDED")
-            if capability.gpu_count and request.budget.gpu_device_ms == 0:
+            if (capability.gpu_count or "gpu_device_ms" in capability.required_usage) and request.budget.gpu_device_ms == 0:
                 raise ValueError("GPU_BUDGET_REQUIRED")
             if "cpu_core_ms" in capability.required_usage and request.budget.cpu_core_ms == 0:
                 raise ValueError("CPU_BUDGET_REQUIRED")

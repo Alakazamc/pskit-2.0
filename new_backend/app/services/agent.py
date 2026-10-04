@@ -95,6 +95,7 @@ class AgentService:
         self._tool_secret = tool_token_secret or secrets.token_bytes(32)
         self.mcp_tool_calls = mcp_tool_calls
         self.catalog = None
+        self.compute_leases = None
         self._instance_id = uuid.uuid4().hex
         self._locks: dict[str, asyncio.Lock] = {}
         self._tasks: set[asyncio.Task] = set()
@@ -128,6 +129,8 @@ class AgentService:
         while True:
             now = asyncio.get_running_loop().time()
             if now >= next_heartbeat:
+                if self.compute_leases is not None:
+                    self.compute_leases.recover_expired()
                 self.store.recover_wakeups(self.resume_retry_seconds)
                 renewed = self.store.renew_leases(self._instance_id, list(self._run_tasks))
                 for run_id, task in tuple(self._run_tasks.items()):

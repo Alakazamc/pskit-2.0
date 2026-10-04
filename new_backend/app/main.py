@@ -409,6 +409,7 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
         app.state.compute_leases = ComputeLeases(database, app.state.compute_jobs.ledger)
     if app.state.agent_service is not None:
         app.state.agent_service.compute_jobs = app.state.compute_jobs
+        app.state.agent_service.compute_leases = app.state.compute_leases
     app.state.af3 = (
         DisabledAf3() if af3_executor == "disabled" else
         MockAf3(app.state.quotas, app.state.conversations)

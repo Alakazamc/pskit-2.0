@@ -43,7 +43,7 @@ class UsageMixin:
         return policy.default_token_limit_for(user_id) if policy else 1_000_000
 
     def _gpu_usage_values(self, user_id: str, day: str) -> tuple[int, int]:
-        """Sum settled and reserved GPU minutes for one UTC creation day."""
+        """Sum this day's settled usage and every still-unsettled GPU hold."""
         actual = self.db.execute(
             "SELECT COALESCE(SUM(actual_minutes),0) FROM agent_jobs "
             "WHERE user_id=? AND substr(created_at,1,10)=? "
@@ -52,9 +52,9 @@ class UsageMixin:
         ).fetchone()[0]
         reserved = self.db.execute(
             "SELECT COALESCE(SUM(estimated_minutes),0) FROM agent_jobs "
-            "WHERE user_id=? AND substr(created_at,1,10)=? "
+            "WHERE user_id=? "
             "AND gpu_accounting_status IN ('reserved','pending_reconciliation')",
-            (user_id, day),
+            (user_id,),
         ).fetchone()[0]
         if getattr(self, "database", None) is not None:
             # Generic entries use milliseconds; legacy admission rounds only its display

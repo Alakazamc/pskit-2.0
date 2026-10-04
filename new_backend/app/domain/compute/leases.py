@@ -30,11 +30,30 @@ class ComputeLeases:
                                   "SELECT gpu_uuid FROM compute_device_leases WHERE job_id=%s "
                                   "ORDER BY gpu_uuid", (job_id,))])
 
+    def _recover_expired(self, connection):
+        now = utcnow()
+        return connection.execute(
+            "UPDATE agent_jobs j SET gpu_accounting_status='pending_reconciliation',"
+            "status=CASE WHEN d.stop_at<=%s THEN 'cancelling' ELSE j.status END "
+            "FROM compute_job_data d WHERE d.job_id=j.id AND j.status IN ('running','cancelling') "
+            "AND (j.lease_expires_at IS NULL OR j.lease_expires_at<=%s OR d.stop_at<=%s) "
+            "AND (j.gpu_accounting_status<>'pending_reconciliation' "
+            "OR (j.status='running' AND d.stop_at<=%s))",
+            (now, now.isoformat(), now, now),
+        ).rowcount
+
+    def recover_expired(self):
+        """Mark unknown consumption without releasing, reassigning or rerunning work."""
+        with self.database.transaction() as connection:
+            admission_lock(connection)
+            return self._recover_expired(connection)
+
     def claim(self, payload):
         if len(set(payload.resources.gpu_uuids)) != len(payload.resources.gpu_uuids):
             raise ValueError("INVALID_GPU_UUIDS")
         with self.database.transaction() as connection:
             admission_lock(connection)
+            self._recover_expired(connection)
             # Lost claim ACK recovers the same ownership, never creates a second execution.
             prior = connection.execute(
                 "SELECT j.id FROM agent_jobs j JOIN compute_job_data d ON d.job_id=j.id "
