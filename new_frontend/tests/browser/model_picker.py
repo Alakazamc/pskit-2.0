@@ -128,11 +128,12 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             slider = page.get_by_role("slider", name=thinking)
             assert await slider.get_attribute("aria-orientation") == "vertical"
             flame = page.locator(".composer-effort-track > span")
+            flame_colors = {}
 
             async def flame_appearance():
                 return await flame.evaluate("""el => {
                     const s = getComputedStyle(el);
-                    return {color: s.backgroundColor, glow: s.boxShadow,
+                    return {color: s.backgroundColor, glow: s.boxShadow, fade: s.maskImage,
                             height: el.getBoundingClientRect().height,
                             opacity: s.opacity};
                 }""")
@@ -141,22 +142,27 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
                 appearance = await flame_appearance()
                 channels = [float(n) / 255 for n in re.findall(r"[\d.]+", appearance["color"])[:3]]
                 hue, saturation, _ = colorsys.rgb_to_hsv(*channels)
-                assert hue_range[0] <= hue * 360 <= hue_range[1] and saturation > 0.5, (level, appearance)
+                assert hue_range[0] <= hue * 360 <= hue_range[1] and 0.1 <= saturation <= 0.4, (level, appearance)
+                assert 0.35 <= float(appearance["opacity"]) <= 0.85, (level, appearance)
+                assert appearance["fade"] != "none", (level, appearance)
                 assert appearance["glow"] != "none" and appearance["height"] > 0, (level, appearance)
+                if level in flame_colors:
+                    assert appearance["color"] == flame_colors[level], (level, appearance)
+                flame_colors[level] = appearance["color"]
                 await panel.screenshot(path=str(screenshots / f"{theme}-{language}-{width}-{level}.png"))
                 return appearance
 
             await slider.focus()
             await slider.press("ArrowUp")
             assert await slider.get_attribute("aria-valuetext") == medium
-            await check_flame("medium", (150, 175))
+            await check_flame("medium", (235, 265))
             await slider.press("ArrowUp")
             assert await slider.get_attribute("aria-valuetext") == high
-            await check_flame("high", (40, 60))
+            await check_flame("high", (265, 295))
             await slider.press("ArrowUp")
-            await check_flame("xhigh", (15, 35))
+            await check_flame("xhigh", (25, 40))
             await slider.press("ArrowUp")
-            await check_flame("max", (0, 12))
+            await check_flame("max", (25, 40))
             await slider.press("ArrowDown")
             await slider.press("ArrowDown")
             await slider.press("ArrowDown")
@@ -200,11 +206,12 @@ async def check(base_url: str, executable: str | None, screenshots: Path) -> Non
             await slider.press("ArrowUp")
             assert (await flame_appearance())["opacity"] == "0"
             await slider.press("ArrowUp")
-            await check_flame("minimal", (210, 230))
+            await check_flame("minimal", (205, 225))
             await slider.press("ArrowUp")
-            await check_flame("low", (180, 200))
+            await check_flame("low", (205, 235))
             await slider.press("ArrowUp")
-            await check_flame("medium", (150, 175))
+            await check_flame("medium", (235, 265))
+            assert len(set(flame_colors.values())) == 6, flame_colors
 
             await page.get_by_role("button", name=switch_model, exact=False).click()
             await search.fill("text-model")
