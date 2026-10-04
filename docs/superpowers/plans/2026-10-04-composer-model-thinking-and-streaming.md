@@ -92,3 +92,11 @@
 - Fresh final review findings were fixed with focused regression tests: active runs before the first event after reload, resize observation after the first message, reasoning support across every deployment under an alias, and exclusion of explicitly non-chat models. Explicit off-to-none mapping was also verified against Pi's actual outgoing request.
 - Automatic follow uses wheel, touch, keyboard and scrollbar input to recognize reader intent. Browser anchoring events alone do not interrupt following; returning near the bottom resumes it.
 - Cloud deployment was not changed in this implementation. The spec's Staging check with two real LiteLLM aliases remains a release prerequisite before production publication.
+
+## Cloud Release — 2026-10-04
+
+- Following the user's cloud publication request, the same fixed image and React dist passed isolated Staging acceptance and were released to Aliyun production.
+- Two real aliases were discovered through temporary bounded Staging routes; one `medium` reasoning request completed through Python/Pi/LiteLLM with `message.delta` and `run.completed`. Temporary routes and the $0.25/20-minute key were revoked.
+- Production readiness, TLS, access boundaries, image/dist identity and 21 visible model capabilities were confirmed. Chromium exercised the actual published frontend assets with intercepted API fixtures at desktop/mobile widths and light/dark themes.
+- Existing PostgreSQL, credentials, data volumes, Nginx routes and A6000 were preserved. The unchanged AF3 proxy stayed running. Deployment helper regressions: 42 passed; deployment skill validated and installed.
+- Full artifact IDs, validation scope and rollback steps: [release record](../../../deploy/agent/releases/2026-10-04-composer.md).

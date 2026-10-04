@@ -1,0 +1,4 @@
+interface:
+  display_name: "PSKit 云端部署"
+  short_description: "发布 PSKit 到阿里云，验收 Staging 并保留可用回滚版本"
+  default_prompt: "使用 $pskit-cloud-deploy 发布当前 PSKit 版本：先验收 Staging，再发布生产并核对前后端版本。"

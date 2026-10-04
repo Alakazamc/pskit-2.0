@@ -59,7 +59,7 @@ bash deploy/agent/stack.sh logs agent
 ```bash
 cd new_frontend
 npm ci
-npm run build
+VITE_AUTH_MODE=supabase VITE_API_BASE_URL=/api/v1 npm run build
 ```
 
 产物是 `new_frontend/dist`。由有权限的运维进程把本次**完整且已核对**的产物发布到 `/var/www/agent.bioailab.net`。生产 Nginx 使用 [`host-nginx-agent-aliyun.conf`](host-nginx-agent-aliyun.conf)：`/api/v1/` 转到本机 Python，`/internal/` 返回 404，其余路径由 SPA 处理。发布静态文件时无需启动 `web` 容器。
@@ -120,7 +120,9 @@ STAGING_CONFIG_DIR=/home/ecs-user/pskit-agent-staging-private \
   bash deploy/agent/staging.sh status
 ```
 
-首次提供私网站点时，由阿里云 root 执行 [`install_host_nginx_staging.sh`](scripts/install_host_nginx_staging.sh)。该脚本检查 `dist` 清单、WireGuard 地址与 Nginx 配置。访问 `http://10.9.8.1:18132/` 检查站点。新版本不能直接覆盖既有 Staging 配置目录；当前脚本没有原地升级命令。处理下一次 Staging 发布时，应保留生产卷，单独安排 Staging 资源更新。
+首次提供私网站点时，由阿里云 root 执行 [`install_host_nginx_staging.sh`](scripts/install_host_nginx_staging.sh)。该脚本检查 `dist` 清单、WireGuard 地址与 Nginx 配置。访问 `http://10.9.8.1:18132/` 检查站点。后续发布保留现有私有配置与测试卷，停止 Staging 项目后用 [`pin_staging_release.py`](scripts/pin_staging_release.py) 更新制品锁定信息，再按 [Staging 手册](STAGING.md)启动验收；不重复生成密钥或迁移测试数据。
+
+可复用的日常发布流程在 [`pskit-cloud-deploy` skill](../../skills/pskit-cloud-deploy/SKILL.md)。它包含 WSL/Windows SSH、制品校验、定向更新后端、静态文件发布与回滚。现有静态 root 可写且 Nginx 路由不变时，无需重新运行 root 安装脚本。
 
 ## 6. 上线检查
 
