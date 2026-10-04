@@ -2,11 +2,11 @@
 
 日期：2026-10-04
 
-状态：待书面规格审阅
+状态：按用户直接执行的指示完成实现与本地验收；待 Staging 真实模型联调
 
 ## 目标与现状
 
-用户在同一个聊天框里，从 LiteLLM 授权的多个模型中搜索、选择模型，并为支持推理控制的模型选择实际生效的推理强度。界面沿用新版 PSKit 的薄荷绿主题和中英双语。借鉴 ChatGPT 网页版将选择器放在输入框内、在同一入口调整速度与推理投入的交互，不复制其视觉样式或产品分级。参考：[ChatGPT 发布说明](https://help.openai.com/en/articles/6825453-chatgpt-release-notes)。
+用户在同一个聊天框里，从 LiteLLM 授权的多个模型中搜索、选择模型，并为支持推理控制的模型选择实际生效的推理强度。界面沿用新版 PSKit 现有的亮暗主题和中英双语。借鉴 ChatGPT 网页版将选择器放在输入框内、在同一入口调整速度与推理投入的交互，不复制其视觉样式或产品分级。参考：[ChatGPT 发布说明](https://help.openai.com/en/articles/6825453-chatgpt-release-notes)。
 
 现有 `Composer` 使用原生 `<select>` 展示 LiteLLM 返回的原始别名；线上可见二十多个 Anthropic 别名，含不应直接展示的 `anthropic/*` 通配项。`ModelOption` 只包含 `id` 与 `supports_images`；消息请求只保存 `model`，Pi 的 `models.json` 没有推理能力标记，也没有在提示前发送推理等级。当前 `new_backend/pi/package.json` 固定 `@earendil-works/pi-coding-agent` 0.87.1；该版本的 RPC 支持 `get_available_thinking_levels` 与 `set_thinking_level`。参考：[Pi RPC 命令文档](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc-commands.md)。
 
@@ -20,7 +20,7 @@
 
 ## API 与能力来源
 
-`GET /api/v1/models` 继续从当前用户获授权的 LiteLLM 虚拟 key 查询别名。过滤空值、通配符别名和明确不可用于聊天的条目；若网关临时不可达，沿用当前有界缓存/默认模型策略。扩展公开 `ModelOption` 为 `id`、可选显示名、`supports_images` 与 `reasoning_levels`。后端从 `/model/info` 读取 `supports_reasoning`、`supports_none_reasoning_effort`、`supports_minimal_reasoning_effort`、`supports_low_reasoning_effort`、`supports_xhigh_reasoning_effort`、`supports_max_reasoning_effort` 等标记，保守生成允许列表：只有 `supports_reasoning=true` 时才给出 `medium/high`，额外等级只在对应标记为 `true` 时给出。元数据缺失或矛盾时不推测该能力。`默认` 由前端提供，不是一个发送给 Pi 的等级。
+`GET /api/v1/models` 继续通过服务端 LiteLLM key 查询该 key 获授权的别名。过滤空值、通配符别名和明确不可用于聊天的条目；若网关临时不可达，沿用当前有界缓存/默认模型策略。扩展公开 `ModelOption` 为 `id`、`supports_images` 与 `reasoning_levels`。后端从 `/model/info` 读取 `supports_reasoning`、`supports_none_reasoning_effort`、`supports_minimal_reasoning_effort`、`supports_low_reasoning_effort`、`supports_xhigh_reasoning_effort`、`supports_max_reasoning_effort` 等标记，保守生成允许列表：只有 `supports_reasoning=true` 时才给出 `medium/high`，额外等级只在对应标记为 `true` 时给出。元数据缺失或矛盾时不推测该能力。`默认` 由前端提供，不是一个发送给 Pi 的等级。
 
 `MessageRequest` 增加可选 `reasoning_effort`，值限定为 Pi 固定版本的等级枚举。后端先按 `model` 解析当前有效别名，再校验所请求等级属于该模型公布的 `reasoning_levels`；不支持时返回稳定的 422 错误码，不创建 Run 或扣除配额。幂等指纹包括模型与强度。请求、OpenAPI 生成的 TypeScript 类型和 mock API 契约同步更新；前端不得自行请求 LiteLLM 或持有网关密钥。
 
@@ -30,7 +30,7 @@
 
 ## 状态与兼容
 
-模型与强度是聊天输入的 UI 状态，服务端项目/消息列表仍由 TanStack Query 管理。选择可按会话保存在浏览器本地；切换会话恢复各自草稿，刷新后再次与最新模型列表核对。旧客户端未传 `reasoning_effort` 时保持现有请求语义；旧会话、既有 Run、持久化 Pi transcript 不需要迁移。新 UI 面向中文和英文使用同一 API 契约。模型下线或强度元数据变化后，前端提示并重置失效选择；后端最终校验不依赖前端缓存。
+模型与强度是聊天输入的 UI 状态，服务端项目/消息列表仍由 TanStack Query 管理。本次选择保留在当前页面的 Composer 状态中，发送后继续使用；刷新页面后重新从服务端模型列表选择。旧客户端未传 `reasoning_effort` 时保持现有请求语义；旧会话、既有 Run、持久化 Pi transcript 不需要迁移。新 UI 面向中文和英文使用同一 API 契约。模型下线或强度元数据变化后，前端提示并重置失效选择；后端最终校验不依赖前端缓存。
 
 ## 验收边界
 
