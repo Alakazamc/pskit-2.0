@@ -167,7 +167,7 @@ class ConversationStore:
         self._archived_projects.setdefault(user_id, set()).add(project_id)
         return True
 
-    def create_session(self, user_id: str, project_id: str, title: str) -> Session | None:
+    def create_session(self, user_id: str, project_id: str, title: str, *, auto_title: bool = False) -> Session | None:
         """Create a mock session in an active owned project.
 
         Returns:

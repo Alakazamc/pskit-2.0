@@ -14,11 +14,12 @@ from app.domain.identity_policy import GuestAccountDeleting
 from .af3 import Af3Mixin
 from .recovery import RecoveryMixin
 from .runs import RunsMixin
+from .titles import TitlesMixin
 from .usage import UsageMixin
 from .workspace import WorkspaceMixin
 
 
-class PersistentConversationStore(WorkspaceMixin, RunsMixin, Af3Mixin, UsageMixin, RecoveryMixin, ConversationStore):
+class PersistentConversationStore(WorkspaceMixin, RunsMixin, Af3Mixin, UsageMixin, RecoveryMixin, TitlesMixin, ConversationStore):
     """Persist workspace, Run, AF3, and quota state through one database handle."""
 
     def __init__(

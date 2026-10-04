@@ -13,7 +13,8 @@ def test_offline_import_upgrades_only_disposable_copy(tmp_path):
     store = PersistentConversationStore(str(source))
     store.db.close()
     with sqlite3.connect(source) as db:
-        db.execute("DELETE FROM core_schema_migrations WHERE version=14")
+        db.execute("DROP TABLE agent_session_titles")
+        db.execute("DELETE FROM core_schema_migrations WHERE version>=14")
         db.execute("PRAGMA user_version=13")
     disposable = tmp_path / "working.sqlite3"
     _sqlite_copy(source, disposable)
@@ -30,7 +31,8 @@ def test_version_thirteen_projects_get_default_icon_without_losing_data(tmp_path
     store.db.close()
     with sqlite3.connect(path) as db:
         db.execute("ALTER TABLE workspace_projects DROP COLUMN icon")
-        db.execute("DELETE FROM core_schema_migrations WHERE version=14")
+        db.execute("DROP TABLE agent_session_titles")
+        db.execute("DELETE FROM core_schema_migrations WHERE version>=14")
         db.execute("PRAGMA user_version=13")
     upgraded = PersistentConversationStore(str(path))
     assert next(item for item in upgraded.projects_for("alice") if item.id == project.id).icon == "folder"
@@ -50,7 +52,7 @@ def test_legacy_unversioned_database_is_upgraded_to_current_schema(tmp_path):
     store = PersistentConversationStore(str(path))
     assert store.db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     assert store.db.execute("SELECT version FROM core_schema_migrations ORDER BY version").fetchall() == [
-        (1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,),
+        (version,) for version in range(1, SCHEMA_VERSION + 1)
     ]
     message_columns = {row[1] for row in store.db.execute("PRAGMA table_info(agent_messages)")}
     run_columns = {row[1] for row in store.db.execute("PRAGMA table_info(agent_runs)")}
@@ -133,8 +135,24 @@ def test_version_four_database_adds_simulation_provenance(tmp_path):
     assert store.db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     assert "simulation" in {row[1] for row in store.db.execute("PRAGMA table_info(agent_jobs)")}
     assert store.db.execute("SELECT version FROM core_schema_migrations").fetchall() == [
-        (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,),
+        (version,) for version in range(5, SCHEMA_VERSION + 1)
     ]
+
+
+def test_version_fourteen_conversations_keep_their_historical_names(tmp_path):
+    path = tmp_path / "existing-v14.sqlite3"
+    original = PersistentConversationStore(str(path))
+    session = original.create_session("alice", original.project_for("alice").id, "历史标题")
+    original.db.close()
+    with sqlite3.connect(path) as db:
+        db.execute("DROP TABLE agent_session_titles")
+        db.execute("DELETE FROM core_schema_migrations WHERE version>=15")
+        db.execute("PRAGMA user_version=14")
+    upgraded = PersistentConversationStore(str(path))
+    stored = upgraded.session_for("alice", session.id)
+    assert stored.title == "历史标题" and stored.title_status == "manual"
+    assert upgraded.db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+    upgraded.db.close()
 
 
 def test_version_five_running_job_gets_a_recoverable_execution_start(tmp_path):

@@ -330,6 +330,7 @@ class RunsMixin:
                              "model_supports_images": model_supports_images,
                              "reasoning_effort": reasoning_effort,
                              "image_ids": list(image_ids),
+                             "title_user_text": payload.content,
                              "file_ids": [item.id for item in payload.attachments]})),
             )
             if idempotency_key:
@@ -638,6 +639,7 @@ class RunsMixin:
                 (session_id, user_id, session_file),
             )
             if not waiting:
+                self._queue_session_title(user_id, session_id, run_id, answer)
                 parts: list[MessagePart] = [
                     TextPart(text=answer), *self._tool_parts_for_run(user_id, run_id),
                     *(tool_results or []),

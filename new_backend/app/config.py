@@ -72,6 +72,8 @@ class Settings:
     model_gateway_api_key: str = ""
     model_gateway_kind: Literal["generic", "litellm"] = "generic"
     model_gateway_image_models_json: str = "[]"
+    title_model: str = ""
+    title_timeout_seconds: float = 15
     user_token_limits_json: str = "{}"
     admin_api_key: str = ""
     model_policy_mode: Literal["legacy", "managed"] = "legacy"
@@ -159,6 +161,8 @@ class Settings:
             model_gateway_api_key=os.getenv("MODEL_GATEWAY_API_KEY", ""),
             model_gateway_kind=os.getenv("MODEL_GATEWAY_KIND", "generic"),
             model_gateway_image_models_json=os.getenv("MODEL_GATEWAY_IMAGE_MODELS_JSON", "[]"),
+            title_model=os.getenv("RESEARCH_AGENT_TITLE_MODEL", ""),
+            title_timeout_seconds=float(os.getenv("RESEARCH_AGENT_TITLE_TIMEOUT_SECONDS", "15")),
             user_token_limits_json=os.getenv("RESEARCH_AGENT_USER_TOKEN_LIMITS_JSON", "{}"),
             admin_api_key=os.getenv("RESEARCH_AGENT_ADMIN_API_KEY", ""),
             model_policy_mode=os.getenv("RESEARCH_AGENT_MODEL_POLICY_MODE", "legacy"),

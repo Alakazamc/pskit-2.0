@@ -253,7 +253,7 @@ class GuestCleanupService:
                     "DELETE FROM oauth_flows WHERE guest_user_id=?", (user_id,),
                 )
             for table in (
-                "agent_messages", "agent_runs", "agent_jobs", "agent_artifact_blobs",
+                "agent_session_titles", "agent_messages", "agent_runs", "agent_jobs", "agent_artifact_blobs",
                 "agent_approvals", "agent_token_usage", "agent_token_entries",
                 "agent_token_limits", "agent_model_call_guards", "agent_gpu_limits",
                 "agent_request_keys", "agent_af3_request_keys",

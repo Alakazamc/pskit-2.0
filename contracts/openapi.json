@@ -9157,6 +9157,18 @@
               }
             ],
             "title": "Latest Run Id"
+          },
+          "title_status": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "pending",
+              "generated",
+              "failed",
+              "manual"
+            ],
+            "title": "Title Status",
+            "default": "manual"
           }
         },
         "type": "object",
@@ -9174,6 +9186,11 @@
             "maxLength": 160,
             "minLength": 1,
             "title": "Title"
+          },
+          "auto_title": {
+            "type": "boolean",
+            "title": "Auto Title",
+            "default": false
           }
         },
         "type": "object",

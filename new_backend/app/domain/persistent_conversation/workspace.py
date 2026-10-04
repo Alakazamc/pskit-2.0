@@ -121,7 +121,7 @@ class WorkspaceMixin:
             )
         return True
 
-    def create_session(self, user_id: str, project_id: str, title: str) -> Session | None:
+    def create_session(self, user_id: str, project_id: str, title: str, *, auto_title: bool = False) -> Session | None:
         """Create a session inside an active project owned by the user.
 
         Args:
@@ -141,6 +141,12 @@ class WorkspaceMixin:
                 "INSERT INTO workspace_sessions VALUES (?,?,?,?,NULL)",
                 (session.id, user_id, project_id, title),
             )
+            if auto_title:
+                self.db.execute(
+                    "INSERT INTO agent_session_titles (session_id,user_id,status,created_at) "
+                    "VALUES (?,?,'waiting',?)", (session.id, user_id, _now().isoformat()),
+                )
+                session = session.model_copy(update={"title_status": "idle"})
         return session
 
     def move_session(self, user_id: str, session_id: str, project_id: str) -> Session | None:
@@ -172,7 +178,8 @@ class WorkspaceMixin:
                 "UPDATE workspace_sessions SET project_id=? WHERE id=? AND user_id=?",
                 (project_id, session_id, user_id),
             )
-        return Session(id=session_id, project_id=project_id, title=row[0])
+        return Session(id=session_id, project_id=project_id, title=row[0],
+                       title_status=self.title_status_for(user_id, session_id))
 
     def project_skill_settings(self, user_id: str, project_id: str) -> ProjectSkillSettings | None:
         """Read ordered Skill grants and defaults for an active project.
@@ -262,12 +269,16 @@ class WorkspaceMixin:
             (session_id, user_id),
         ).fetchone()
         project_id = row[0] if row else self.project_for(user_id).id
-        with self.db:
+        with self._immediate_transaction():
             self._require_not_deleting(user_id)
             self.db.execute(
                 "INSERT INTO workspace_sessions VALUES (?,?,?,?,NULL) "
                 "ON CONFLICT(id) DO UPDATE SET title=excluded.title",
                 (session_id, user_id, project_id, title),
+            )
+            self.db.execute(
+                "UPDATE agent_session_titles SET status='manual' WHERE session_id=? AND user_id=?",
+                (session_id, user_id),
             )
         return Session(id=session_id, project_id=project_id, title=title)
 
@@ -289,12 +300,16 @@ class WorkspaceMixin:
         ).fetchone()
         project_id = row[0] if row else self.project_for(user_id).id
         title = row[1] if row else "新的科研任务"
-        with self.db:
+        with self._immediate_transaction():
             self._require_not_deleting(user_id)
             self.db.execute(
                 "INSERT INTO workspace_sessions VALUES (?,?,?,?,?) "
                 "ON CONFLICT(id) DO UPDATE SET archived_at=excluded.archived_at",
                 (session_id, user_id, project_id, title, _now().isoformat()),
+            )
+            self.db.execute(
+                "UPDATE agent_session_titles SET status='manual' WHERE session_id=? AND user_id=?",
+                (session_id, user_id),
             )
         return True
 
@@ -350,6 +365,9 @@ class WorkspaceMixin:
                     title=default_row[0] if default_row else "新的科研任务",
                 ))
         for index, session in enumerate(sessions):
+            sessions[index] = session = session.model_copy(update={
+                "title_status": self.title_status_for(user_id, session.id),
+            })
             row = self.db.execute(
                 "SELECT id,status FROM agent_runs WHERE user_id=? AND session_id=? "
                 "ORDER BY created_at DESC,rowid DESC LIMIT 1",

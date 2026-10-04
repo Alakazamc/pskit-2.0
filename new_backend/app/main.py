@@ -72,6 +72,7 @@ from app.services.model_catalog import ModelCatalog
 from app.services.observability import ObservabilityMiddleware, RequestMetrics
 from app.services.pdf_processing import PdfProcessingPool
 from app.services.sandbox_operations import SandboxOperations
+from app.services.session_titles import SessionTitleService
 from app.services.workspace_transfer import WorkspaceTransfer
 
 
@@ -96,6 +97,8 @@ def create_app(
     settings = settings or Settings.from_env()
     if settings.mode not in {"mock", "live"}:
         raise ValueError("RESEARCH_AGENT_MODE must be mock or live")
+    if not 1 <= settings.title_timeout_seconds <= 60:
+        raise ValueError("RESEARCH_AGENT_TITLE_TIMEOUT_SECONDS must be between 1 and 60")
     if settings.model_policy_mode not in {"legacy", "managed"}:
         raise ValueError("RESEARCH_AGENT_MODEL_POLICY_MODE must be legacy or managed")
     approved_references = {}
@@ -299,9 +302,13 @@ def create_app(
                     await asyncio.sleep(0.05)
 
             mock_scheduler = asyncio.create_task(advance_mock_jobs())
+        if application.state.session_titles:
+            await application.state.session_titles.start()
         try:
             yield
         finally:
+            if application.state.session_titles:
+                await application.state.session_titles.stop()
             if mcp_refresh_task:
                 mcp_refresh_task.cancel()
                 try:
@@ -531,6 +538,12 @@ def create_app(
         app.state.admin_store,
         app.state.model_catalog,
         managed=settings.model_policy_mode == "managed",
+    )
+    app.state.session_titles = (
+        SessionTitleService(
+            app.state.conversations, app.state.model_policy, model=settings.title_model,
+            timeout=settings.title_timeout_seconds, gateway_kind=settings.model_gateway_kind,
+        ) if settings.agent_runtime == "pi" else None
     )
     app.state.catalog.admin_storage_limit_for = app.state.admin_store.storage_limit_for
     app.state.conversations.admin_concurrency_limit_for = (

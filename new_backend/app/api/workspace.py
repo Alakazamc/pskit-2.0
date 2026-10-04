@@ -153,7 +153,8 @@ async def create_personal_chat(
     payload: SessionCreate, user: CurrentUserDep, conversations: ConversationStoreDep,
 ) -> Session:
     """Create a session in the user's personal workspace."""
-    return conversations.create_session(user.id, conversations.project_for(user.id).id, payload.title)
+    return conversations.create_session(user.id, conversations.project_for(user.id).id, payload.title,
+                                        auto_title=payload.auto_title)
 
 
 @router.get("/g/{project_key}/c")
@@ -175,7 +176,8 @@ async def create_session(
 ) -> Session:
     """Create a session within an owned project."""
     project_id = _project_id(project_key, user.id, conversations, allow_personal=False)
-    session = conversations.create_session(user.id, project_id, payload.title)
+    session = conversations.create_session(user.id, project_id, payload.title,
+                                           auto_title=payload.auto_title)
     if session is None:
         raise HTTPException(status_code=404, detail="Project not found")
     return session

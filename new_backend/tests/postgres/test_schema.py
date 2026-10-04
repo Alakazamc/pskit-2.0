@@ -17,7 +17,7 @@ from app.db.migrations.components import (
     migrate_tool_run_schema,
 )
 from app.db.postgres import PostgresDatabase
-from app.db.postgres_migrations import migrate_postgres
+from app.db.postgres_migrations import SCHEMA_VERSION, migrate_postgres
 from app.domain.guest_rate_limit import GuestRateLimiter
 from app.domain.persistent_conversation.store import PersistentConversationStore
 
@@ -32,6 +32,7 @@ EXPECTED_TABLES = {
     "tool_runs", "mcp_capacity_config", "mcp_execution_leases", "pdf_capacity_config",
     "pdf_execution_leases", "mcp_tool_calls", "internal_tool_auth",
     "guest_creation_events", "schema_migrations",
+    "agent_session_titles",
 }
 
 
@@ -41,7 +42,7 @@ def test_private_schema_and_version(pg_schema: tuple[str, str]) -> None:
     migrate_postgres(dsn, schema=schema)
     database = PostgresDatabase(dsn, schema=schema)
     try:
-        database.check_schema_version(6)
+        database.check_schema_version(SCHEMA_VERSION)
         with database.connection() as connection:
             tables = {
                 row[0] for row in connection.execute(
@@ -56,7 +57,7 @@ def test_private_schema_and_version(pg_schema: tuple[str, str]) -> None:
             }
             assert connection.execute(
                 "SELECT version FROM schema_migrations ORDER BY version"
-            ).fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,)]
+            ).fetchall() == [(version,) for version in range(1, SCHEMA_VERSION + 1)]
             assert connection.execute(
                 "SELECT is_identity FROM information_schema.columns "
                 "WHERE table_schema=%s AND table_name='agent_token_entries' AND column_name='id'",
@@ -92,7 +93,7 @@ def test_private_schema_and_version(pg_schema: tuple[str, str]) -> None:
     with psycopg.connect(dsn) as connection:
         assert connection.execute(
             sql.SQL("SELECT count(*) FROM {}.schema_migrations").format(sql.Identifier(schema))
-        ).fetchone() == (6,)
+        ).fetchone() == (SCHEMA_VERSION,)
         assert connection.execute(
             sql.SQL("SELECT count(*) FROM {}.agent_jobs").format(sql.Identifier(schema))
         ).fetchone() == (1,)

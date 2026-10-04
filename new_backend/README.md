@@ -6,13 +6,15 @@
 
 **沙箱与管理台（2026-10-04）：** PostgreSQL schema v5/v6 保存用户沙箱、管理角色、模型策略、发布与审计。管理入口、受控授权和配置见 [ADMIN.md](ADMIN.md)；每用户容器及多会话工作区见 [SANDBOX.md](../deploy/agent/SANDBOX.md)。本轮完成本地隔离验收，尚未发布到生产。
 
+**对话自动命名（2026-10-05）：** 新前端对话在首个完整回复完成后独立请求简短标题。默认沿用首轮模型，可用 `RESEARCH_AGENT_TITLE_MODEL` 指定已开放的小模型；`RESEARCH_AGENT_TITLE_TIMEOUT_SECONDS` 默认 15 秒。额外调用计入 Token 额度，手动改名优先，失败保留临时标题。生产发布前需运行 PostgreSQL schema v7 迁移。行为和本地验证见 [自动命名说明](../docs/verification/2026-10-05-session-titles.md)。
+
 ## 代码目录
 
 - `app/api/`：公开 HTTP、SSE 和受保护的内部路由；入参和响应类型在 `app/contracts/`。
 - `app/services/`：Agent 调度、依赖探测、游客清理和文件处理。
 - `app/adapters/mock/`、`app/adapters/live/`：相同端口的替身与外部服务适配。
 - `app/domain/persistent_conversation/`：`store.py` 持有 SQLite 连接与事务；`workspace.py` 管项目和会话，`runs.py` 管消息、事件和 Pi Run，`af3.py` 管审批、计算租约和产物，`usage.py` 管 Token/GPU 记账，`recovery.py` 管后台唤醒与中断恢复。公开导入仍为 `app.domain.persistent_conversation.PersistentConversationStore`。
-- `app/db/migrations/`：`core.py` 管核心版本 1–14，`components.py` 管各组件版本，`common.py` 管共享迁移事务和补列；调用方仍从 `app.db.migrations` 导入。
+- `app/db/migrations/`：`core.py` 管核心版本 1–15，`components.py` 管各组件版本，`common.py` 管共享迁移事务和补列；调用方仍从 `app.db.migrations` 导入。
 - `app/ports/`：身份、Agent 和能力提供者的接口；`app/workers/`：独立后台执行入口。
 - `scripts/check_docstrings.py`：列出缺少函数 docstring 的模块；`--check` 可用于完成后的门禁。
 
@@ -27,7 +29,7 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 18080
 OpenAPI 位于 http://127.0.0.1:18080/openapi.json。前端 Vite 默认代理到这个端口；旧系统目录和端口不受影响。
 `GET /health/live` 只检查进程存活；`GET /health/ready` 检查本进程打开的 SQLite 连接，并返回已选择的身份、Agent、MCP 和 AF3 模式。就绪检查保持轻量，不因可选外部服务故障而下线整个 API。配置管理员密钥后，`GET /api/v1/admin/dependencies` 配合 `X-Admin-Key` 可按需主动探测 Supabase Auth 健康端点和模型网关 `/v1/models`，每项最多等待 3 秒；返回可用、不可达、鉴权失败或限流等状态，不返回 URL、密钥或上游错误正文。MCP 状态来自后台周期发现的最近一次结果，多个服务分别显示；首次发现前或最近结果超过两个刷新周期（最少 10 秒）时为 `unknown`。AF3 callback 是计算 Worker 主动领取任务的入站模式，因此显示 `inbound_only`，不代表 GPU 节点在线。未配置管理员密钥时诊断接口返回 404。
 每个 HTTP 响应带随机 `X-Request-ID`；`pskit.requests` logger 输出 JSON 方法、路由模板、状态码和耗时，不记录 URL 查询、请求正文或认证头。配置 `RESEARCH_AGENT_ADMIN_API_KEY` 后，受信任管理员可用 `X-Admin-Key` 读取 `/internal/metrics` 的进程内路由计数与耗时总和；未配置或密钥不符时返回 404。指标在进程重启后归零；SSE 耗时覆盖整个连接直到关闭，因此不应与普通请求延迟直接比较。
-Pi 持久库用 SQLite `PRAGMA user_version` 标记当前核心 schema 版本为 14。`app/db/migrations/core.py` 明确列出版本 1–14 的升级步骤，在 `BEGIN IMMEDIATE` 事务中执行建表、补列、写入 `core_schema_migrations` 历史及版本号；中途失败会整体回滚，重启后可重试。未标记旧库和版本 1–13 可升级；比程序更新的数据库在建表前拒绝打开。OAuth、目录、工具运行和 MCP 入场租约表使用 `app/db/migrations/components.py` 的组件级迁移记录 `component_schema_migrations`，可在共享 SQLite 文件内独立升级；旧表会在首次运行时纳入记录。升级前应先做 SQLite 快照并备份 Pi 会话目录。
+Pi 持久库用 SQLite `PRAGMA user_version` 标记当前核心 schema 版本为 15。`app/db/migrations/core.py` 明确列出版本 1–15 的升级步骤，在 `BEGIN IMMEDIATE` 事务中执行建表、补列、写入 `core_schema_migrations` 历史及版本号；中途失败会整体回滚，重启后可重试。未标记旧库和版本 1–14 可升级；比程序更新的数据库在建表前拒绝打开。OAuth、目录、工具运行和 MCP 入场租约表使用 `app/db/migrations/components.py` 的组件级迁移记录 `component_schema_migrations`，可在共享 SQLite 文件内独立升级；旧表会在首次运行时纳入记录。升级前应先做 SQLite 快照并备份 Pi 会话目录。
 
 ## 运行模式
 

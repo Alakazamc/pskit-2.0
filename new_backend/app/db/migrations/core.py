@@ -6,8 +6,7 @@ from datetime import UTC, datetime
 
 from .common import call_add_column_if_missing as add_column_if_missing
 
-
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 def _legacy_core_columns(db: sqlite3.Connection) -> None:
     """Backfill columns required by databases created before version stamps."""
@@ -128,6 +127,14 @@ def _version_14(db: sqlite3.Connection) -> None:
     """Add project icons to existing workspaces."""
     add_column_if_missing(db, "workspace_projects", "icon", "TEXT NOT NULL DEFAULT 'folder'")
 
+def _version_15(db: sqlite3.Connection) -> None:
+    """Track one auxiliary title request per opted-in conversation."""
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS agent_session_titles ("
+        "session_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, status TEXT NOT NULL, "
+        "run_id TEXT, prompt_json TEXT, created_at TEXT NOT NULL, started_at TEXT)"
+    )
+
 MIGRATIONS: tuple[tuple[str, Callable[[sqlite3.Connection], None]], ...] = (
     ("legacy core columns", _version_1),
     ("AF3 input contract", _version_2),
@@ -143,6 +150,7 @@ MIGRATIONS: tuple[tuple[str, Callable[[sqlite3.Connection], None]], ...] = (
     ("AF3 GPU usage reconciliation", _version_12),
     ("AF3 GPU reconciliation audit", _version_13),
     ("workspace project icons", _version_14),
+    ("automatic conversation titles", _version_15),
 )
 
 def _verify_current_schema(db: sqlite3.Connection) -> None:
@@ -170,6 +178,8 @@ def _verify_current_schema(db: sqlite3.Connection) -> None:
         "agent_gpu_reconciliations": {"id", "job_id", "user_id", "source",
                                       "previous_minutes", "actual_minutes", "reason", "created_at"},
         "workspace_projects": {"id", "user_id", "name", "description", "archived_at", "icon"},
+        "agent_session_titles": {"session_id", "user_id", "status", "run_id",
+                                 "prompt_json", "created_at", "started_at"},
     }
     for table, needed in expected.items():
         columns = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}

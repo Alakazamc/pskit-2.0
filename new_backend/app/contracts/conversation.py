@@ -38,10 +38,12 @@ class Session(BaseModel):
     title: str
     status: Literal["idle", "running", "waiting", "completed", "failed", "cancelled"] = "idle"
     latest_run_id: str | None = None
+    title_status: Literal["idle", "pending", "generated", "failed", "manual"] = "manual"
 
 
 class SessionCreate(BaseModel):
     title: str = Field(min_length=1, max_length=160)
+    auto_title: bool = False
 
 
 class SessionRename(BaseModel):
