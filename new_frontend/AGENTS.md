@@ -47,6 +47,7 @@
 ## Sidebar
 
 - Align section labels and personal chat titles on one left edge. Put the add-project action in the project section heading, keep chat actions available on hover and keyboard focus, and use a full-row gray selected state.
+- Place account access at the sidebar's bottom avatar/name row, including an avatar-only entry when collapsed. Clicking it opens a compact menu upward with identity, Profile, Settings and Sign out; omit a separate top-right settings button. Profile navigation focuses nickname editing, preserves unsaved form values on repeat visits and closes the mobile drawer. Support Escape, outside-click dismissal, keyboard navigation and appropriate focus return in both themes; retain the guest sign-out warning.
 
 ## Scrollbars
 
