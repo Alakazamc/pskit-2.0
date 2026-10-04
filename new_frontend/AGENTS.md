@@ -27,6 +27,12 @@
 - Keep tool run history inside that tool's details alongside its invocation parameters. Request history with the exact tool name and authenticated user; scope query caches by both. Fetch history when its tab opens, retain entered parameters when switching tabs, and preserve project assignment. The Tools directory has no aggregate history entry.
 - Verify compact rendered dimensions, search focus, panel scrolling, edit focus and per-tool history isolation at desktop and mobile widths in both themes.
 
+## Scientific tool workspaces
+
+- Specialized tools such as CORAL reuse the catalog card and detail panel. Arrange target inputs on the left and actual results on the right on desktop. Use server-observable acceptance, execution and completion nodes; percentages come from the service. Respect advertised input limits, show unconfigured/error/cancellation states, and never animate fabricated scientific stages or result counts.
+- Put download and Agent task actions beside the result summary. Keep previews bounded and keyboard-scrollable with an explicit scrolling hint; display full dataset completeness. On mobile, use one detail scroll area, fold completed parameters into a short editable summary, and keep result actions visible near the top. Completed jobs use a secondary regenerate action.
+- Agent handoffs use the completed job's immutable input snapshot and a bounded result summary. Attach complete datasets through owned file APIs instead of putting bulk data in a prompt. Label partial data honestly. Upload before creating a new session; retries retain uploaded references, session identity and message idempotency. Offer small, clearly named preset tasks in a touch-accessible menu explaining that they continue in a new conversation.
+
 ## Page headings
 
 - Use one clear page title. Keep page-level descriptions only when they add information needed to act; do not repeat the navigation label or describe obvious page functions. Preserve user-written project descriptions and tool-specific guidance.

@@ -68,11 +68,14 @@ RESEARCH_AGENT_COMPUTE_SERVICE_KEYS_JSON={}
 | --- | --- | --- |
 | 用户 | GET /api/v1/compute/capabilities | Python 验证用户 JWT、发布和用户 allowlist |
 | 用户 | POST /api/v1/compute/jobs | JWT + Idempotency-Key；输入只有 capability_id/version/arguments/budget |
+| 用户 | GET /api/v1/compute/jobs?capability_id=...&limit=30 | JWT ownership、精确能力过滤；最近 30 条、最多 50 条轻量历史 |
 | 用户 | GET /api/v1/compute/jobs/{id}、POST .../{id}/cancel | ownership；跨用户 404 |
 | 用户 | GET /api/v1/compute/usage | CPU/GPU used/reserved/remaining，整数毫秒与来源 |
 | Pi | POST /internal/compute/jobs、GET .../{id}?run_id=... | Run 范围工具 token；服务器绑定 owner，绝不接收 user_id |
 | worker | POST /internal/compute/jobs/claim | service_id、worker_id、GPU UUID；X-Compute-Key |
 | worker | POST .../{id}/heartbeat、POST .../{id}/result | X-Compute-Service + X-Compute-Key + attempt/fencing_token |
+
+CORAL 的规范输入、结果预览和新对话交接见 [CORAL.md](CORAL.md)。
 
 结果回执包含 receipt_id、job_id、accepted_seq、payload_hash、status、committed=true，事务提交后才返回。同 seq 同 payload 重发返回原回执；不同 payload 409。心跳用量是累计值，终态也是完整累计值。显式 UsageWindow 使用时区明确的 start/end；按窗口比例做 UTC 日归账，余数给最后一天，这只是归账政策。未给窗口时按预占日归账，不伪称逐日物理采样。跨日未结算 hold 不消失。
 
