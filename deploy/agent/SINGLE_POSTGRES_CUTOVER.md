@@ -2,7 +2,15 @@
 
 本手册适用于阿里云 `pskit-agent-supabase` 的 PostgreSQL 17、阿里云 Python/Pi、阿里云 LiteLLM，以及 A6000 上唯一的 AF3 接收器。前端由阿里云宿主机 Nginx 提供 `dist`。旧 `pskit.bioailab.net` 不参与切换。
 
-**当前状态：候选阶段已执行，正式切换待验收。下面的本地替身记录不能当作生产验收。** 在候选模型的真实提供商 API key、受控 AF3 任务和阿里云 root 操作完成前，不停 A6000 生产写入，也不切公网 Nginx。任何阶段只有一个 Agent 后端可以写业务数据。所有命令必须在注明的主机运行；不要执行 `down -v`，不要删除旧 PG16 卷、A6000 Agent 卷或原始快照。
+**当前状态：2026-10-04 已切换公网 Agent API 到阿里云；真实 AF3 作业及登录后的交互仍待验收。** 下方保留切换步骤和回退流程供后续操作参考。任何阶段只有一个 Agent 后端可以写业务数据。所有命令必须在注明的主机运行；不要执行 `down -v`，不要删除旧 PG16 卷、A6000 Agent 卷或原始快照。公网已开始接收请求，回退时必须先检查新写入并按“已产生新写入后的回退”流程处理。
+
+## 2026-10-04 实际切换记录
+
+- A6000 原 Python 后端和回调代理已停止；阿里云 `pskit-agent-cloud-backend-1` 与回调代理健康。阿里云只有一个 Supabase PostgreSQL 17 容器，LiteLLM 旧 PostgreSQL 16 容器已停止、卷及逻辑备份保留。
+- A6000 停写快照 SHA-256：`3c02b7ee411aca2229bb10492fdf2a938a602c7cfebdab2faff1091adceaedff`。Pi 文件 19 个已校验；导入器报告 36 张表、322 行并逐表比较行哈希。阿里云业务库现有项目 1、会话 9、消息 29、Run 15、Agent job 0、Token 账本 43 条。
+- 阿里云后端到 LiteLLM 的模型列表返回 200；从后端容器发出的真实模型流式请求返回 200、2 个内容增量和结束事件。公网 `https://agent.bioailab.net/login` 返回 200，未登录 `/api/v1/usage` 返回 401，`/internal/` 返回 404；旧站 `https://pskit.bioailab.net/` 返回 200，HTTPS 证书校验通过。
+- A6000 只运行一个 AF3 接收器和原计算容器；接收器指向 `http://10.9.8.1:18184`，重启次数 0。带密钥的 owned-jobs 只读请求返回 200、待领作业 0，接收器 journal 作业数 0。私网入口只允许 A6000 来源。
+- 尚未验证登录后的会话续聊、上传、SSE 和一次真实 AF3 任务的领取、产物、GPU 结算与自动唤醒。当前云端账号 GPU 日额度为 0；在授权测试账号有额度之前，不应把只读回调检查当作真实 AF3 验收。
 
 ## 0. 路径、凭据和容量
 
@@ -164,12 +172,12 @@ docker run --rm --network none --user 0:0 \
 
 | 检查项 | 本地替身结果 | 阿里云/A6000 实际结果 |
 | --- | --- | --- |
-| 固定版 PG17、LiteLLM gateway 健康 | 本地候选 readiness/UI 均 200 | 2026-10-03：固定后端镜像 `sha256:48b939d59fcc2f5990f5c2da4a4e0d790f22daae326b2f857082c4de4e3c73ab` 已校验；候选 4001 readiness/UI 200，旧 4000 readiness 200，均健康；旧服务未停 |
-| 新预算/虚拟 key、模型工具流 | 本地 10/2 美元预算；mock 工具流 200；旧测试 key 被拒绝 | 2026-10-03：候选团队/用户预算 10/2 美元，新虚拟 key 复验成功、旧 key 被拒绝；真实提供商模型待用户配置及调用验收 |
-| SQLite→PG→SQLite 与 Pi 清单 | 本地迁移回归通过，36 表样本与字节哈希保留 | 待 A6000 停写后核对实际计数 |
-| Run/job/journal/owned-jobs/GPU | 本地门禁与回调契约测试 | 2026-10-03 只读预检：A6000 Run completed 12/failed 1，Agent job 0，receiver journal 0，认证的 `owned-jobs` 返回 0；spool 中两份历史目录须停接收器后归档，受控真 AF3 待执行 |
+| 固定版 PG17、LiteLLM gateway 健康 | 本地候选 readiness/UI 均 200 | 2026-10-04：固定后端镜像 `sha256:48b939d59fcc2f5990f5c2da4a4e0d790f22daae326b2f857082c4de4e3c73ab`；阿里云单个 Supabase PG17、LiteLLM 4000 和后端均健康；旧 PG16 停止并保留备份 |
+| 新预算/虚拟 key、模型工具流 | 本地 10/2 美元预算；mock 工具流 200；旧测试 key 被拒绝 | 候选团队/用户预算 10/2 美元与新虚拟 key 已核对；真实提供商的工具调用和流式响应已在候选 4001 验证，正式 4000 从后端容器完成一次真实流式调用 |
+| SQLite→PG→SQLite 与 Pi 清单 | 本地迁移回归通过，36 表样本与字节哈希保留 | 停写快照已核对 SHA-256；阿里云导入器报告 36 表、322 行并逐表校验哈希，19 个 Pi 文件已校验；生产反向导出只在回退时执行 |
+| Run/job/journal/owned-jobs/GPU | 本地门禁与回调契约测试 | A6000 原后端停写前无未完成作业；新接收器认证读取阿里云 `owned-jobs` 返回 200、0 作业，journal 0，重启 0；受控真 AF3 与 GPU 结算待执行 |
 | 备份及隔离 | 本地角色隔离测试通过 | 2026-10-03：Supabase PG17、旧 LiteLLM PG16、新 `litellm` DB 三份 dump 可列出，SHA-256 已记录；A6000 的 0700 私有目录已收异机副本并通过 SHA-256 复核；生产 `pskit_app` 无权读 `auth.users` |
-| 云端后端预配置 | 本地 Compose 合同测试通过 | 2026-10-03：独立 0600 的 `cloud.backend.pg17.env`、`cloud.env`、`.env.stack` 已准备；Compose 渲染通过；受限 `pskit_app` DSN 实际连接成功，云端后端尚未启动 |
-| 公网 HTTPS、SSE、上传、旧站 | 尚未在新拓扑切换 | 待私网验收、root 脚本执行后记录 |
+| 云端后端预配置 | 本地 Compose 合同测试通过 | 独立 0600 配置与受限 `pskit_app` DSN 已投入运行，后端和回调代理健康，后端仅绑定 `127.0.0.1:18088` |
+| 公网 HTTPS、SSE、上传、旧站 | 尚未在新拓扑切换 | 公网 `/login` 200、未登录 API 401、`/internal/` 404，旧站 200；登录后的 SSE 和上传待验收 |
 
 记录时间、镜像 digest、源/目标卷名、快照 SHA-256、匿名化行数与状态、HTTP 状态、真 AF3 job ID 和 ACK 状态。不得记录密码、API key、回调密钥、文件内容或聊天文本。
