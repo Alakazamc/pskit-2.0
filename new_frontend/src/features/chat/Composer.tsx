@@ -1,10 +1,11 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ArrowUp, AtSign, CircleAlert, File, FilePlus2, FileText, Globe2, Plus, Sparkles, Square, X } from "lucide-react";
 import { useDropzone } from "react-dropzone";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CatalogItem, ContextRef, MessageRequest, ModelOption } from "../../api/types";
-import { useComposerStore } from "./composerStore";
+import { createComposerStore, useComposerStore } from "./composerStore";
+import { observeComposerDraft, type ComposerDraftScope } from "./composerDrafts";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { errorTranslationKey } from "../../i18n/errors";
 import type { TranslationKey } from "../../i18n/translations";
@@ -32,7 +33,11 @@ function fileKind(file: File | string): UploadTile["kind"] {
   return "file";
 }
 
-export function Composer({ onSend, onUpload, onStop, runActive = false, skills, projectSkillIds = [], resources, models = [], disabled = false }: { onSend: (message: MessageRequest) => Promise<boolean>; onUpload: (file: File, onProgress: (value: number) => void) => Promise<ContextRef>; onStop?: () => Promise<void>; runActive?: boolean; skills: CatalogItem[]; projectSkillIds?: string[]; resources: CatalogItem[]; models?: ModelOption[]; disabled?: boolean }) {
+export function Composer(props: Parameters<typeof ComposerInput>[0]) {
+  return <ComposerInput key={JSON.stringify([props.draftScope?.userId, props.draftScope?.conversationId])} {...props} />;
+}
+
+function ComposerInput({ draftScope, onSend, onUpload, onStop, runActive = false, skills, projectSkillIds = [], resources, models = [], disabled = false }: { draftScope?: ComposerDraftScope; onSend: (message: MessageRequest) => Promise<boolean>; onUpload: (file: File, onProgress: (value: number) => void) => Promise<ContextRef>; onStop?: () => Promise<void>; runActive?: boolean; skills: CatalogItem[]; projectSkillIds?: string[]; resources: CatalogItem[]; models?: ModelOption[]; disabled?: boolean }) {
   const { t } = useLanguage();
   const [uploadTiles, setUploadTiles] = useState<UploadTile[]>([]);
   const [uploadError, setUploadError] = useState<TranslationKey | null>(null);
@@ -41,23 +46,34 @@ export function Composer({ onSend, onUpload, onStop, runActive = false, skills, 
   const canceledUploads = useRef(new Set<string>());
   const pendingUploads = useRef(new Set<string>());
   const portalContainer = useWorkspacePortalContainer();
-  const content = useComposerStore((state) => state.content);
-  const attachments = useComposerStore((state) => state.attachments);
-  const selectedSkills = useComposerStore((state) => state.skills);
-  const selectedResources = useComposerStore((state) => state.resources);
-  const model = useComposerStore((state) => state.model);
-  const reasoningEffort = useComposerStore((state) => state.reasoning_effort);
-  const setModel = useComposerStore((state) => state.setModel);
-  const setReasoningEffort = useComposerStore((state) => state.setReasoningEffort);
+  const userId = draftScope?.userId;
+  const conversationId = draftScope?.conversationId;
+  const useDraftStore = useMemo(() => userId && conversationId
+    ? createComposerStore({ userId, conversationId }) : useComposerStore, [userId, conversationId]);
+  useEffect(() => {
+    if (userId && conversationId) return observeComposerDraft({ userId, conversationId }, (draft) => useDraftStore.setState(draft));
+  }, [userId, conversationId, useDraftStore]);
+  const content = useDraftStore((state) => state.content);
+  const attachments = useDraftStore((state) => state.attachments);
+  const selectedSkills = useDraftStore((state) => state.skills);
+  const selectedResources = useDraftStore((state) => state.resources);
+  const model = useDraftStore((state) => state.model);
+  const reasoningEffort = useDraftStore((state) => state.reasoning_effort);
+  const setModel = useDraftStore((state) => state.setModel);
+  const setReasoningEffort = useDraftStore((state) => state.setReasoningEffort);
   const availableModels = Array.isArray(models) ? models : [];
   const selectedModel = model ? availableModels.find((option) => option.id === model) : availableModels[0];
   const modelUnavailable = Boolean(model && !selectedModel);
-  const setText = useComposerStore((state) => state.setText);
-  const addSkill = useComposerStore((state) => state.addSkill);
-  const addResource = useComposerStore((state) => state.addResource);
-  const addAttachment = useComposerStore((state) => state.addAttachment);
-  const removeRef = useComposerStore((state) => state.removeRef);
-  const clearAfterSend = useComposerStore((state) => state.clearAfterSend);
+  const setText = useDraftStore((state) => state.setText);
+  const addSkill = useDraftStore((state) => state.addSkill);
+  const addResource = useDraftStore((state) => state.addResource);
+  const addAttachment = useDraftStore((state) => state.addAttachment);
+  const removeRef = useDraftStore((state) => state.removeRef);
+  const clearAfterSend = useDraftStore((state) => state.clearAfterSend);
+  const defaultModelId = availableModels[0]?.id;
+  useEffect(() => {
+    if (userId && conversationId && defaultModelId && !useDraftStore.getState().model) setModel(defaultModelId);
+  }, [userId, conversationId, defaultModelId, useDraftStore, setModel]);
   const [stopping, setStopping] = useState(false);
   const picker = content.endsWith("/") ? "skill" : content.endsWith("@") ? "resource" : null;
   const projectSkillSet = new Set(projectSkillIds);
@@ -85,7 +101,7 @@ export function Composer({ onSend, onUpload, onStop, runActive = false, skills, 
     noClick: true, noKeyboard: true,
     onDrop: async (files) => {
       setUploadError(null);
-      const currentCount = useComposerStore.getState().attachments.length + pendingUploads.current.size;
+      const currentCount = useDraftStore.getState().attachments.length + pendingUploads.current.size;
       const acceptedFiles = files.slice(0, Math.max(0, MAX_ATTACHMENTS_PER_TURN - currentCount));
       if (acceptedFiles.length < files.length) setUploadError("error.tooManyAttachments");
       if (!acceptedFiles.length) {
@@ -129,9 +145,10 @@ export function Composer({ onSend, onUpload, onStop, runActive = false, skills, 
       return;
     }
     const refs = (items: ContextRef[]) => items.map(({ id, name }) => ({ id, name }));
+    const submittedDraft = useDraftStore.getState();
     const effort = reasoningEffort && selectedModel?.reasoning_levels?.includes(reasoningEffort) ? reasoningEffort : undefined;
     if (await onSend({ content: content.trim(), model: selectedModel?.id, ...(effort ? { reasoning_effort: effort } : {}), attachments: refs(attachments), skills: refs(selectedSkills), resources: refs(selectedResources) })) {
-      clearAfterSend();
+      clearAfterSend(submittedDraft);
       uploadTiles.forEach(revokePreview);
       setUploadTiles([]);
       setUploadError(null);

@@ -6,6 +6,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import type { MessageRequest, ResearchApi, UserIdentity } from "../../api/types";
 import { AgentPanel } from "../chat/AgentPanel";
 import { Composer } from "../chat/Composer";
+import { conversationDraftScope } from "../chat/composerDrafts";
 import { Conversation } from "../chat/Conversation";
 import { emptyRun } from "../chat/events";
 import { useRunEvents } from "../chat/useRunEvents";
@@ -24,6 +25,7 @@ export function WorkspacePage({ api, user, onLogout }: { api: ResearchApi; user:
   const projectSegment = location.pathname.match(/^\/p\/([^/]+)/)?.[1];
   const sessionSegment = location.pathname.match(/(?:\/c\/|^\/session\/)([^/]+)/)?.[1];
   const sessionId = sessionSegment ? decodeURIComponent(sessionSegment) : null;
+  const draftScope = conversationDraftScope(user.id, sessionId, projectSegment ? decodeURIComponent(projectSegment) : null);
   const section = location.pathname.startsWith("/skills") ? "skills" : location.pathname.startsWith("/resources") ? "resources" : location.pathname.startsWith("/settings") ? "settings" : "projects";
   const [runId, setRunId] = useState<string | null>(null);
   const pendingSend = useRef<{ sessionId: string; body: string; key: string } | null>(null);
@@ -142,7 +144,7 @@ export function WorkspacePage({ api, user, onLogout }: { api: ResearchApi; user:
           {!agentVisible && run.approval && <div className="mobile-approval-banner"><b>{t("agent.approvalRequired", { minutes: run.approval.estimatedMinutes })}</b><button onClick={() => void decideApproval(run.approval!.id, "approved")}>{t("agent.approve")}</button><button onClick={() => void decideApproval(run.approval!.id, "rejected")}>{t("agent.reject")}</button></div>}
           <Conversation messages={messages.data ?? []} run={run} />
           {error && <div className="workspace-error" role="alert">{t(error)}</div>}
-          <Composer onSend={send} onUpload={upload} skills={skills.data ?? []} resources={resources.data ?? []} models={models.data ?? []} disabled={sending} />
+          <Composer draftScope={draftScope} onSend={send} onUpload={upload} skills={skills.data ?? []} resources={resources.data ?? []} models={models.data ?? []} disabled={sending} />
         </> : <div className="project-overview"><div className="overview-icon"><Sparkles size={30} /></div><span className="eyebrow">{t("workspace.spaceEyebrow")}</span><h1>{activeProject?.name ?? t("workspace.overviewTitle")}</h1>{sessions.data?.length ? <><p>{t("workspace.overviewDescription")}</p><button className="primary-button" onClick={() => { const item = sessions.data?.[0]; if (item) selectSession(item.project_id, item.id); }}>{t("workspace.openSession")} <ChevronRight size={17} /></button></> : <p>{t(sessions.isLoading ? "workspace.loadingSessions" : activeProject ? "workspace.noProjectSessions" : "workspace.noProjects")}</p>}</div>}
       </Panel>
       {agentVisible && <><Separator className="resize-handle" /><Panel defaultSize="340px" minSize="280px" maxSize="520px" className="agent-panel-wrapper"><AgentPanel run={sessionId ? run : emptyRun} usage={usage.data} savedArtifacts={artifacts.data ?? []} onCancel={sessionId && visibleRunId ? () => { void cancel(); } : undefined} onApproval={sessionId && visibleRunId ? (id, decision) => { void decideApproval(id, decision); } : undefined} /></Panel></>}

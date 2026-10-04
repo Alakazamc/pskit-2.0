@@ -9,6 +9,7 @@ import { useWorkspacePortalContainer } from "../../hooks/useWorkspacePortalConta
 import { errorTranslationKey } from "../../i18n/errors";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { Composer } from "../chat/Composer";
+import { completeComposerDraft, conversationDraftScope, moveComposerDraft, readComposerDraft } from "../chat/composerDrafts";
 import { Conversation } from "../chat/Conversation";
 import { useRunEvents } from "../chat/useRunEvents";
 import { LanguageSwitch } from "../../i18n/LanguageProvider";
@@ -112,6 +113,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
   const projectChatMatch = pathname.match(/^\/p\/[^/]+\/c\/([^/]+)\/?$/);
   const activeSessionId = decodeURIComponent(personalChatMatch?.[1] ?? projectChatMatch?.[1] ?? "") || null;
   const personalProjectId = `project-${user.id}`;
+  const draftScope = conversationDraftScope(user.id, activeSessionId, activeProjectId);
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -172,6 +174,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
     setSendError(null);
     setShowUpgradePrompt(false);
     let optimistic: { queryKey: string[]; id: string } | undefined;
+    const submittedDraft = readComposerDraft(draftScope);
     try {
       const targetProjectId = activeProjectId ?? personalProjectId;
       let targetSessionId = activeSessionId;
@@ -181,6 +184,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
         const created = await api.createSession(activeProjectId, title);
         targetSessionId = created.id;
         createdSession = true;
+        moveComposerDraft(draftScope, conversationDraftScope(user.id, created.id));
         queryClient.setQueryData(["session", user.id, created.id], created);
       }
       const body = JSON.stringify(payload);
@@ -199,6 +203,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
       queryClient.setQueryData<Message[]>(queryKey, (previous = []) => [...previous, message]);
       if (createdSession) navigate(sessionPath(targetProjectId, personalProjectId, targetSessionId));
       const result = await api.sendMessage(targetSessionId, payload, pendingSend.current.key, activeProjectId);
+      if (createdSession) completeComposerDraft(conversationDraftScope(user.id, targetSessionId), submittedDraft);
       pendingSend.current = null;
       setCurrentRun({ sessionId: targetSessionId, runId: result.run_id });
       setSubmitting(false);
@@ -254,7 +259,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession }: { api: Researc
       if (activeSessionId && !currentSession) return sessionListPending || sessionLookup.isPending || !!sessionLookup.data
         ? <div className="mono-loading-page" role="status">{t("mono.openingChat")}</div>
         : <div className="mono-page-scroll"><div className="mono-empty-panel"><h2>{t("mono.pageNotFound")}</h2><Link to="/">{t("mono.backNewChat")}</Link></div></div>;
-      return <div className="mono-chat-layout">{activeSessionId ? <Conversation messages={messages.data ?? []} run={run} runId={visibleRunId} awaitingEvents={run.status === "idle" && runActive} onCancel={visibleRunId ? cancelRun : undefined} onApproval={decideApproval} /> : <div className="mono-empty-chat"><h1>{t("mono.emptyChatTitle")}</h1><p>{t("mono.emptyChatDescription")}</p></div>}{sendError && <div className="mono-error" role="alert">{sendError}{showUpgradePrompt && <Link to="/settings">{t("guest.upgradeToContinue")}</Link>}</div>}{defaultSkills.length > 0 && <div className="mono-default-skills">{t("mono.defaultSkills")}{defaultSkills.map((skill) => <span className="mono-chip" key={skill.id}>✦ {skill.name}</span>)}</div>}<Composer onSend={send} onUpload={upload} onStop={visibleRunId ? cancelRun : undefined} runActive={runActive} skills={skills.data ?? []} projectSkillIds={projectSkillSettings.data?.skill_ids ?? []} resources={resources.data ?? []} models={models.data ?? []} disabled={sending} /></div>;
+      return <div className="mono-chat-layout">{activeSessionId ? <Conversation messages={messages.data ?? []} run={run} runId={visibleRunId} awaitingEvents={run.status === "idle" && runActive} onCancel={visibleRunId ? cancelRun : undefined} onApproval={decideApproval} /> : <div className="mono-empty-chat"><h1>{t("mono.emptyChatTitle")}</h1><p>{t("mono.emptyChatDescription")}</p></div>}{sendError && <div className="mono-error" role="alert">{sendError}{showUpgradePrompt && <Link to="/settings">{t("guest.upgradeToContinue")}</Link>}</div>}{defaultSkills.length > 0 && <div className="mono-default-skills">{t("mono.defaultSkills")}{defaultSkills.map((skill) => <span className="mono-chip" key={skill.id}>✦ {skill.name}</span>)}</div>}<Composer draftScope={draftScope} onSend={send} onUpload={upload} onStop={visibleRunId ? cancelRun : undefined} runActive={runActive} skills={skills.data ?? []} projectSkillIds={projectSkillSettings.data?.skill_ids ?? []} resources={resources.data ?? []} models={models.data ?? []} disabled={sending} /></div>;
     }
     if (pathname === "/g") return <ProjectIndex projects={visibleProjects} />;
     if (pathname === "/artifacts") return <ArtifactsPage api={api} userId={user.id} />;
