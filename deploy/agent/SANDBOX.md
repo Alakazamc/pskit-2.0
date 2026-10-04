@@ -41,3 +41,9 @@ Staging 在它原有的 Compose 文件组合末尾叠加同一个 `compose.sandb
 回退时从 Compose 命令中移除 `compose.sandbox.yaml` 并重建 backend，恢复本地 Pi 模式。**新产生的沙箱 transcript 路径无法由旧模式直接读取**；回退前应暂停新 Run，导出/转换这些 transcript，或保留沙箱服务直到在沙箱内完成未结束的会话。不要运行 `down -v`，否则会删除工作区数据。
 
 Docker socket 使管理器具有宿主 Docker 控制权，因此它是受信任的基础设施组件。用户沙箱只拥有私有应用网络和自身工作卷；如果未来开放 shell、代码执行或不可信 Skill，需要单独审查网络出口、文件同步和更强的容器隔离。
+
+## 通用计算 SDK（独立于用户 CPU 沙箱）
+
+科研模型可保留自己的模型环境，用函数/HTTP/MCP executor 返回统一的 Completed/Pending/Failed + UsageReport。用户 Pi 只获得 Run 工具 token，经 Python 的 `/internal/compute/jobs` 提交持久任务；worker 接收器持有服务专属密钥，GPU 模型不必放在每用户沙箱中。
+
+详见 [模型接入与计量协议](../../new_backend/COMPUTE_SERVICES.md)。默认关闭，启用前显式升级 PostgreSQL v4，配置已批准 manifest 与 CPU 日额度。新旧 GPU receiver 同设备并行互斥尚需统一设备调度，生产切换前先排空旧任务。此 B 阶段实现不代表 A 阶段沙箱文件同步或 C 阶段管理台已经完成。

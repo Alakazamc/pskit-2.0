@@ -1,0 +1,798 @@
+{
+  "$defs": {
+    "ArtifactRef": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "available": {
+          "default": false,
+          "title": "Available",
+          "type": "boolean"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Size"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind"
+      ],
+      "title": "ArtifactRef",
+      "type": "object"
+    },
+    "CapabilityVersion": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9_.-]{1,120}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        },
+        "input_schema": {
+          "additionalProperties": true,
+          "title": "Input Schema",
+          "type": "object"
+        },
+        "output_schema": {
+          "additionalProperties": true,
+          "title": "Output Schema",
+          "type": "object"
+        },
+        "required_usage": {
+          "items": {
+            "enum": [
+              "wall_ms",
+              "cpu_core_ms",
+              "gpu_device_ms",
+              "peak_memory_bytes",
+              "peak_gpu_memory_bytes",
+              "gpu_count"
+            ],
+            "type": "string"
+          },
+          "title": "Required Usage",
+          "type": "array"
+        },
+        "accepted_sources": {
+          "items": {
+            "enum": [
+              "service_reported",
+              "measured",
+              "estimated",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Accepted Sources",
+          "type": "array"
+        },
+        "visibility": {
+          "default": "draft",
+          "enum": [
+            "draft",
+            "published"
+          ],
+          "title": "Visibility",
+          "type": "string"
+        },
+        "allowed_users": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowed Users"
+        },
+        "gpu_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Gpu Count",
+          "type": "integer"
+        },
+        "max_budget": {
+          "$ref": "#/$defs/ComputeBudget"
+        },
+        "concurrency": {
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "max_execution_seconds": {
+          "default": 1800,
+          "exclusiveMinimum": 0,
+          "title": "Max Execution Seconds",
+          "type": "integer"
+        },
+        "cancellation": {
+          "default": "cooperative",
+          "enum": [
+            "none",
+            "cooperative",
+            "confirmed_stop"
+          ],
+          "title": "Cancellation",
+          "type": "string"
+        },
+        "limit_mode": {
+          "default": "soft",
+          "enum": [
+            "soft",
+            "hard"
+          ],
+          "title": "Limit Mode",
+          "type": "string"
+        },
+        "exclusive_process": {
+          "default": false,
+          "title": "Exclusive Process",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "input_schema"
+      ],
+      "title": "CapabilityVersion",
+      "type": "object"
+    },
+    "Completed": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "completed",
+          "default": "completed",
+          "title": "Status",
+          "type": "string"
+        },
+        "result": {
+          "additionalProperties": true,
+          "title": "Result",
+          "type": "object"
+        },
+        "usage": {
+          "$ref": "#/$defs/UsageReport"
+        },
+        "artifacts": {
+          "items": {
+            "$ref": "#/$defs/ArtifactRef"
+          },
+          "title": "Artifacts",
+          "type": "array"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job Id"
+        }
+      },
+      "required": [
+        "result",
+        "usage"
+      ],
+      "title": "Completed",
+      "type": "object"
+    },
+    "ComputeBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "cpu_core_ms": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Cpu Core Ms",
+          "type": "integer"
+        },
+        "gpu_device_ms": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Gpu Device Ms",
+          "type": "integer"
+        }
+      },
+      "title": "ComputeBudget",
+      "type": "object"
+    },
+    "ComputeJob": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "user_id": {
+          "title": "User Id",
+          "type": "string"
+        },
+        "service_id": {
+          "title": "Service Id",
+          "type": "string"
+        },
+        "capability": {
+          "$ref": "#/$defs/CapabilityVersion"
+        },
+        "arguments": {
+          "additionalProperties": true,
+          "title": "Arguments",
+          "type": "object"
+        },
+        "budget": {
+          "$ref": "#/$defs/ComputeBudget"
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "cancelling",
+            "completed",
+            "failed",
+            "cancelled"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "accounting_status": {
+          "enum": [
+            "reserved",
+            "settled",
+            "released",
+            "pending_reconciliation"
+          ],
+          "title": "Accounting Status",
+          "type": "string"
+        },
+        "progress": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Progress",
+          "type": "integer"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "tool_call_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Call Id"
+        },
+        "report": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "completed": "#/$defs/Completed",
+                  "failed": "#/$defs/Failed",
+                  "pending": "#/$defs/Pending"
+                },
+                "propertyName": "status"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Completed"
+                },
+                {
+                  "$ref": "#/$defs/Pending"
+                },
+                {
+                  "$ref": "#/$defs/Failed"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Report"
+        }
+      },
+      "required": [
+        "id",
+        "user_id",
+        "service_id",
+        "capability",
+        "arguments",
+        "budget",
+        "status",
+        "accounting_status"
+      ],
+      "title": "ComputeJob",
+      "type": "object"
+    },
+    "ComputeServiceManifest": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "pskit.compute.v1",
+          "default": "pskit.compute.v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "service_id": {
+          "pattern": "^[a-zA-Z0-9_.-]{1,120}$",
+          "title": "Service Id",
+          "type": "string"
+        },
+        "model_version": {
+          "minLength": 1,
+          "title": "Model Version",
+          "type": "string"
+        },
+        "capabilities": {
+          "items": {
+            "$ref": "#/$defs/CapabilityVersion"
+          },
+          "minItems": 1,
+          "title": "Capabilities",
+          "type": "array"
+        }
+      },
+      "required": [
+        "service_id",
+        "model_version",
+        "capabilities"
+      ],
+      "title": "ComputeServiceManifest",
+      "type": "object"
+    },
+    "ComputeUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "day": {
+          "title": "Day",
+          "type": "string"
+        },
+        "cpu": {
+          "$ref": "#/$defs/ResourceCounter"
+        },
+        "gpu": {
+          "$ref": "#/$defs/ResourceCounter"
+        },
+        "sources": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Sources",
+          "type": "array"
+        },
+        "allocation_policy": {
+          "default": "proportional_usage_window",
+          "title": "Allocation Policy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "day",
+        "cpu",
+        "gpu",
+        "sources"
+      ],
+      "title": "ComputeUsage",
+      "type": "object"
+    },
+    "ExecutionError": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "maxLength": 2000,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "ExecutionError",
+      "type": "object"
+    },
+    "ExecutionGrant": {
+      "additionalProperties": false,
+      "properties": {
+        "job": {
+          "$ref": "#/$defs/ComputeJob"
+        },
+        "worker_id": {
+          "title": "Worker Id",
+          "type": "string"
+        },
+        "attempt": {
+          "exclusiveMinimum": 0,
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "fencing_token": {
+          "title": "Fencing Token",
+          "type": "string"
+        },
+        "stop_at": {
+          "format": "date-time",
+          "title": "Stop At",
+          "type": "string"
+        },
+        "lease_expires_at": {
+          "format": "date-time",
+          "title": "Lease Expires At",
+          "type": "string"
+        },
+        "gpu_uuids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Gpu Uuids",
+          "type": "array"
+        },
+        "recovered": {
+          "default": false,
+          "title": "Recovered",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "job",
+        "worker_id",
+        "attempt",
+        "fencing_token",
+        "stop_at",
+        "lease_expires_at"
+      ],
+      "title": "ExecutionGrant",
+      "type": "object"
+    },
+    "Failed": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "failed",
+          "default": "failed",
+          "title": "Status",
+          "type": "string"
+        },
+        "error": {
+          "$ref": "#/$defs/ExecutionError"
+        },
+        "usage": {
+          "$ref": "#/$defs/UsageReport"
+        },
+        "artifacts": {
+          "items": {
+            "$ref": "#/$defs/ArtifactRef"
+          },
+          "title": "Artifacts",
+          "type": "array"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job Id"
+        }
+      },
+      "required": [
+        "error",
+        "usage"
+      ],
+      "title": "Failed",
+      "type": "object"
+    },
+    "Pending": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "pending",
+          "default": "pending",
+          "title": "Status",
+          "type": "string"
+        },
+        "job_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Job Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_id"
+      ],
+      "title": "Pending",
+      "type": "object"
+    },
+    "ResourceCounter": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "minimum": 0,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "used": {
+          "minimum": 0,
+          "title": "Used",
+          "type": "integer"
+        },
+        "reserved": {
+          "minimum": 0,
+          "title": "Reserved",
+          "type": "integer"
+        },
+        "remaining": {
+          "minimum": 0,
+          "title": "Remaining",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "limit",
+        "used",
+        "reserved",
+        "remaining"
+      ],
+      "title": "ResourceCounter",
+      "type": "object"
+    },
+    "UsageReceipt": {
+      "additionalProperties": false,
+      "properties": {
+        "receipt_id": {
+          "title": "Receipt Id",
+          "type": "string"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "accepted_seq": {
+          "exclusiveMinimum": 0,
+          "title": "Accepted Seq",
+          "type": "integer"
+        },
+        "payload_hash": {
+          "title": "Payload Hash",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "failed",
+            "cancelled",
+            "pending"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "committed": {
+          "const": true,
+          "default": true,
+          "title": "Committed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "receipt_id",
+        "job_id",
+        "accepted_seq",
+        "payload_hash",
+        "status"
+      ],
+      "title": "UsageReceipt",
+      "type": "object"
+    },
+    "UsageReport": {
+      "additionalProperties": false,
+      "properties": {
+        "wall_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Wall Ms"
+        },
+        "cpu_core_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cpu Core Ms"
+        },
+        "gpu_device_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gpu Device Ms"
+        },
+        "peak_memory_bytes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Peak Memory Bytes"
+        },
+        "peak_gpu_memory_bytes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Peak Gpu Memory Bytes"
+        },
+        "gpu_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gpu Count"
+        },
+        "source": {
+          "enum": [
+            "service_reported",
+            "measured",
+            "estimated",
+            "unknown"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "UsageReport",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/ComputeServiceManifest"
+    },
+    {
+      "$ref": "#/$defs/ComputeJob"
+    },
+    {
+      "$ref": "#/$defs/ExecutionGrant"
+    },
+    {
+      "$ref": "#/$defs/UsageReceipt"
+    },
+    {
+      "$ref": "#/$defs/ComputeUsage"
+    },
+    {
+      "discriminator": {
+        "mapping": {
+          "completed": "#/$defs/Completed",
+          "failed": "#/$defs/Failed",
+          "pending": "#/$defs/Pending"
+        },
+        "propertyName": "status"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Completed"
+        },
+        {
+          "$ref": "#/$defs/Pending"
+        },
+        {
+          "$ref": "#/$defs/Failed"
+        }
+      ]
+    }
+  ]
+}

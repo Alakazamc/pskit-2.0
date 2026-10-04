@@ -649,6 +649,215 @@
         ]
       }
     },
+    "/api/v1/compute/capabilities": {
+      "get": {
+        "tags": [
+          "compute"
+        ],
+        "summary": "Capabilities",
+        "operationId": "capabilities_api_v1_compute_capabilities_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CapabilityVersion"
+                  },
+                  "type": "array",
+                  "title": "Response Capabilities Api V1 Compute Capabilities Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/compute/jobs": {
+      "post": {
+        "tags": [
+          "compute"
+        ],
+        "summary": "Submit",
+        "operationId": "submit_api_v1_compute_jobs_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComputeJobRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComputeJob"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compute/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "compute"
+        ],
+        "summary": "Get",
+        "operationId": "get_api_v1_compute_jobs__job_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComputeJob"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compute/jobs/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "compute"
+        ],
+        "summary": "Cancel",
+        "operationId": "cancel_api_v1_compute_jobs__job_id__cancel_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComputeJob"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compute/usage": {
+      "get": {
+        "tags": [
+          "compute"
+        ],
+        "summary": "Usage",
+        "operationId": "usage_api_v1_compute_usage_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComputeUsage"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/runs/{run_id}/approvals/{approval_id}": {
       "post": {
         "tags": [
@@ -768,7 +977,7 @@
           "runs"
         ],
         "summary": "Cancel Run",
-        "description": "Cancel an owned run and any associated active AF3 jobs.",
+        "description": "Cancel an owned run and request cancellation of its background jobs.",
         "operationId": "cancel_run_api_v1_runs__run_id__delete",
         "security": [
           {
@@ -2843,6 +3052,353 @@
         }
       }
     },
+    "/internal/compute/jobs/claim": {
+      "post": {
+        "tags": [
+          "compute-worker"
+        ],
+        "summary": "Claim",
+        "operationId": "claim_internal_compute_jobs_claim_post",
+        "parameters": [
+          {
+            "name": "X-Compute-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compute-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComputeClaimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ExecutionGrant"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Claim Internal Compute Jobs Claim Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/compute/jobs/{job_id}/heartbeat": {
+      "post": {
+        "tags": [
+          "compute-worker"
+        ],
+        "summary": "Heartbeat",
+        "operationId": "heartbeat_internal_compute_jobs__job_id__heartbeat_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "X-Compute-Service",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Compute-Service"
+            }
+          },
+          {
+            "name": "X-Compute-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compute-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComputeHeartbeatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrantUpdate"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/compute/jobs/{job_id}/result": {
+      "post": {
+        "tags": [
+          "compute-worker"
+        ],
+        "summary": "Result",
+        "operationId": "result_internal_compute_jobs__job_id__result_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "X-Compute-Service",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Compute-Service"
+            }
+          },
+          {
+            "name": "X-Compute-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compute-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComputeResultRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageReceipt"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/compute/jobs": {
+      "post": {
+        "tags": [
+          "compute-worker"
+        ],
+        "summary": "Submit Agent Job",
+        "operationId": "submit_agent_job_internal_compute_jobs_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InternalComputeSubmit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComputeJob"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/compute/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "compute-worker"
+        ],
+        "summary": "Get Agent Result",
+        "operationId": "get_agent_result_internal_compute_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComputeResumeContext"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/dependencies": {
       "get": {
         "tags": [
@@ -3759,6 +4315,136 @@
         ],
         "title": "AuthSessionResponse"
       },
+      "CapabilityVersion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_.-]{1,120}$",
+            "title": "Id"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Version"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Schema"
+          },
+          "output_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Output Schema"
+          },
+          "required_usage": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "wall_ms",
+                "cpu_core_ms",
+                "gpu_device_ms",
+                "peak_memory_bytes",
+                "peak_gpu_memory_bytes",
+                "gpu_count"
+              ]
+            },
+            "type": "array",
+            "title": "Required Usage"
+          },
+          "accepted_sources": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "service_reported",
+                "measured",
+                "estimated",
+                "unknown"
+              ]
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Accepted Sources"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published"
+            ],
+            "title": "Visibility",
+            "default": "draft"
+          },
+          "allowed_users": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Users"
+          },
+          "gpu_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Gpu Count",
+            "default": 0
+          },
+          "max_budget": {
+            "$ref": "#/components/schemas/ComputeBudget"
+          },
+          "concurrency": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Concurrency",
+            "default": 1
+          },
+          "max_execution_seconds": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Max Execution Seconds",
+            "default": 1800
+          },
+          "cancellation": {
+            "type": "string",
+            "enum": [
+              "none",
+              "cooperative",
+              "confirmed_stop"
+            ],
+            "title": "Cancellation",
+            "default": "cooperative"
+          },
+          "limit_mode": {
+            "type": "string",
+            "enum": [
+              "soft",
+              "hard"
+            ],
+            "title": "Limit Mode",
+            "default": "soft"
+          },
+          "exclusive_process": {
+            "type": "boolean",
+            "title": "Exclusive Process",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "input_schema"
+        ],
+        "title": "CapabilityVersion"
+      },
       "CatalogItem": {
         "properties": {
           "id": {
@@ -3811,6 +4497,297 @@
         ],
         "title": "CitationPart"
       },
+      "Completed": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "completed",
+            "title": "Status",
+            "default": "completed"
+          },
+          "result": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Result"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/UsageReport"
+          },
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "type": "array",
+            "title": "Artifacts"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "result",
+          "usage"
+        ],
+        "title": "Completed"
+      },
+      "ComputeBudget": {
+        "properties": {
+          "cpu_core_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Cpu Core Ms",
+            "default": 0
+          },
+          "gpu_device_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Gpu Device Ms",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ComputeBudget"
+      },
+      "ComputeClaimRequest": {
+        "properties": {
+          "service_id": {
+            "type": "string",
+            "title": "Service Id"
+          },
+          "worker_id": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Worker Id"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/WorkerResources"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "service_id",
+          "worker_id"
+        ],
+        "title": "ComputeClaimRequest"
+      },
+      "ComputeHeartbeatRequest": {
+        "properties": {
+          "worker_id": {
+            "type": "string",
+            "title": "Worker Id"
+          },
+          "attempt": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Attempt"
+          },
+          "fencing_token": {
+            "type": "string",
+            "title": "Fencing Token"
+          },
+          "seq": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Seq"
+          },
+          "progress": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Progress",
+            "default": 0
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UsageReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UsageWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "worker_id",
+          "attempt",
+          "fencing_token",
+          "seq"
+        ],
+        "title": "ComputeHeartbeatRequest"
+      },
+      "ComputeJob": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "service_id": {
+            "type": "string",
+            "title": "Service Id"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/CapabilityVersion"
+          },
+          "arguments": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Arguments"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/ComputeBudget"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "cancelling",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "accounting_status": {
+            "type": "string",
+            "enum": [
+              "reserved",
+              "settled",
+              "released",
+              "pending_reconciliation"
+            ],
+            "title": "Accounting Status"
+          },
+          "progress": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Progress",
+            "default": 0
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Call Id"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Completed"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Pending"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Failed"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "status",
+                  "mapping": {
+                    "completed": "#/components/schemas/Completed",
+                    "failed": "#/components/schemas/Failed",
+                    "pending": "#/components/schemas/Pending"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "service_id",
+          "capability",
+          "arguments",
+          "budget",
+          "status",
+          "accounting_status"
+        ],
+        "title": "ComputeJob"
+      },
+      "ComputeJobRequest": {
+        "properties": {
+          "capability_id": {
+            "type": "string",
+            "title": "Capability Id"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "arguments": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Arguments"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/ComputeBudget"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "capability_id",
+          "version",
+          "arguments"
+        ],
+        "title": "ComputeJobRequest"
+      },
       "ComputeResourceRequirements": {
         "properties": {
           "capability": {
@@ -3836,6 +4813,131 @@
         },
         "type": "object",
         "title": "ComputeResourceRequirements"
+      },
+      "ComputeResultRequest": {
+        "properties": {
+          "worker_id": {
+            "type": "string",
+            "title": "Worker Id"
+          },
+          "attempt": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Attempt"
+          },
+          "fencing_token": {
+            "type": "string",
+            "title": "Fencing Token"
+          },
+          "seq": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Seq"
+          },
+          "report": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Completed"
+              },
+              {
+                "$ref": "#/components/schemas/Pending"
+              },
+              {
+                "$ref": "#/components/schemas/Failed"
+              }
+            ],
+            "title": "Report",
+            "discriminator": {
+              "propertyName": "status",
+              "mapping": {
+                "completed": "#/components/schemas/Completed",
+                "failed": "#/components/schemas/Failed",
+                "pending": "#/components/schemas/Pending"
+              }
+            }
+          },
+          "window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UsageWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stopped": {
+            "type": "boolean",
+            "title": "Stopped"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "worker_id",
+          "attempt",
+          "fencing_token",
+          "seq",
+          "report",
+          "stopped"
+        ],
+        "title": "ComputeResultRequest"
+      },
+      "ComputeResumeContext": {
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/ComputeJob"
+          },
+          "related": {
+            "items": {
+              "$ref": "#/components/schemas/ComputeJob"
+            },
+            "type": "array",
+            "title": "Related"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "job",
+          "related"
+        ],
+        "title": "ComputeResumeContext"
+      },
+      "ComputeUsage": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "title": "Day"
+          },
+          "cpu": {
+            "$ref": "#/components/schemas/ResourceCounter"
+          },
+          "gpu": {
+            "$ref": "#/components/schemas/ResourceCounter"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "allocation_policy": {
+            "type": "string",
+            "title": "Allocation Policy",
+            "default": "proportional_usage_window"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "day",
+          "cpu",
+          "gpu",
+          "sources"
+        ],
+        "title": "ComputeUsage"
       },
       "ContextRef": {
         "properties": {
@@ -4083,6 +5185,122 @@
         ],
         "title": "ErrorPart"
       },
+      "ExecutionError": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ExecutionError"
+      },
+      "ExecutionGrant": {
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/ComputeJob"
+          },
+          "worker_id": {
+            "type": "string",
+            "title": "Worker Id"
+          },
+          "attempt": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Attempt"
+          },
+          "fencing_token": {
+            "type": "string",
+            "title": "Fencing Token"
+          },
+          "stop_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Stop At"
+          },
+          "lease_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Lease Expires At"
+          },
+          "gpu_uuids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gpu Uuids"
+          },
+          "recovered": {
+            "type": "boolean",
+            "title": "Recovered",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "job",
+          "worker_id",
+          "attempt",
+          "fencing_token",
+          "stop_at",
+          "lease_expires_at"
+        ],
+        "title": "ExecutionGrant"
+      },
+      "Failed": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "failed",
+            "title": "Status",
+            "default": "failed"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ExecutionError"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/UsageReport"
+          },
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "type": "array",
+            "title": "Artifacts"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "error",
+          "usage"
+        ],
+        "title": "Failed"
+      },
       "FilePart": {
         "properties": {
           "type": {
@@ -4243,6 +5461,32 @@
         ],
         "title": "GpuReconciliationRequest"
       },
+      "GrantUpdate": {
+        "properties": {
+          "stop_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Stop At"
+          },
+          "lease_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Lease Expires At"
+          },
+          "cancel_requested": {
+            "type": "boolean",
+            "title": "Cancel Requested"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "stop_at",
+          "lease_expires_at",
+          "cancel_requested"
+        ],
+        "title": "GrantUpdate"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -4255,6 +5499,46 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "InternalComputeSubmit": {
+        "properties": {
+          "capability_id": {
+            "type": "string",
+            "title": "Capability Id"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "arguments": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Arguments"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/ComputeBudget"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "tool_call_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Tool Call Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "capability_id",
+          "version",
+          "arguments",
+          "run_id",
+          "tool_call_id"
+        ],
+        "title": "InternalComputeSubmit"
       },
       "McpInvokeResult": {
         "properties": {
@@ -4542,6 +5826,28 @@
           "password"
         ],
         "title": "PasswordUpdateRequest"
+      },
+      "Pending": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "pending",
+            "title": "Status",
+            "default": "pending"
+          },
+          "job_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Job Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "job_id"
+        ],
+        "title": "Pending"
       },
       "ProgressPart": {
         "properties": {
@@ -4849,6 +6155,39 @@
           "instructions"
         ],
         "title": "RegisterSkillRequest"
+      },
+      "ResourceCounter": {
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Limit"
+          },
+          "used": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Used"
+          },
+          "reserved": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Reserved"
+          },
+          "remaining": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Remaining"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "limit",
+          "used",
+          "reserved",
+          "remaining"
+        ],
+        "title": "ResourceCounter"
       },
       "RunRef": {
         "properties": {
@@ -5308,6 +6647,145 @@
         ],
         "title": "UsageEntry"
       },
+      "UsageReceipt": {
+        "properties": {
+          "receipt_id": {
+            "type": "string",
+            "title": "Receipt Id"
+          },
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "accepted_seq": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Accepted Seq"
+          },
+          "payload_hash": {
+            "type": "string",
+            "title": "Payload Hash"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "cancelled",
+              "pending"
+            ],
+            "title": "Status"
+          },
+          "committed": {
+            "type": "boolean",
+            "const": true,
+            "title": "Committed",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "receipt_id",
+          "job_id",
+          "accepted_seq",
+          "payload_hash",
+          "status"
+        ],
+        "title": "UsageReceipt"
+      },
+      "UsageReport": {
+        "properties": {
+          "wall_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wall Ms"
+          },
+          "cpu_core_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpu Core Ms"
+          },
+          "gpu_device_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gpu Device Ms"
+          },
+          "peak_memory_bytes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peak Memory Bytes"
+          },
+          "peak_gpu_memory_bytes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peak Gpu Memory Bytes"
+          },
+          "gpu_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gpu Count"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "service_reported",
+              "measured",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Source"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source"
+        ],
+        "title": "UsageReport"
+      },
       "UsageSnapshot": {
         "properties": {
           "tokens": {
@@ -5333,6 +6811,27 @@
           "gpu"
         ],
         "title": "UsageSnapshot"
+      },
+      "UsageWindow": {
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "UsageWindow"
       },
       "UserIdentity": {
         "properties": {
@@ -5438,6 +6937,21 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WorkerResources": {
+        "properties": {
+          "gpu_uuids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "title": "Gpu Uuids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "WorkerResources"
       }
     },
     "securitySchemes": {

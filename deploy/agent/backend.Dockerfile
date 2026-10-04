@@ -16,12 +16,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 && \
     mkdir -p /data /workspace && chown agent:agent /data /workspace
 COPY pyproject.toml ./
 COPY app ./app
+COPY pskit_compute ./pskit_compute
 RUN python -m pip install --no-cache-dir .
 COPY --from=pi-build /usr/local/bin/node /usr/local/bin/node
 COPY --from=pi-build /opt/pi/node_modules /app/pi/node_modules
 COPY pi/package.json pi/extension.js pi/system-prompt.md ./pi/
 COPY skills ./skills
 COPY scripts/af3_callback_proxy.py ./scripts/af3_callback_proxy.py
+COPY scripts/compute_receiver.py ./scripts/compute_receiver.py
 COPY scripts/agent_data_migrate.py ./scripts/agent_data_migrate.py
 USER agent
 VOLUME /data

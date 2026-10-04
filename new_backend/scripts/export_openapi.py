@@ -3,6 +3,14 @@ from pathlib import Path
 
 from pydantic import TypeAdapter
 
+from app.contracts.compute import (
+    ComputeJob,
+    ComputeServiceManifest,
+    ComputeUsage,
+    ExecutionGrant,
+    ExecutionReport,
+    UsageReceipt,
+)
 from app.contracts.conversation import RunEvent
 from app.main import create_app
 
@@ -17,8 +25,8 @@ def _typescript_type(schema: dict, *, event: bool = False) -> str:
         return json.dumps(schema["const"], ensure_ascii=False)
     if "enum" in schema:
         return " | ".join(json.dumps(value, ensure_ascii=False) for value in schema["enum"])
-    if "anyOf" in schema:
-        return " | ".join(_typescript_type(part) for part in schema["anyOf"])
+    if "anyOf" in schema or "oneOf" in schema:
+        return " | ".join(_typescript_type(part) for part in schema.get("anyOf", schema.get("oneOf", [])))
     kind = schema.get("type")
     if kind == "string":
         return "string"
@@ -33,7 +41,8 @@ def _typescript_type(schema: dict, *, event: bool = False) -> str:
     if kind == "object":
         properties = schema.get("properties", {})
         if not properties:
-            raise ValueError("Event schema object has no properties")
+            values = schema.get("additionalProperties", {})
+            return "Record<string, " + (_typescript_type(values) if isinstance(values, dict) else "unknown") + ">"
         required = set(schema.get("required", []))
         if event:
             # SSE serializes the whole Pydantic model, including these defaulted fields.
@@ -44,6 +53,8 @@ def _typescript_type(schema: dict, *, event: bool = False) -> str:
             for name, value in properties.items()
         ]
         return "{\n" + "\n".join(members) + "\n}"
+    if kind is None:
+        return "unknown"
     raise ValueError(f"Unsupported event schema type: {kind}")
 
 
@@ -65,15 +76,23 @@ def render_event_types(schema: dict) -> str:
 def main() -> None:
     directory = Path(__file__).resolve().parents[2] / "contracts"
     event_schema = TypeAdapter(RunEvent).json_schema()
+    compute_schema = TypeAdapter(ComputeServiceManifest | ComputeJob | ExecutionGrant
+                                 | UsageReceipt | ComputeUsage | ExecutionReport).json_schema()
     for name, schema in (
         ("openapi.json", create_app().openapi()),
         ("run-event.schema.json", event_schema),
+        ("compute.schema.json", compute_schema),
     ):
         (directory / name).write_text(
             json.dumps(schema, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
     frontend_types = directory.parent / "new_frontend" / "src" / "api" / "generated-events.ts"
     frontend_types.write_text(render_event_types(event_schema), encoding="utf-8")
+    compute_types = ["// Generated from contracts/compute.schema.json. Do not edit by hand.", ""]
+    for name, definition in compute_schema["$defs"].items():
+        compute_types.append(f"export type {name} = {_typescript_type(definition)};\n")
+    compute_types.append("export type ExecutionReport = Completed | Pending | Failed;\n")
+    (frontend_types.parent / "generated-compute.ts").write_text("\n".join(compute_types), encoding="utf-8")
 
 
 if __name__ == "__main__":
