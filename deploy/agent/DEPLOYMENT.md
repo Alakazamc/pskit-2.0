@@ -4,6 +4,8 @@
 
 本文借鉴 [ASD-STE100 官方 FAQ](https://www.asd-ste100.org/STE_faq.html)的清晰写作原则。每组命令先说明执行主机和条件，再说明预期结果。中文文档不宣称符合英语标准。系统职责见[架构文档](../../docs/AGENT_ARCHITECTURE.md)。
 
+三个 Compose 项目怎样叠加、容器端口怎样映射，见[Compose 与端口说明](COMPOSE_PORTS.md)。
+
 ## 1. 部署位置
 
 | 主机 | 服务 | 入口 |
