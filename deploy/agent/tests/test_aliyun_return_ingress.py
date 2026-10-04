@@ -68,6 +68,32 @@ def test_public_installer_restores_previous_config_if_reload_fails(tmp_path: Pat
     assert (tmp_path / "reload-count").read_text() == "2"
 
 
+def test_public_installer_waits_for_new_upstream_after_reload(tmp_path: Path):
+    config_dir = tmp_path / "conf.d"
+    config_dir.mkdir()
+    target = config_dir / "agent.bioailab.net.conf"
+    target.write_text("old upstream\n")
+    backup = config_dir / "agent.bioailab.net.conf.pre-aliyun-20261003"
+    backup.write_text("old upstream\n")
+    environment = _fake_commands(tmp_path, curl_status="401")
+    (tmp_path / "bin/systemctl").write_text("#!/bin/sh\nexit 0\n")
+    (tmp_path / "bin/curl").write_text(
+        "#!/bin/sh\n"
+        'count=0; test -f "$FAKE_CURL_COUNT" && count=$(cat "$FAKE_CURL_COUNT"); '
+        'count=$((count+1)); printf "%s" "$count" > "$FAKE_CURL_COUNT"\n'
+        'case "$count" in 1) printf 401;; 2) exit 0;; '
+        '3) printf 502;; *) printf 401;; esac\n'
+    )
+    environment["FAKE_CURL_COUNT"] = str(tmp_path / "curl-count")
+    result = subprocess.run(
+        ["bash", str(PUBLIC)], text=True, capture_output=True, env=environment,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "curl-count").read_text() == "4"
+    assert "proxy_pass http://127.0.0.1:18088" in target.read_text()
+    assert backup.read_text() == "old upstream\n"
+
+
 def test_private_installer_restores_disabled_config_if_reload_fails(tmp_path: Path):
     config_dir = tmp_path / "conf.d"
     config_dir.mkdir()
@@ -81,6 +107,31 @@ def test_private_installer_restores_disabled_config_if_reload_fails(tmp_path: Pa
     assert disabled.read_text() == "listen 10.9.8.1:18184;\n"
     assert not (config_dir / "agent-af3-private.conf").exists()
     assert (tmp_path / "reload-count").read_text() == "2"
+
+
+def test_private_installer_waits_for_nginx_listener_after_reload(tmp_path: Path):
+    config_dir = tmp_path / "conf.d"
+    config_dir.mkdir()
+    disabled = config_dir / "agent-af3-private.conf.disabled-20261002"
+    disabled.write_text("listen 10.9.8.1:18184;\n")
+    environment = _fake_commands(tmp_path, curl_status="404")
+    (tmp_path / "bin/systemctl").write_text("#!/bin/sh\nexit 0\n")
+    (tmp_path / "bin/curl").write_text(
+        "#!/bin/sh\n"
+        'count=0; test -f "$FAKE_CURL_COUNT" && count=$(cat "$FAKE_CURL_COUNT"); '
+        'count=$((count+1)); printf "%s" "$count" > "$FAKE_CURL_COUNT"\n'
+        'if [ "$count" -eq 1 ]; then printf 404; '
+        'elif [ "$count" -eq 2 ]; then printf 000; exit 7; '
+        'else printf 403; fi\n'
+    )
+    environment["FAKE_CURL_COUNT"] = str(tmp_path / "curl-count")
+    result = subprocess.run(
+        ["bash", str(PRIVATE)], text=True, capture_output=True, env=environment,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "curl-count").read_text() == "3"
+    assert (config_dir / "agent-af3-private.conf").exists()
+    assert not disabled.exists()
 
 
 def test_private_ingress_allows_only_a6000():

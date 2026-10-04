@@ -16,8 +16,10 @@ backup_conf="$conf_dir/agent.bioailab.net.conf.pre-aliyun-20261003"
 test -f "$source_conf"
 test -f "$target_conf"
 if [ -e "$backup_conf" ]; then
-    echo "Review the existing rollback copy before another cutover: $backup_conf" >&2
-    exit 1
+    if ! cmp -s -- "$target_conf" "$backup_conf"; then
+        echo "Review the existing rollback copy before another cutover: $backup_conf" >&2
+        exit 1
+    fi
 fi
 
 status="$(curl --noproxy '*' --connect-timeout 5 --max-time 10 -sS \
@@ -27,7 +29,9 @@ if [ "$status" != 401 ]; then
     exit 1
 fi
 
-cp -a -- "$target_conf" "$backup_conf"
+if [ ! -e "$backup_conf" ]; then
+    cp -a -- "$target_conf" "$backup_conf"
+fi
 install -m 0644 "$source_conf" "$target_conf"
 
 restore_previous() {
@@ -49,13 +53,21 @@ if ! curl --noproxy '*' --resolve agent.bioailab.net:443:127.0.0.1 \
     exit 1
 fi
 
-status="$(curl --noproxy '*' --resolve agent.bioailab.net:443:127.0.0.1 \
-    --connect-timeout 5 --max-time 10 -sS -o /dev/null -w '%{http_code}' \
-    https://agent.bioailab.net/api/v1/usage)" || {
-    restore_previous
-    echo "Public API probe failed; previous configuration restored" >&2
-    exit 1
-}
+# systemctl signals Nginx before its replacement workers necessarily accept
+# requests; the old worker can briefly return 502 for the stopped A6000 API.
+status=000
+for attempt in {1..20}; do
+    status="$(curl --noproxy '*' --resolve agent.bioailab.net:443:127.0.0.1 \
+        --connect-timeout 1 --max-time 2 -s -o /dev/null -w '%{http_code}' \
+        https://agent.bioailab.net/api/v1/usage || true)"
+    if [ "$status" = 401 ]; then
+        break
+    fi
+    if [ "$status" != 000 ] && [ "$status" != 502 ]; then
+        break
+    fi
+    sleep 0.25
+done
 if [ "$status" != 401 ]; then
     restore_previous
     echo "Public API returned HTTP $status; previous configuration restored" >&2

@@ -36,17 +36,24 @@ if ! nginx -t || ! systemctl reload nginx; then
     exit 1
 fi
 
+# systemctl returns once it signals Nginx; the new listener may appear shortly after.
 # The cloud host itself is not the allowed A6000 source.
-status="$(curl --noproxy '*' --connect-timeout 5 --max-time 10 -sS \
-    -o /dev/null -w '%{http_code}' \
-    'http://10.9.8.1:18184/internal/compute/af3/jobs/owned?worker_id=a6000-af3-cloud-1')" || {
-    restore_previous
-    echo "AF3 private ingress probe failed; disabled configuration restored" >&2
-    exit 1
-}
+status=000
+for attempt in {1..20}; do
+    status="$(curl --noproxy '*' --connect-timeout 1 --max-time 2 -s \
+        -o /dev/null -w '%{http_code}' \
+        'http://10.9.8.1:18184/internal/compute/af3/jobs/owned?worker_id=a6000-af3-cloud-1' || true)"
+    if [ "$status" = 403 ]; then
+        break
+    fi
+    if [ "$status" != 000 ]; then
+        break
+    fi
+    sleep 0.25
+done
 if [ "$status" != 403 ]; then
     restore_previous
-    echo "AF3 private ingress source restriction failed; configuration restored" >&2
+    echo "AF3 private ingress probe returned HTTP $status; configuration restored" >&2
     exit 1
 fi
 
