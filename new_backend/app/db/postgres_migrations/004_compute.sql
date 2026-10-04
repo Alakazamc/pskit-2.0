@@ -28,3 +28,14 @@ CREATE TABLE compute_usage_daily (
 );
 CREATE INDEX compute_usage_owner_day ON compute_usage_daily(user_id,day);
 CREATE TABLE compute_cpu_limits (user_id text PRIMARY KEY, limit_ms bigint NOT NULL CHECK(limit_ms>=0));
+CREATE TABLE compute_device_leases (
+    gpu_uuid text PRIMARY KEY, job_id text NOT NULL REFERENCES agent_jobs(id)
+);
+CREATE TABLE compute_result_receipts (
+    job_id text NOT NULL REFERENCES agent_jobs(id), seq bigint NOT NULL,
+    payload_hash text NOT NULL, receipt_json jsonb NOT NULL, PRIMARY KEY(job_id,seq)
+);
+CREATE TABLE compute_outbox (
+    job_id text PRIMARY KEY REFERENCES agent_jobs(id), run_id text,
+    created_at timestamptz NOT NULL DEFAULT now(), consumed_at timestamptz
+);

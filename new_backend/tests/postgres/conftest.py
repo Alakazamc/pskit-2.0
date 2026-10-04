@@ -4,6 +4,7 @@ import os
 import uuid
 
 import pytest
+from compute_support import ledger_system  # noqa: F401
 
 
 @pytest.fixture

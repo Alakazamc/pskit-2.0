@@ -75,6 +75,7 @@ class CapabilityVersion(Contract):
     allowed_users: list[str] | None = None
     gpu_count: Count = 0
     max_budget: ComputeBudget = Field(default_factory=ComputeBudget)
+    concurrency: Positive = 1
     max_execution_seconds: Positive = 1800
     cancellation: Literal["none", "cooperative", "confirmed_stop"] = "cooperative"
     limit_mode: Literal["soft", "hard"] = "soft"
@@ -143,6 +144,7 @@ class ExecutionGrant(Contract):
     stop_at: datetime
     lease_expires_at: datetime
     gpu_uuids: list[str] = Field(default_factory=list)
+    recovered: bool = False
 
 
 class UsageWindow(Contract):
@@ -163,7 +165,7 @@ class ComputeResultRequest(Contract):
     seq: Positive
     report: ExecutionReport
     window: UsageWindow | None = None
-    stopped: bool = True
+    stopped: bool
 
 
 class ComputeHeartbeatRequest(Contract):

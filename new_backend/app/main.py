@@ -30,6 +30,7 @@ from app.api import (
     guest_auth,
     health,
     internal,
+    internal_compute,
     metrics,
     models,
     runs,
@@ -263,6 +264,7 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
     app.state.settings = settings
     app.state.database = database
     app.state.compute_jobs = None
+    app.state.compute_leases = None
     if settings.compute_enabled:
         if database is None:
             raise ValueError("Generic compute requires live PostgreSQL mode")
@@ -402,6 +404,9 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
             database, cpu_daily_limit_ms=settings.compute_cpu_daily_limit_ms,
             gpu_limit_for=app.state.conversations._gpu_limit_for,
         )
+    if app.state.compute_jobs is not None:
+        from app.domain.compute.leases import ComputeLeases
+        app.state.compute_leases = ComputeLeases(database, app.state.compute_jobs.ledger)
     app.state.af3 = (
         DisabledAf3() if af3_executor == "disabled" else
         MockAf3(app.state.quotas, app.state.conversations)
@@ -418,6 +423,7 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
     app.include_router(models.router)
     app.include_router(workspace.router)
     app.include_router(internal.router)
+    app.include_router(internal_compute.router)
     app.include_router(admin.router)
     app.include_router(health.router)
     app.include_router(metrics.router)
