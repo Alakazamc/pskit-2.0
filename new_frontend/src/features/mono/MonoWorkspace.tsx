@@ -126,8 +126,8 @@ export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = (
   const pendingSend = useRef<{ sessionId: string; body: string; key: string } | null>(null);
   useEffect(() => { window.localStorage.setItem("pskit-theme", theme); document.documentElement.dataset.theme = theme; }, [theme]);
   const projects = useQuery({ queryKey: ["projects", user.id], queryFn: api.getProjects });
-  const personalSessions = useQuery({ queryKey: ["sessions", user.id, personalProjectId], queryFn: () => api.getSessions(null) });
-  const projectSessions = useQuery({ queryKey: ["sessions", user.id, activeProjectId], queryFn: () => api.getSessions(activeProjectId!), enabled: !!activeProjectId });
+  const personalSessions = useQuery({ queryKey: ["sessions", user.id, personalProjectId], queryFn: () => api.getSessions(null), refetchInterval: (query) => !query.state.error && query.state.data?.some((session) => session.title_status === "pending") ? 1000 : false });
+  const projectSessions = useQuery({ queryKey: ["sessions", user.id, activeProjectId], queryFn: () => api.getSessions(activeProjectId!), enabled: !!activeProjectId, refetchInterval: (query) => !query.state.error && query.state.data?.some((session) => session.title_status === "pending") ? 1000 : false });
   const messages = useQuery({ queryKey: ["messages", user.id, activeSessionId], queryFn: () => api.getMessages(activeSessionId!, activeProjectId), enabled: !!activeSessionId });
   const skills = useQuery({ queryKey: ["skills", user.id], queryFn: api.getSkills });
   const resources = useQuery({ queryKey: ["resources", user.id], queryFn: api.getResources });
@@ -137,12 +137,22 @@ export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = (
   const allSessions = activeProjectId ? projectSessions.data ?? [] : personalSessions.data ?? [];
   const listedSession = allSessions.find((session) => session.id === activeSessionId && session.project_id === (activeProjectId ?? personalProjectId));
   const sessionListPending = activeProjectId ? projectSessions.isPending : personalSessions.isPending;
-  const sessionLookup = useQuery({ queryKey: ["session", user.id, activeSessionId], queryFn: () => api.getSession(activeSessionId!, activeProjectId), enabled: !!activeSessionId && !listedSession && !sessionListPending });
+  const sessionLookup = useQuery({ queryKey: ["session", user.id, activeSessionId], queryFn: () => api.getSession(activeSessionId!, activeProjectId), enabled: !!activeSessionId && !listedSession && !sessionListPending, refetchInterval: (query) => !query.state.error && query.state.data?.title_status === "pending" ? 1000 : false });
   const currentSession = listedSession ?? (sessionLookup.data?.project_id === (activeProjectId ?? personalProjectId) ? sessionLookup.data : undefined);
+  const previousTitleStatus = useRef({ sessionId: currentSession?.id, status: currentSession?.title_status });
+  useEffect(() => {
+    if (previousTitleStatus.current.sessionId === currentSession?.id && previousTitleStatus.current.status === "pending" && currentSession?.title_status !== "pending") {
+      for (const resource of ["usage", "usage-entries", "usage-activity"]) {
+        void queryClient.invalidateQueries({ queryKey: [resource, user.id] });
+      }
+    }
+    previousTitleStatus.current = { sessionId: currentSession?.id, status: currentSession?.title_status };
+  }, [currentSession?.id, currentSession?.title_status, queryClient, user.id]);
   const visibleRunId = submitting ? null : currentRun?.sessionId === activeSessionId ? currentRun.runId : currentSession?.latest_run_id ?? null;
   const onRunCompleted = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["messages", user.id, activeSessionId] });
     void queryClient.invalidateQueries({ queryKey: ["sessions", user.id, activeProjectId ?? personalProjectId] });
+    void queryClient.invalidateQueries({ queryKey: ["session", user.id, activeSessionId] });
     void queryClient.invalidateQueries({ queryKey: ["usage", user.id] });
     void queryClient.invalidateQueries({ queryKey: ["usage-entries", user.id] });
     void queryClient.invalidateQueries({ queryKey: ["usage-activity", user.id] });
@@ -179,7 +189,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = (
       let createdSession = false;
       if (!targetSessionId) {
         const title = payload.content.trim().replace(/\s+/g, " ").slice(0, 48);
-        const created = await api.createSession(activeProjectId, title);
+        const created = await api.createSession(activeProjectId, title, true);
         targetSessionId = created.id;
         createdSession = true;
         moveComposerDraft(draftScope, conversationDraftScope(user.id, created.id));

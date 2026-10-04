@@ -14,6 +14,10 @@
 - On accepted sends, clear the submitted content while preserving model preferences and any newer typing. Retain rejected submissions. Bind asynchronous uploads and send completion to their originating draft; reset transient controls on conversation changes.
 - Cache only the necessary draft fields. Keep file contents, temporary blob URLs and credentials out of draft storage, and keep preference persistence entirely in the browser. Verify switching, refresh, account isolation and late completions through the UI; unavailable storage must leave the current composer usable.
 
+## Conversation titles
+
+- New chats opt into server-side automatic naming after the first complete assistant reply. Use the first user text as a temporary title. Naming is a separate, quota-accounted request; it neither enters Pi's transcript nor keeps Send/Stop waiting after the reply finishes. Preserve manually renamed and historical titles. Refresh pending title snapshots until generation settles or a network error occurs, then stop refreshing; update the sidebar/header without clearing drafts or changing the selected model.
+
 ## Catalog cards and detail panels
 
 - Sidebar destinations with catalogs (Tools, Skills, resources, projects and artifacts; future MCP catalogs) reuse `src/components/catalog/CatalogCard.tsx` and `src/styles/catalog.css`. At normal zoom, use a 100 px wide grid with cards approximately 80 px tall and 10 px gaps. Keep entries compact as the viewport grows; allow height to grow for text scaling. Show only an icon, name (up to two lines) and one short description; keep full content and actions in the detail panel.

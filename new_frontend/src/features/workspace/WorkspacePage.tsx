@@ -90,7 +90,7 @@ export function WorkspacePage({ api, user, onLogout }: { api: ResearchApi; user:
   };
   const createSession = async (title: string) => {
     if (!projectId) return;
-    const session = await api.createSession(scopeProjectId ?? null, title);
+    const session = await api.createSession(scopeProjectId ?? null, title, true);
     await query.invalidateQueries({ queryKey: ["sessions", user.id, projectId] });
     selectSession(projectId, session.id);
   };

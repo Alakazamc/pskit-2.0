@@ -21,7 +21,7 @@ export function ToolAgentAction({ api, tool, result }: {
     pending.current ??= { key: crypto.randomUUID() };
     try {
       const sessionId = pending.current.sessionId ??
-        (await api.createSession(null, `${tool.slice(0, 110)} · Agent`)).id;
+        (await api.createSession(null, `${tool.slice(0, 110)} · Agent`, true)).id;
       pending.current.sessionId = sessionId;
       const serialized = JSON.stringify(result, null, 2);
       const excerpt = serialized.slice(0, 12_000);

@@ -85,7 +85,7 @@ export interface ResearchApi extends AdminApi {
   setProjectSkills(id: string, settings: ProjectSkillSettings): Promise<ProjectSkillSettings>;
   getSessions(projectId: string | null): Promise<Session[]>;
   getSession(id: string, projectId?: string | null): Promise<Session>;
-  createSession(projectId: string | null, title: string): Promise<Session>;
+  createSession(projectId: string | null, title: string, autoTitle?: boolean): Promise<Session>;
   renameSession(id: string, title: string, projectId?: string | null): Promise<Session>;
   archiveSession(id: string, projectId?: string | null): Promise<void>;
   moveSession(id: string, targetProjectId: string, sourceProjectId?: string | null): Promise<Session>;

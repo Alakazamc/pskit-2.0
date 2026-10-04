@@ -2123,6 +2123,10 @@ export type Session = {
      * Latest Run Id
      */
     latest_run_id?: string | null;
+    /**
+     * Title Status
+     */
+    title_status?: 'idle' | 'pending' | 'generated' | 'failed' | 'manual';
 };
 
 /**
@@ -2133,6 +2137,10 @@ export type SessionCreate = {
      * Title
      */
     title: string;
+    /**
+     * Auto Title
+     */
+    auto_title?: boolean;
 };
 
 /**

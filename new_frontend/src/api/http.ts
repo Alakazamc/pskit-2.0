@@ -92,7 +92,7 @@ export function createHttpApi({ baseUrl = "/api/v1", token, fetcher = fetch, onU
     setProjectSkills: (id, settings) => request(`${projectPath(id)}/skills`, { method: "PUT", body: JSON.stringify(settings) }),
     getSessions: (projectId) => request(projectId ? `${projectPath(projectId)}/c` : "/c"),
     getSession: (id, projectId) => request(chatPath(id, projectId)),
-    createSession: (projectId, title) => post(projectId ? `${projectPath(projectId)}/c` : "/c", { title }),
+    createSession: (projectId, title, autoTitle = false) => post(projectId ? `${projectPath(projectId)}/c` : "/c", { title, ...(autoTitle ? { auto_title: true } : {}) }),
     renameSession: (id, title, projectId) => request(chatPath(id, projectId), { method: "PATCH", body: JSON.stringify({ title }) }),
     archiveSession: (id, projectId) => remove(chatPath(id, projectId)),
     moveSession: (id, targetProjectId, sourceProjectId) => request(`${chatPath(id, sourceProjectId)}/project`, { method: "PATCH", body: JSON.stringify({ project_id: targetProjectId }) }),
