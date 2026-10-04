@@ -396,6 +396,12 @@ def create_app(settings: Settings | None = None, *, pi_runner=None, mcp_provider
         app.state.quotas.identity_policy = app.state.identity_policy
     for user_id, limit in settings.user_token_limits().items():
         app.state.quotas.seed_token_limit(user_id, limit)
+    if app.state.compute_jobs is not None:
+        from app.domain.compute.ledger import ComputeLedger
+        app.state.compute_jobs.ledger = ComputeLedger(
+            database, cpu_daily_limit_ms=settings.compute_cpu_daily_limit_ms,
+            gpu_limit_for=app.state.conversations._gpu_limit_for,
+        )
     app.state.af3 = (
         DisabledAf3() if af3_executor == "disabled" else
         MockAf3(app.state.quotas, app.state.conversations)

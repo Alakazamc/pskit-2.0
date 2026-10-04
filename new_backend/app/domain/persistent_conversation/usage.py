@@ -56,6 +56,21 @@ class UsageMixin:
             "AND gpu_accounting_status IN ('reserved','pending_reconciliation')",
             (user_id, day),
         ).fetchone()[0]
+        if getattr(self, "database", None) is not None:
+            # Generic entries use milliseconds; legacy admission rounds only its display
+            # projection, so fractions cannot bypass the old minute-based quota gate.
+            usage = self.db.execute(
+                "SELECT COALESCE(SUM(gpu_ms),0) FROM compute_usage_daily "
+                "WHERE user_id=? AND day=?", (user_id, day),
+            ).fetchone()[0]
+            held = self.db.execute(
+                "SELECT COALESCE(SUM(GREATEST(r.gpu_ms-COALESCE(u.used,0),0)),0) "
+                "FROM compute_reservations r LEFT JOIN (SELECT job_id,SUM(gpu_ms) used "
+                "FROM compute_usage_daily GROUP BY job_id) u USING(job_id) "
+                "WHERE r.user_id=? AND r.active", (user_id,),
+            ).fetchone()[0]
+            actual += (int(usage)+59999)//60000
+            reserved += (int(held)+59999)//60000
         return actual, reserved
 
     def usage_for(self, user_id: str) -> UsageSnapshot:
