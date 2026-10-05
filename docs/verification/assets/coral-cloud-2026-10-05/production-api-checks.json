@@ -1,0 +1,19 @@
+{
+  "stage": false,
+  "login": 200,
+  "checks": {
+    "/api/v1/me": 200,
+    "/api/v1/models": 200,
+    "/api/v1/usage": 200,
+    "/api/v1/usage/activity?days=365": 200,
+    "/api/v1/compute/capabilities": 200,
+    "/api/v1/compute/jobs?capability_id=coral.generate_rna&limit=30": 200,
+    "/api/v1/compute/jobs?limit=0": 422,
+    "/api/v1/compute/jobs/nonexistent-coral-smoke": 404
+  },
+  "model_count": 21,
+  "coral_service_connected": false,
+  "unregistered_job_rejected": true,
+  "index_sha256": "9b8d44a50ad8239720ef4826f0835c5145ba3ccb76e61883c015863743ff0bfd",
+  "image_id": "sha256:8b26bb6ff078f8f015d740130c4cf1fd562fa27353fb06fa1c1138cce564c50e"
+}

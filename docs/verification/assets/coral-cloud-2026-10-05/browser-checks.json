@@ -1,0 +1,114 @@
+[
+  {
+    "theme": "dark",
+    "width": 1360,
+    "card": {
+      "x": 400,
+      "y": 139,
+      "width": 100,
+      "height": 80
+    },
+    "focus": {
+      "outline": "none",
+      "shadow": "none"
+    },
+    "panel": {
+      "x": 210,
+      "y": 97.15625,
+      "width": 940,
+      "height": 755.6875
+    },
+    "upload_sizes": [
+      899910,
+      268984
+    ],
+    "download_bytes": 1168894,
+    "prompt_size": 1397,
+    "mobile_edit_or_keyboard_scroll": true,
+    "page_errors": []
+  },
+  {
+    "theme": "dark",
+    "width": 390,
+    "card": {
+      "x": 125,
+      "y": 135,
+      "width": 100,
+      "height": 80
+    },
+    "focus": {
+      "outline": "none",
+      "shadow": "none"
+    },
+    "panel": {
+      "x": 10,
+      "y": 10,
+      "width": 370,
+      "height": 930
+    },
+    "upload_sizes": [
+      899910,
+      268984
+    ],
+    "download_bytes": 1168894,
+    "prompt_size": 1397,
+    "mobile_edit_or_keyboard_scroll": true,
+    "page_errors": []
+  },
+  {
+    "theme": "light",
+    "width": 1360,
+    "card": {
+      "x": 400,
+      "y": 139,
+      "width": 100,
+      "height": 80
+    },
+    "focus": {
+      "outline": "none",
+      "shadow": "none"
+    },
+    "panel": {
+      "x": 210,
+      "y": 97.15625,
+      "width": 940,
+      "height": 755.6875
+    },
+    "upload_sizes": [
+      899910,
+      268984
+    ],
+    "download_bytes": 1168894,
+    "prompt_size": 1397,
+    "mobile_edit_or_keyboard_scroll": true,
+    "page_errors": []
+  },
+  {
+    "theme": "light",
+    "width": 390,
+    "card": {
+      "x": 125,
+      "y": 135,
+      "width": 100,
+      "height": 80
+    },
+    "focus": {
+      "outline": "none",
+      "shadow": "none"
+    },
+    "panel": {
+      "x": 10,
+      "y": 10,
+      "width": 370,
+      "height": 930
+    },
+    "upload_sizes": [
+      899910,
+      268984
+    ],
+    "download_bytes": 1168894,
+    "prompt_size": 1397,
+    "mobile_edit_or_keyboard_scroll": true,
+    "page_errors": []
+  }
+]
