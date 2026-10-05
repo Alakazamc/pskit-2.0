@@ -7,10 +7,11 @@ import { DetailPanel } from "../../components/catalog/DetailPanel";
 import { useWorkspacePortalContainer } from "../../hooks/useWorkspacePortalContainer";
 import { useLanguage } from "../../i18n/LanguageProvider";
 
-export function ConversationArtifacts({ api, userId, sessionId, runActive }: {
+export function ConversationArtifacts({ api, userId, sessionId, sessionTitle, runActive }: {
   api: ResearchApi;
   userId: string;
   sessionId: string;
+  sessionTitle: string;
   runActive: boolean;
 }) {
   const { t } = useLanguage();
@@ -62,8 +63,11 @@ export function ConversationArtifacts({ api, userId, sessionId, runActive }: {
         <FolderOpen size={17} aria-hidden="true" /><span>{t("artifact.title")}</span>
         {!!artifacts.data?.length && <small aria-hidden="true">{artifacts.data.length}</small>}
       </button></Popover.Trigger>
-      <Popover.Portal container={portalContainer}><Popover.Content className="conversation-artifacts-popover" align="end" sideOffset={8}>
-        <div className="conversation-artifacts-heading">{t("artifact.title")}</div>
+      <Popover.Portal container={portalContainer}><Popover.Content className="conversation-artifacts-popover" align="end" sideOffset={8} collisionPadding={12}>
+        <div className="conversation-artifacts-session" title={sessionTitle}>{sessionTitle}</div>
+        <div className="conversation-artifacts-heading"><FolderOpen size={16} aria-hidden="true" /><span>{t("artifact.outputs")}</span>
+          {artifacts.isSuccess && <small>{artifacts.data.length}</small>}
+        </div>
         {artifacts.isPending && <p role="status">{t("workspace.loadingCatalog")}</p>}
         {artifacts.isError && <p role="alert">{t("artifact.loadFailed")}</p>}
         {artifacts.isSuccess && artifacts.data.length === 0 && <p>{t("artifact.empty")}</p>}

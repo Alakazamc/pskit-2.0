@@ -20,7 +20,7 @@
 
 ## Conversation artifacts
 
-- Put one compact Artifacts button at the upper right of an existing conversation's chat header. Open a small list for that conversation only; keep preview and download in its detail panel. Fetch through an owned session-scoped API and refresh when the Run produces new outputs. Keep artifacts out of the sidebar.
+- Put one compact Artifacts button at the upper right of an existing conversation's chat header. Open a compact popover named for the current conversation with only one "Outputs / 产出" section; do not add change, subagent, source, or other tabs. List that conversation's outputs only; keep preview and download in its detail panel. Fetch through an owned session-scoped API and refresh when the Run produces new outputs. Keep artifacts out of the sidebar.
 - A new chat without a session has no artifact control. Switching conversations resets the open list and preview to the newly selected session. Legacy `/artifacts` links return to the chat entry instead of showing an all-session catalog.
 
 ## Catalog cards and detail panels

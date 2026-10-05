@@ -5,11 +5,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .mono-header-action{height:32px;border:0;background:transparent;color:var(--mono-muted);display:flex;align-items:center;gap:6px;padding:0 9px;border-radius:8px;font-size:12px;text-decoration:none;white-space:nowrap}
 .mono-header-action:hover{background:var(--mono-hover);color:var(--mono-text)}
 .conversation-artifacts-trigger small{min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--mono-subtle);color:var(--mono-muted);display:grid;place-items:center;font-size:10px}
-.conversation-artifacts-popover{z-index:180;width:min(320px,calc(100vw - 24px));max-height:min(400px,calc(100dvh - 86px));overflow:auto;padding:10px;border:1px solid var(--mono-border);border-radius:12px;background:var(--mono-surface);color:var(--mono-text);box-shadow:0 12px 36px #0003}
-.conversation-artifacts-heading{padding:5px 8px 8px;font-size:12px;font-weight:650}
-.conversation-artifacts-popover>p{margin:8px;padding:4px 0;color:var(--mono-muted);font-size:12px}
-.conversation-artifacts-list{display:grid;gap:2px}
-.conversation-artifacts-list button{width:100%;display:flex;align-items:center;gap:10px;text-align:left;padding:9px 8px;border:0;border-radius:8px;background:transparent;color:var(--mono-text);cursor:pointer}
+.conversation-artifacts-popover{z-index:180;width:min(380px,calc(100vw - 24px));max-height:min(440px,calc(100dvh - 86px));overflow:auto;padding:15px 18px 14px;border:1px solid var(--mono-border);border-radius:16px;background:var(--mono-surface);color:var(--mono-text);box-shadow:0 18px 48px #0004}
+.conversation-artifacts-session{margin:0 2px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mono-muted);font-size:12px}
+.conversation-artifacts-heading{display:flex;align-items:center;gap:10px;min-height:35px;padding:0 2px 10px;border-bottom:1px solid var(--mono-border);font-size:13px;font-weight:650}
+.conversation-artifacts-heading svg{color:var(--mono-muted)}
+.conversation-artifacts-heading small{margin-left:auto;color:var(--mono-muted);font-size:11px;font-weight:450}
+.conversation-artifacts-popover>p{margin:13px 2px 3px;color:var(--mono-muted);font-size:12px}
+.conversation-artifacts-list{display:grid;gap:2px;padding-top:7px}
+.conversation-artifacts-list button{width:100%;display:flex;align-items:center;gap:10px;text-align:left;padding:10px 4px;border:0;border-radius:8px;background:transparent;color:var(--mono-text);cursor:pointer}
 .conversation-artifacts-list button:hover,.conversation-artifacts-list button:focus-visible{background:var(--mono-hover)}
 .conversation-artifacts-list button>svg{flex:none;color:var(--mono-muted)}
 .conversation-artifacts-list button>span{min-width:0;display:grid;gap:2px}

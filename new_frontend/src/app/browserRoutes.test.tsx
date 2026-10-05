@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -46,7 +46,12 @@ it("opens artifacts for the current chat from the upper-right control instead of
   expect(screen.queryByRole("link", { name: "产物" })).not.toBeInTheDocument();
   const actor = userEvent.setup();
   await actor.click(await screen.findByRole("button", { name: "产物" }));
-  expect(await screen.findByText("structure.cif")).toBeInTheDocument();
+  const panel = screen.getByRole("dialog");
+  expect(within(panel).getByText("Personal research")).toBeInTheDocument();
+  expect(within(panel).getByText("产出")).toBeInTheDocument();
+  expect(within(panel).queryByText("来源")).not.toBeInTheDocument();
+  expect(within(panel).queryByText("变更")).not.toBeInTheDocument();
+  expect(await within(panel).findByText("structure.cif")).toBeInTheDocument();
   expect(fetch).toHaveBeenCalledWith(
     "/api/v1/sessions/session-alice/artifacts", expect.any(Object),
   );
