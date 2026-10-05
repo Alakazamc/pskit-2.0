@@ -217,6 +217,13 @@ class ConversationStore:
         return next((session for session in self.sessions_for(user_id, project_id) or []
                      if session.id == session_id), None)
 
+    def session_id_for_run(self, user_id: str, run_id: str) -> str | None:
+        """Resolve an in-memory Run to its owner's active conversation."""
+        run = self._runs.get(run_id)
+        if run is None or run[0] != user_id or not self._owns_session(user_id, run[1]):
+            return None
+        return run[1]
+
     def set_project_skill_settings(
         self, user_id: str, project_id: str, settings: ProjectSkillSettings,
     ) -> ProjectSkillSettings | None:

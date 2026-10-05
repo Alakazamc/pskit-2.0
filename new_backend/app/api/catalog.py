@@ -152,10 +152,14 @@ def _workspace_artifacts(request: Request):
     return transfer.artifacts if transfer is not None else None
 
 
-def _artifact_metadata(request: Request, user_id: str, af3):
-    items = af3.artifacts_for(user_id)
+def _artifact_metadata(request: Request, user_id: str, af3, session_id: str | None = None):
+    items = af3.artifacts_for(user_id) if session_id is None else af3.artifacts_for(user_id, session_id)
     workspace = _workspace_artifacts(request)
-    return items + [item.model_dump() for item in workspace.list(user_id)] if workspace else items
+    if workspace is None:
+        return items
+    workspace_items = (workspace.list(user_id) if session_id is None
+                       else workspace.list(user_id, session_id))
+    return items + [item.model_dump() for item in workspace_items]
 
 
 def _artifact_bytes(request: Request, user_id: str, artifact_id: str, af3):
@@ -168,6 +172,17 @@ def _artifact_bytes(request: Request, user_id: str, artifact_id: str, af3):
 async def list_artifacts(user: CurrentUserDep, af3: Af3Dep, request: Request) -> list[ArtifactRef]:
     """List AF3 artifact metadata visible to the user."""
     return [ArtifactRef(**artifact) for artifact in _artifact_metadata(request, user.id, af3)]
+
+
+@router.get("/sessions/{session_id}/artifacts")
+async def list_session_artifacts(
+    session_id: str, user: CurrentUserDep, af3: Af3Dep, request: Request,
+) -> list[ArtifactRef]:
+    """List only artifacts from an active conversation owned by the caller."""
+    if request.app.state.conversations.project_id_for_session(user.id, session_id) is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return [ArtifactRef(**artifact) for artifact in
+            _artifact_metadata(request, user.id, af3, session_id)]
 
 
 @router.get("/artifacts/{artifact_id}/preview")

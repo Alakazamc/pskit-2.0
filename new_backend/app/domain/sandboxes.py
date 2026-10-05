@@ -422,9 +422,11 @@ class SandboxArtifactStore:
             id=artifact_id, name=name, kind="file", available=True, size=len(content), sha256=digest
         )
 
-    def list(self, user_id):
+    def list(self, user_id, session_id=None):
         from app.contracts.catalog import ArtifactRef
 
+        where = "AND a.session_id=?" if session_id is not None else ""
+        params = (user_id, user_id, session_id) if session_id is not None else (user_id, user_id)
         return [
             ArtifactRef(
                 id=row[0], name=row[1], kind=row[2], available=True, size=row[3], sha256=row[4]
@@ -432,8 +434,8 @@ class SandboxArtifactStore:
             for row in self.db.execute(
                 "SELECT b.id,b.name,b.kind,b.size,b.sha256 "
                 "FROM agent_artifact_blobs b JOIN sandbox_artifacts a ON a.id=b.id "
-                "WHERE a.user_id=? AND b.user_id=? ORDER BY b.created_at",
-                (user_id, user_id),
+                f"WHERE a.user_id=? AND b.user_id=? {where} ORDER BY b.created_at",
+                params,
             )
         ]
 

@@ -18,9 +18,14 @@
 
 - New chats opt into server-side automatic naming after the first complete assistant reply. Use the first user text as a temporary title. Naming is a separate, quota-accounted request; it neither enters Pi's transcript nor keeps Send/Stop waiting after the reply finishes. Preserve manually renamed and historical titles. Refresh pending title snapshots until generation settles or a network error occurs, then stop refreshing; update the sidebar/header without clearing drafts or changing the selected model.
 
+## Conversation artifacts
+
+- Put one compact Artifacts button at the upper right of an existing conversation's chat header. Open a small list for that conversation only; keep preview and download in its detail panel. Fetch through an owned session-scoped API and refresh when the Run produces new outputs. Keep artifacts out of the sidebar.
+- A new chat without a session has no artifact control. Switching conversations resets the open list and preview to the newly selected session. Legacy `/artifacts` links return to the chat entry instead of showing an all-session catalog.
+
 ## Catalog cards and detail panels
 
-- Sidebar destinations with catalogs (Tools, Skills, resources, projects and artifacts; future MCP catalogs) reuse `src/components/catalog/CatalogCard.tsx` and `src/styles/catalog.css`. At normal zoom, use a 100 px wide grid with cards approximately 80 px tall and 10 px gaps. Keep entries compact as the viewport grows; allow height to grow for text scaling. Show only an icon, name (up to two lines) and one short description; keep full content and actions in the detail panel.
+- Sidebar destinations with catalogs (Tools, Skills, resources and projects; future MCP catalogs) reuse `src/components/catalog/CatalogCard.tsx` and `src/styles/catalog.css`. At normal zoom, use a 100 px wide grid with cards approximately 80 px tall and 10 px gaps. Keep entries compact as the viewport grows; allow height to grow for text scaling. Show only an icon, name (up to two lines) and one short description; keep full content and actions in the detail panel.
 - Add a borderless search field for large catalogs, filtering names and descriptions. Use theme tokens in both themes and show loading, empty, no-match and error states. Keep each card one keyboard-accessible action with its full name and a visible focus state.
 - Open details using the shared `DetailPanel.tsx`, centered over the retained directory. Keep long content scrollable within the viewport, support Escape/Close and return focus to the opening card. Project cards may open their existing project workspace. Chat messages, usage summaries and form sections retain their purpose-specific layouts.
 - Put the slanted pencil at the detail panel's top right when the user has an authorized edit operation. Editing exposes actual editable fields (or a file tree and content editor for Skill packages when supported); save/cancel actions must follow a real write contract. Tool pencils focus editable invocation parameters. Public read-only catalogs show details without a pretend save action.

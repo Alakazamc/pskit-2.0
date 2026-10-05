@@ -107,6 +107,7 @@ export interface ResearchApi extends AdminApi {
   downloadFile(id: string): Promise<Blob>;
   deleteFile(id: string): Promise<void>;
   getArtifacts(): Promise<ArtifactRef[]>;
+  getSessionArtifacts(sessionId: string): Promise<ArtifactRef[]>;
   getArtifactPreview(id: string): Promise<ArtifactPreview>;
   downloadArtifact(id: string): Promise<Blob>;
   sendMessage(sessionId: string, message: MessageRequest, idempotencyKey?: string, projectId?: string | null): Promise<{ run_id: string }>;

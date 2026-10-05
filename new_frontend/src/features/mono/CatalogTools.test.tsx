@@ -99,26 +99,29 @@ it("searches compact skill cards and opens their full details without leaving th
   expect(screen.getByText("No matching items")).toBeInTheDocument();
 }, 15_000);
 
-it("reuses directory cards for artifacts and puts preview and download in the detail panel", async () => {
+it("opens a conversation artifact from its header and keeps preview and download in the detail panel", async () => {
   window.localStorage.setItem("research_access_token", "demo-token");
   window.localStorage.setItem("research_language", "en");
-  window.history.replaceState(null, "", "/artifacts");
+  window.history.replaceState(null, "", "/session/session-1");
   const actor = userEvent.setup();
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
-    if (path.endsWith("/artifacts")) return json([{ id: "result", name: "report.md", kind: "text", available: true }]);
+    if (path.endsWith("/g")) return json([{ id: "project-alice", name: "Personal", description: "" }]);
+    if (path.endsWith("/c")) return json([{ id: "session-1", project_id: "project-alice", title: "Research" }]);
+    if (path.endsWith("/sessions/session-1/artifacts")) return json([{ id: "result", name: "report.md", kind: "text", available: true }]);
     if (path.endsWith("/result/preview")) return json({ id: "result", text: "# Analysis result", truncated: false });
     return json([]);
   }));
   render(<App />);
-  const card = await screen.findByRole("button", { name: "report.md" });
-  expect(card).toHaveClass("catalog-entry-card");
+  const trigger = await screen.findByRole("button", { name: "Artifacts" });
+  await actor.click(trigger);
+  const card = await screen.findByRole("button", { name: /report.md/ });
   expect(screen.queryByRole("button", { name: "Download report.md" })).not.toBeInTheDocument();
   await actor.click(card);
   const panel = await screen.findByRole("dialog", { name: "report.md" });
   expect(await within(panel).findByText("# Analysis result")).toBeInTheDocument();
   expect(within(panel).getByRole("button", { name: "Download report.md" })).toBeEnabled();
   await actor.keyboard("{Escape}");
-  expect(card).toHaveFocus();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 }, 15_000);

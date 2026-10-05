@@ -6,7 +6,6 @@ from app.contracts.models import UserIdentity
 
 class ProviderUnavailable(Exception):
     """An optional external capability cannot currently serve requests."""
-    pass
 
 
 class IdentityProvider(Protocol):
@@ -62,8 +61,8 @@ class Af3Provider(Protocol):
         """List active AF3 jobs attached to an owned Agent Run."""
         ...
 
-    def artifacts_for(self, user_id: str) -> list[dict[str, str]]:
-        """List AF3 artifact metadata visible to one user."""
+    def artifacts_for(self, user_id: str, session_id: str | None = None) -> list[dict[str, str]]:
+        """List AF3 artifacts owned by a user, optionally from one session."""
         ...
 
     def artifact_bytes_for(self, user_id: str, artifact_id: str) -> tuple[str, bytes] | None:

@@ -903,7 +903,7 @@ class Af3Mixin:
             "AND status IN ('queued','running')", (user_id, run_id),
         ).fetchall()]
 
-    def af3_artifacts_for(self, user_id: str) -> list[dict[str, str]]:
+    def af3_artifacts_for(self, user_id: str, session_id: str | None = None) -> list[dict[str, str]]:
         """List completed AF3 artifact metadata with blob availability.
 
         Args:
@@ -914,9 +914,18 @@ class Af3Mixin:
         """
         import json
 
-        rows = self.db.execute(
-            "SELECT id,artifacts FROM agent_jobs WHERE user_id=? AND status='completed'", (user_id,)
-        ).fetchall()
+        if session_id is None:
+            rows = self.db.execute(
+                "SELECT id,artifacts FROM agent_jobs WHERE user_id=? AND status='completed'",
+                (user_id,),
+            ).fetchall()
+        else:
+            rows = self.db.execute(
+                "SELECT j.id,j.artifacts FROM agent_jobs j "
+                "JOIN agent_runs r ON r.id=j.run_id AND r.user_id=j.user_id "
+                "WHERE j.user_id=? AND r.session_id=? AND j.status='completed'",
+                (user_id, session_id),
+            ).fetchall()
         result = []
         for job_id, raw_artifacts in rows:
             for artifact in json.loads(raw_artifacts):

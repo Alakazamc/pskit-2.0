@@ -47,7 +47,7 @@ class DisabledAf3:
         """Return no active AF3 jobs while execution is disabled."""
         return []
 
-    def artifacts_for(self, user_id: str) -> list[dict[str, str]]:
+    def artifacts_for(self, user_id: str, session_id: str | None = None) -> list[dict[str, str]]:
         """Return no AF3 artifacts while execution is disabled."""
         return []
 

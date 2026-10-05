@@ -14,8 +14,8 @@ from app.contracts.conversation import (
     UsageUpdatedData,
     UsageUpdatedEvent,
 )
-from app.domain.conversation import ConversationStore
 from app.domain.af3_requests import Af3IdempotencyConflict, af3_request_fingerprint
+from app.domain.conversation import ConversationStore
 from app.domain.quota import QuotaLedger
 
 
@@ -32,12 +32,14 @@ class MockAf3:
         """Check whether the user can reserve estimated GPU time."""
         return self.quotas.available_gpu(user_id) >= estimated_minutes
 
-    def artifacts_for(self, user_id: str) -> list[dict[str, str]]:
+    def artifacts_for(self, user_id: str, session_id: str | None = None) -> list[dict[str, str]]:
         """Collect artifact metadata from the user's simulated jobs."""
         return [
             artifact
             for owner, job in self._jobs.values()
             if owner == user_id
+            and (session_id is None or (job.run_id is not None
+                 and self.conversations.session_id_for_run(user_id, job.run_id) == session_id))
             for artifact in job.artifacts
         ]
 

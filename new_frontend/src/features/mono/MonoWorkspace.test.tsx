@@ -688,25 +688,25 @@ it("shows an uncertain MCP outcome without inviting a blind retry", async () => 
   expect(await screen.findByRole("alert")).toHaveTextContent("本次工具调用的结果尚未确认");
 });
 
-it("shows the artifacts route in English when that language is selected", async () => {
-  loggedIn("/artifacts");
+it("shows the conversation artifact control in English without a sidebar destination", async () => {
+  loggedIn("/session/session-1");
   window.localStorage.setItem("research_language", "en");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([]);
-    if (path.endsWith("/c") || path.endsWith("/skills") || path.endsWith("/resources")) return json([]);
-    if (path.endsWith("/artifacts")) return json([
+    if (path.endsWith("/c")) return json([{ id: "session-1", project_id: "project-alice", title: "English chat" }]);
+    if (path.endsWith("/skills") || path.endsWith("/resources") || path.endsWith("/messages")) return json([]);
+    if (path.endsWith("/sessions/session-1/artifacts")) return json([
       { id: "demo", name: "demo.cif", kind: "structure", available: false },
     ]);
     return json({ detail: "Not found" }, 404);
   }));
   render(<App />);
-  expect(await screen.findByRole("heading", { name: "Artifacts", level: 1 })).toBeInTheDocument();
-  expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("Artifacts");
-  expect(within(screen.getByRole("main")).getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  expect(screen.queryByRole("link", { name: "Artifacts" })).not.toBeInTheDocument();
   const actor = userEvent.setup();
-  await actor.click(await screen.findByRole("button", { name: "demo.cif" }));
+  await actor.click(await screen.findByRole("button", { name: "Artifacts" }));
+  await actor.click(await screen.findByRole("button", { name: /demo.cif/ }));
   expect(screen.getByRole("button", { name: "Download demo.cif" })).toBeDisabled();
 }, 10_000);
 
@@ -886,7 +886,7 @@ it("does not expose a prediction page without a backing capability", async () =>
 }, 10_000);
 
 it("lists owned artifacts and downloads only those with stored bytes", async () => {
-  loggedIn("/artifacts");
+  loggedIn("/session/session-1");
   const actor = userEvent.setup();
   const objectUrl = vi.fn(() => "blob:artifact");
   const revoke = vi.fn();
@@ -900,8 +900,9 @@ it("lists owned artifacts and downloads only those with stored bytes", async () 
     const path = String(input);
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([{ id: "project-alice", name: "我的科研项目", description: "" }]);
-    if (path.endsWith("/c") || path.endsWith("/skills") || path.endsWith("/resources")) return json([]);
-    if (path.endsWith("/artifacts")) return json([
+    if (path.endsWith("/c")) return json([{ id: "session-1", project_id: "project-alice", title: "Research" }]);
+    if (path.endsWith("/skills") || path.endsWith("/resources") || path.endsWith("/messages")) return json([]);
+    if (path.endsWith("/sessions/session-1/artifacts")) return json([
       { id: "result-1", name: "result.cif", kind: "structure", available: true, size: 4, sha256: "abcd" },
       { id: "demo-1", name: "demo.cif", kind: "structure", available: false, size: null, sha256: null },
     ]);
@@ -914,13 +915,15 @@ it("lists owned artifacts and downloads only those with stored bytes", async () 
   vi.stubGlobal("fetch", fetcher);
   render(<App />);
 
-  const available = await screen.findByRole("button", { name: "result.cif" });
-  const unavailable = screen.getByRole("button", { name: "demo.cif" });
-  expect(available).toHaveClass("catalog-entry-card");
+  const trigger = await screen.findByRole("button", { name: "产物" });
+  await actor.click(trigger);
+  const unavailable = await screen.findByRole("button", { name: /demo.cif/ });
   await actor.click(unavailable);
   expect(screen.getByRole("button", { name: "下载 demo.cif" })).toBeDisabled();
   expect(fetcher).not.toHaveBeenCalledWith("/api/v1/artifacts/demo-1/preview", expect.anything());
   await actor.keyboard("{Escape}");
+  await actor.click(trigger);
+  const available = await screen.findByRole("button", { name: /result.cif/ });
   await actor.click(available);
   expect(await screen.findByText("CIF!")).toBeInTheDocument();
   expect(fetcher).toHaveBeenCalledWith("/api/v1/artifacts/result-1/preview", expect.anything());

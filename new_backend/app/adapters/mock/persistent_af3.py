@@ -40,9 +40,9 @@ class PersistentMockAf3:
         """List unfinished jobs associated with the user's agent run."""
         return self.store.active_job_ids_for_run(user_id, run_id)
 
-    def artifacts_for(self, user_id: str) -> list[dict[str, str]]:
+    def artifacts_for(self, user_id: str, session_id: str | None = None) -> list[dict[str, str]]:
         """List AF3 artifact metadata visible to a user."""
-        return self.store.af3_artifacts_for(user_id)
+        return self.store.af3_artifacts_for(user_id, session_id)
 
     def artifact_bytes_for(self, user_id: str, artifact_id: str) -> tuple[str, bytes] | None:
         """Read a user's stored AF3 artifact, if one exists."""

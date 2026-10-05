@@ -4,6 +4,17 @@
 button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 .mono-header-action{height:32px;border:0;background:transparent;color:var(--mono-muted);display:flex;align-items:center;gap:6px;padding:0 9px;border-radius:8px;font-size:12px;text-decoration:none;white-space:nowrap}
 .mono-header-action:hover{background:var(--mono-hover);color:var(--mono-text)}
+.conversation-artifacts-trigger small{min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--mono-subtle);color:var(--mono-muted);display:grid;place-items:center;font-size:10px}
+.conversation-artifacts-popover{z-index:180;width:min(320px,calc(100vw - 24px));max-height:min(400px,calc(100dvh - 86px));overflow:auto;padding:10px;border:1px solid var(--mono-border);border-radius:12px;background:var(--mono-surface);color:var(--mono-text);box-shadow:0 12px 36px #0003}
+.conversation-artifacts-heading{padding:5px 8px 8px;font-size:12px;font-weight:650}
+.conversation-artifacts-popover>p{margin:8px;padding:4px 0;color:var(--mono-muted);font-size:12px}
+.conversation-artifacts-list{display:grid;gap:2px}
+.conversation-artifacts-list button{width:100%;display:flex;align-items:center;gap:10px;text-align:left;padding:9px 8px;border:0;border-radius:8px;background:transparent;color:var(--mono-text);cursor:pointer}
+.conversation-artifacts-list button:hover,.conversation-artifacts-list button:focus-visible{background:var(--mono-hover)}
+.conversation-artifacts-list button>svg{flex:none;color:var(--mono-muted)}
+.conversation-artifacts-list button>span{min-width:0;display:grid;gap:2px}
+.conversation-artifacts-list strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:550}
+.conversation-artifacts-list small{color:var(--mono-muted);font-size:11px}
 .mono-default-skills{max-width:750px;width:100%;margin:0 auto 5px;padding:0 6px;display:flex;align-items:center;gap:6px;color:var(--mono-soft);font-size:11px}
 .mono-picker-group-label{font-size:11px;color:var(--mono-soft);padding:8px 10px 3px}
 .mono-picker-group button{width:100%}

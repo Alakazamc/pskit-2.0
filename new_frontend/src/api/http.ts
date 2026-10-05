@@ -116,6 +116,7 @@ export function createHttpApi({ baseUrl = "/api/v1", token, fetcher = fetch, onU
     },
     deleteFile: (id) => remove(`/files/${encodeURIComponent(id)}`),
     getArtifacts: () => request("/artifacts"),
+    getSessionArtifacts: (sessionId) => request(`/sessions/${encodeURIComponent(sessionId)}/artifacts`),
     getArtifactPreview: (id) => request(`/artifacts/${encodeURIComponent(id)}/preview`),
     downloadArtifact: async (id) => {
       const response = await send(`/artifacts/${encodeURIComponent(id)}/download`);
