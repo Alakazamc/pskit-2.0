@@ -1,9 +1,9 @@
 """Check the Aliyun Nginx routes and rollback when reload fails."""
 
-from pathlib import Path
 import os
+import re
 import subprocess
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 DEPLOY = ROOT / "deploy/agent"
@@ -27,6 +27,17 @@ def test_return_public_config_keeps_static_auth_and_private_api():
     assert "location = /auth/v1/callback {" in config
     assert "location = /auth/v1/verify {" in config
     assert "location ^~ /auth/v1/ { return 404; }" in config
+
+
+def test_admin_page_and_api_are_restricted_to_wireguard():
+    config = (DEPLOY / "host-nginx-agent-aliyun.conf").read_text()
+    for location in (r"location ~\* \^/admin\(\?:/\|\$\)",
+                     r"location \^~ /api/v1/admin"):
+        match = re.search(rf"{location}\s*\{{([^}}]+)\}}", config)
+        assert match, f"Missing protected Nginx location: {location}"
+        assert "allow 10.9.8.0/24;" in match.group(1)
+        assert "deny all;" in match.group(1)
+    assert "try_files /index.html =404;" in config
 
 
 def _fake_commands(tmp_path: Path, *, curl_status: str) -> dict[str, str]:
@@ -59,7 +70,7 @@ def test_public_installer_restores_previous_config_if_reload_fails(tmp_path: Pat
     target = config_dir / "agent.bioailab.net.conf"
     target.write_text("old upstream\n")
     result = subprocess.run(
-        ["bash", str(PUBLIC)], text=True, capture_output=True,
+        ["bash", str(PUBLIC)], check=False, text=True, capture_output=True,
         env=_fake_commands(tmp_path, curl_status="401"),
     )
     assert result.returncode != 0
@@ -86,7 +97,7 @@ def test_public_installer_waits_for_new_upstream_after_reload(tmp_path: Path):
     )
     environment["FAKE_CURL_COUNT"] = str(tmp_path / "curl-count")
     result = subprocess.run(
-        ["bash", str(PUBLIC)], text=True, capture_output=True, env=environment,
+        ["bash", str(PUBLIC)], check=False, text=True, capture_output=True, env=environment,
     )
     assert result.returncode == 0, result.stderr
     assert (tmp_path / "curl-count").read_text() == "4"
@@ -100,7 +111,7 @@ def test_private_installer_restores_disabled_config_if_reload_fails(tmp_path: Pa
     disabled = config_dir / "agent-af3-private.conf.disabled-20261002"
     disabled.write_text("listen 10.9.8.1:18184;\n")
     result = subprocess.run(
-        ["bash", str(PRIVATE)], text=True, capture_output=True,
+        ["bash", str(PRIVATE)], check=False, text=True, capture_output=True,
         env=_fake_commands(tmp_path, curl_status="404"),
     )
     assert result.returncode != 0
@@ -126,7 +137,7 @@ def test_private_installer_waits_for_nginx_listener_after_reload(tmp_path: Path)
     )
     environment["FAKE_CURL_COUNT"] = str(tmp_path / "curl-count")
     result = subprocess.run(
-        ["bash", str(PRIVATE)], text=True, capture_output=True, env=environment,
+        ["bash", str(PRIVATE)], check=False, text=True, capture_output=True, env=environment,
     )
     assert result.returncode == 0, result.stderr
     assert (tmp_path / "curl-count").read_text() == "3"

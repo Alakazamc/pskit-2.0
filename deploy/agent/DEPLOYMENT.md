@@ -10,7 +10,7 @@
 
 | 主机 | 服务 | 入口 |
 | --- | --- | --- |
-| 阿里云宿主机 | Nginx、React `dist` | `https://agent.bioailab.net` |
+| 阿里云宿主机 | Nginx、React `dist` | 普通站点 `https://agent.bioailab.net`；管理入口仅经 WireGuard 访问同一域名的 `/admin/models` |
 | 阿里云 Docker | Python/Pi、Supabase、PostgreSQL 17、LiteLLM、AF3 回调代理 | Python `127.0.0.1:18088`；回调代理 `127.0.0.1:18185` |
 | 阿里云 WireGuard | AF3 私网 Nginx | `10.9.8.1:18184`，只允许 A6000 `10.9.8.2` |
 | A6000 | 一个 AF3 接收器、一个计算容器 | 接收器主动连接阿里云 |
@@ -77,6 +77,8 @@ systemctl reload nginx
 
 只有 `nginx -t` 成功才 reload。日常仅更新后端镜像或 React `dist` 时，不需要重新配置域名、证书或 Nginx 路由。
 
+管理员页面 `/admin` 和管理 API `/api/v1/admin` 只允许源地址为 WireGuard `10.9.8.0/24` 的连接。修改现有生产配置时，在阿里云 root 会话运行 `bash deploy/agent/scripts/install_private_admin_ingress.sh`；脚本先备份原配置，验证 Nginx 并探测公网拒绝、私网可达，失败则恢复原配置。浏览器需先连接 WireGuard，并在浏览器所在机器将 `agent.bioailab.net` 临时解析到 `10.9.8.1`，这样 HTTPS 证书与域名仍匹配。断开 WireGuard 后移除该临时解析。管理角色还需按 [管理台手册](../../new_backend/ADMIN.md)授予已验证账号；接入私网本身不会授予权限。
+
 ## 4. A6000 AF3
 
 执行主机：阿里云 root 会话。执行条件：WireGuard 已提供 `10.9.8.1`，A6000 的地址是 `10.9.8.2`；本机回调代理已健康。在部署仓库根目录安装私网 Nginx 配置：
@@ -137,9 +139,14 @@ curl --silent --show-error --output /dev/null --write-out '%{http_code}\n' \
 curl --silent --show-error --output /dev/null --write-out '%{http_code}\n' \
   https://agent.bioailab.net/internal/
 curl --head --fail --silent --show-error https://agent.bioailab.net/login
+curl --noproxy '*' --silent --show-error --output /dev/null --write-out '%{http_code}\n' \
+  https://agent.bioailab.net/admin/models
+curl --noproxy '*' --resolve agent.bioailab.net:443:10.9.8.1 \
+  --silent --show-error --output /dev/null --write-out '%{http_code}\n' \
+  https://agent.bioailab.net/admin/models
 ```
 
-预期结果：后端就绪；未登录的 `usage` 返回 `401`；公网 `internal` 返回 `404`；登录页返回 `200`。再用授权账号核对登录、项目、对话、SSE、上传、模型选择和 Token 额度。真实 AF3 要另外检查 Job 领取、进度、产物、GPU 结算与 Pi 自动唤醒。当前生产配置把会员 GPU 日额度设为 `0`；只有明确给测试账号配置额度后，真实 AF3 验收才有意义。不要把只读回调请求当成真实计算成功。
+预期结果：后端就绪；未登录的 `usage` 返回 `401`；公网 `internal` 返回 `404`；登录页返回 `200`；公网管理页面返回 `403`，WireGuard 管理页面返回 `200`。管理 API 公网返回 `403`，WireGuard 未登录返回 `401`。再用授权账号核对登录、项目、对话、SSE、上传、模型选择和 Token 额度。真实 AF3 要另外检查 Job 领取、进度、产物、GPU 结算与 Pi 自动唤醒。当前生产配置把会员 GPU 日额度设为 `0`；只有明确给测试账号配置额度后，真实 AF3 验收才有意义。不要把只读回调请求当成真实计算成功。
 
 ## 7. 停止和恢复
 

@@ -1,6 +1,6 @@
 # PSKit 管理台
 
-管理台位于前端 `/admin/models`，复用已有 Python 登录接口与 Supabase 身份。浏览器只发送普通用户 JWT；管理角色存放在 PSKit PostgreSQL 中，每次请求重新查询。用户 metadata、前端隐藏按钮和过期的权限缓存均不能授予管理权限。
+管理台位于 `https://agent.bioailab.net/admin/models`，只通过 WireGuard 访问：客户端连接 WireGuard 后，把该域名在本机临时解析到 `10.9.8.1`。公网 Nginx 对 `/admin` 和 `/api/v1/admin` 返回 `403`。管理台复用已有 Python 登录接口与 Supabase 身份。浏览器只发送普通用户 JWT；管理角色存放在 PSKit PostgreSQL 中，每次请求重新查询。用户 metadata、前端隐藏按钮和过期的权限缓存均不能授予管理权限。
 
 ## 初始化管理员
 
