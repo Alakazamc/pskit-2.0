@@ -9,7 +9,7 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
 });
 
-it("opens tool parameters in a panel and loads only that tool's history on demand", async () => {
+it("opens a tool in the full tools area with a back button and tool-scoped history", async () => {
   window.localStorage.setItem("research_access_token", "demo-token");
   window.localStorage.setItem("research_language", "en");
   window.history.replaceState(null, "", "/tools");
@@ -40,8 +40,11 @@ it("opens tool parameters in a panel and loads only that tool's history on deman
   render(<App />);
   expect(screen.queryByRole("link", { name: "My runs" })).not.toBeInTheDocument();
   const trigger = await screen.findByRole("link", { name: /fetch_uniprot/ });
+  expect(trigger).toHaveClass("catalog-entry-card-large");
   await actor.click(trigger);
-  const panel = await screen.findByRole("dialog", { name: "fetch_uniprot" });
+  const panel = await screen.findByRole("article", { name: "fetch_uniprot" });
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.queryByRole("searchbox", { name: "Search tools" })).not.toBeInTheDocument();
   expect(history).toEqual([]);
   await actor.type(within(panel).getByRole("textbox", { name: "accession" }), "P12345");
   await actor.click(within(panel).getByRole("button", { name: "Run tool" }));
@@ -55,11 +58,11 @@ it("opens tool parameters in a panel and loads only that tool's history on deman
   expect(field).toHaveValue("P12345");
   // The pencil switches back to parameters and focuses the editable field.
   await vi.waitFor(() => expect(field).toHaveFocus());
-  await actor.keyboard("{Escape}");
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(trigger).toHaveFocus();
+  await actor.click(within(panel).getByRole("button", { name: "Back to tools" }));
+  expect(await screen.findByRole("searchbox", { name: "Search tools" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /fetch_uniprot/ })).toHaveFocus();
   await actor.click(screen.getByRole("link", { name: /search_pdb/ }));
-  const pdb = await screen.findByRole("dialog", { name: "search_pdb" });
+  const pdb = await screen.findByRole("article", { name: "search_pdb" });
   await actor.click(within(pdb).getByRole("tab", { name: "Run history" }));
   expect(await within(pdb).findByText("search_pdb saved call")).toBeInTheDocument();
   expect(within(pdb).queryByText("fetch_uniprot saved call")).not.toBeInTheDocument();

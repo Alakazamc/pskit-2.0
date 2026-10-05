@@ -106,7 +106,7 @@ it("reports partial datasets and does not attach a preview as the complete datas
     if (url.pathname.endsWith("/c/partial/messages") && init?.method === "POST") { message = JSON.parse(String(init.body)); return { run_id: "run-partial" }; }
     return [];
   });
-  const panel = await screen.findByRole("dialog", { name: "CORAL" });
+  const panel = await screen.findByRole("article", { name: "CORAL" });
   expect(await within(panel).findByText(/preview only/, {}, { timeout: 5000 })).toBeInTheDocument();
   expect(within(panel).queryByRole("button", { name: "Download FASTA" })).not.toBeInTheDocument();
   await actor.click(within(panel).getByRole("button", { name: "Ask Agent" }));

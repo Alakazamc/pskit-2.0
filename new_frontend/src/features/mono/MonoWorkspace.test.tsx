@@ -665,7 +665,7 @@ it("lists the structure viewer in the toolbox even without an MCP connection", a
   const viewer = await screen.findByRole("link", { name: /结构查看器/ });
   expect(viewer).toHaveAttribute("href", "/tools/structure");
   await actor.click(viewer);
-  expect(await screen.findByRole("dialog", { name: "结构查看器" })).toBeInTheDocument();
+  expect(await screen.findByRole("article", { name: "结构查看器" })).toBeInTheDocument();
   expect(screen.getByRole("textbox", { name: "PDB ID" })).toBeInTheDocument();
 });
 
@@ -756,7 +756,7 @@ it("translates project creation and the project Skill dialog", async () => {
   expect(screen.getByRole("dialog", { name: "Project Skills" })).toBeInTheDocument();
 }, 10_000);
 
-it("translates tool parameters and their scoped history inside the detail panel", async () => {
+it("translates tool parameters and scoped history in the tools content area", async () => {
   loggedIn("/tools/pdb");
   window.localStorage.setItem("research_language", "en");
   const actor = userEvent.setup();
@@ -771,14 +771,15 @@ it("translates tool parameters and their scoped history inside the detail panel"
     return json({ detail: "Not found" }, 404);
   }));
   render(<App />);
-  const panel = await screen.findByRole("dialog", { name: "search_pdb" });
+  const panel = await screen.findByRole("article", { name: "search_pdb" });
   expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("Tools");
   expect(within(panel).getByRole("textbox", { name: "Protein name, UniProt or PDB ID" })).toBeInTheDocument();
   await actor.click(within(panel).getByRole("tab", { name: "Run history" }));
   expect(await within(panel).findByText("No runs yet")).toBeInTheDocument();
   expect(within(panel).getByText("Run this tool to see its history here.")).toBeInTheDocument();
-  await actor.keyboard("{Escape}");
+  await actor.click(within(panel).getByRole("button", { name: "Back to tools" }));
   expect(screen.getByRole("heading", { name: "Tools", level: 1 })).toBeInTheDocument();
+  expect(await screen.findByRole("searchbox", { name: "Search tools" })).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "My runs" })).not.toBeInTheDocument();
 }, 10_000);
 
@@ -829,7 +830,7 @@ it("uses a published MCP tool schema to invoke a newly listed tool", async () =>
   render(<App />);
   await actor.type(await screen.findByRole("textbox", { name: "accession" }), "P12345");
   expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("工具集");
-  expect(screen.getByRole("dialog", { name: "fetch_uniprot" })).toBeInTheDocument();
+  expect(screen.getByRole("article", { name: "fetch_uniprot" })).toBeInTheDocument();
   await actor.click(screen.getByRole("button", { name: "运行工具" }));
   expect(await screen.findByText(/"accession": "P12345"/)).toBeInTheDocument();
   expect(invoked).toEqual([{ accession: "P12345" }]);

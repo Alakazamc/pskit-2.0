@@ -58,7 +58,7 @@ it("runs CORAL with server progress, actual results and input-bound analysis in 
   }));
   render(<App />); const actor = userEvent.setup();
   await actor.click(await screen.findByRole("link", { name: /CORAL/ }));
-  const panel = await screen.findByRole("dialog", { name: "CORAL" });
+  const panel = await screen.findByRole("article", { name: "CORAL" });
   await actor.type(within(panel).getByRole("textbox", { name: "PDB ID" }), "1a9n");
   expect(within(panel).getByRole("spinbutton", { name: "Sequence count" })).toHaveValue(10000);
   expect(within(panel).getByRole("spinbutton", { name: "RNA length" })).toHaveValue(100);
