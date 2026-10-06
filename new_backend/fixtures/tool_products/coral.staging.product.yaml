@@ -1,0 +1,140 @@
+product_id: product-coral-staging-smoke
+slug: coral-staging-smoke
+revision: 1
+owner_user_id: system
+title: {en: CORAL Staging smoke, zh-CN: CORAL 预发布验证}
+description:
+  en: Isolated low-cost lifecycle validation for the reviewed CORAL provider.
+  zh-CN: 对已审核 CORAL 服务执行隔离、低成本的完整生命周期验证。
+ui_schema:
+  schema_version: pskit.tool-ui.v1
+  product:
+    slug: coral-staging-smoke
+    title: {en: CORAL Staging smoke, zh-CN: CORAL 预发布验证}
+    description:
+      en: One-shot generation used only by the isolated Staging release gate.
+      zh-CN: 仅供隔离 Staging 发布门禁使用的一次生成。
+  page: {layout: split-workspace, input_width: 5, result_width: 7}
+  state: {}
+  sections:
+    - id: one-shot-inputs
+      title: {en: Protein target, zh-CN: 蛋白质目标}
+      fields:
+        - id: pdb-id
+          component: protein-input
+          label: {en: PDB ID, zh-CN: PDB 编号}
+          input_pointer: /form/pdb_id
+          required: true
+        - id: pdb-chain
+          component: text-input
+          label: {en: Chain, zh-CN: 蛋白链}
+          input_pointer: /form/chain
+          required: true
+        - id: one-shot-samples
+          component: number-input
+          label: {en: Candidate count, zh-CN: 候选数量}
+          input_pointer: /form/num_samples
+          default: 1
+          minimum: 1
+          maximum: 1
+          step: 1
+        - id: one-shot-length
+          component: number-input
+          label: {en: RNA length, zh-CN: RNA 长度}
+          input_pointer: /form/length
+          default: 50
+          minimum: 50
+          maximum: 50
+          step: 1
+  actions:
+    - id: run-coral
+      label: {en: Run smoke, zh-CN: 运行验证}
+      kind: start_run
+      target: {action_id: coral-one-shot}
+  result_views:
+    - id: stages
+      component: stage-flow
+      source: /run/status
+      title: {en: Progress, zh-CN: 运行进度}
+    - id: result-summary
+      component: metric-grid
+      source: /run/result
+      title: {en: Summary, zh-CN: 结果摘要}
+    - id: result-artifacts
+      component: artifact-list
+      source: /run/artifacts
+      title: {en: Outputs, zh-CN: 产出文件}
+      preview_limit: 128
+  handoffs: []
+bindings:
+  - binding_id: binding-coral-one-shot
+    product_action_id: coral-one-shot
+    service_id: coral-mcp
+    service_revision: 1
+    capability_id: coral.generate.one_shot
+    capability_version: 1.0.0
+    adapter: immediate_mcp
+    submit_tool: coral.generate.one_shot
+    remote_output_schema:
+      type: object
+      properties:
+        status: {type: string, enum: [completed, failed]}
+        result: {type: object}
+        error:
+          type: object
+          properties:
+            code: {type: string}
+            message: {type: string}
+          required: [code, message]
+          additionalProperties: false
+        usage:
+          type: object
+          properties:
+            wall_ms: {type: [integer, "null"], minimum: 0}
+            cpu_core_ms: {type: [integer, "null"], minimum: 0}
+            gpu_device_ms: {type: [integer, "null"], minimum: 0}
+            gpu_count: {type: [integer, "null"], minimum: 0}
+            source: {type: string, enum: [service_reported, measured, estimated, unknown]}
+          required: [wall_ms, cpu_core_ms, gpu_device_ms, gpu_count, source]
+          additionalProperties: false
+        artifacts:
+          type: array
+          items: {type: object}
+      required: [status, usage, artifacts]
+      additionalProperties: false
+    result_schema:
+      type: object
+      properties:
+        generated_count: {type: integer, minimum: 0}
+        protein_sequence_preview: {type: string}
+      required: [generated_count, protein_sequence_preview]
+      additionalProperties: false
+    result_mapping: {kind: json_pointer, pointer: /result}
+    required_usage: [wall_ms, cpu_core_ms, gpu_device_ms, gpu_count]
+    # The generic receiver runs on Aliyun and calls a remote GPU MCP service.
+    # GPU time is quota-accounted below, but no local receiver GPU is required.
+    gpu_count: 0
+    max_budget: {cpu_core_ms: 120000, gpu_device_ms: 120000}
+    concurrency: 1
+    max_execution_seconds: 600
+    limit_mode: soft
+    exclusive_process: false
+    cancellation: none
+actions:
+  - id: coral-one-shot
+    label: {en: One-shot generation, zh-CN: 一次生成}
+    kind: capability
+    binding_ids: [binding-coral-one-shot]
+    input_schema:
+      type: object
+      properties:
+        pdb_id: {type: string, pattern: "^[A-Za-z0-9]{4}$"}
+        chain: {type: string, pattern: "^[A-Za-z0-9]{1,4}$"}
+        num_samples: {type: integer, minimum: 1, maximum: 1}
+        length: {type: integer, minimum: 50, maximum: 50}
+      required: [pdb_id, chain, num_samples, length]
+      additionalProperties: false
+visibility: {audience: members, allowed_user_ids: []}
+acceptance_suite_id: coral-provider-staging-smoke
+acceptance_suite_revision: 1
+handoffs: []

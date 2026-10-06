@@ -91,15 +91,18 @@ def validate_staging(
         allowed_networks = {
             "supabase": {"default": NETWORK},
             "litellm": {"supabase": NETWORK},
-            "agent": {"app": "pskit-agent-staging_app", "supabase": NETWORK},
+            "agent": {"app": "pskit-agent-staging_app", "supabase": NETWORK,
+                      "mcp_egress": "pskit-agent-staging_mcp_egress"},
         }[part]
         if {key: item.get("name") for key, item in config.get("networks", {}).items()} != allowed_networks:
             raise ValueError("Unexpected staging network")
-        for service in config.get("services", {}).values():
+        for service_name, service in config.get("services", {}).items():
             service_networks = set(service.get("networks", {}))
-            if service_networks != ({"default"} if part == "supabase" else
-                                    {"supabase"} if part == "litellm" else
-                                    {"app", "supabase"}):
+            expected_service_networks = ({"default"} if part == "supabase" else
+                                         {"supabase"} if part == "litellm" else
+                                         {"app", "mcp_egress"} if service_name == "mcp-receiver" else
+                                         {"app", "supabase"})
+            if service_networks != expected_service_networks:
                 raise ValueError("Unexpected staging service network")
             for mount in service.get("volumes", []):
                 source = mount.get("source", "")
@@ -145,12 +148,17 @@ def validate_staging(
         raise ValueError("Staging storage volume mismatch")
     if rendered["agent"]["volumes"]["agent_data"]["name"] != "pskit-agent-staging_agent_data":
         raise ValueError("Staging Agent volume mismatch")
+    if rendered["agent"]["volumes"]["mcp_receiver_data"]["name"] != "pskit-agent-staging_mcp_receiver_data":
+        raise ValueError("Staging MCP receiver volume mismatch")
     if rendered["agent"]["services"]["backend"]["environment"].get("RESEARCH_AGENT_AF3_EXECUTOR") != "mock":
         raise ValueError("Real AF3 is prohibited in staging")
     if "af3-callback-proxy" in rendered["agent"]["services"] or "web" in rendered["agent"]["services"]:
         raise ValueError("Unexpected staging service")
     if "model-stub" not in rendered["litellm"]["services"]:
         raise ValueError("Staging model stub is missing")
+    receiver = rendered["agent"]["services"].get("mcp-receiver")
+    if not receiver or receiver.get("ports") or receiver.get("image") != release.get("backend_image"):
+        raise ValueError("Staging MCP receiver is missing or exposed")
     if (rendered["agent"]["services"]["backend"].get("image") != release.get("backend_image")
             or rendered["litellm"]["services"]["model-stub"].get("image") != release.get("backend_image")):
         raise ValueError("Staging image differs from release manifest")
@@ -159,6 +167,7 @@ def validate_staging(
     litellm_env = _env(root / "litellm.env")
     backend_path = root / "backend.env"
     backend_env = _env(backend_path if backend_path.exists() else root / "backend.env.base")
+    receiver_env = _env(root / "mcp.receiver.env")
     admin_env = _env(root / "admin.env")
     _check_dsn(admin_env.get("SHARED_POSTGRES_ADMIN_DSN", ""), user="postgres", database="postgres")
     _check_dsn(backend_env.get("RESEARCH_AGENT_DATABASE_URL", ""),
@@ -179,6 +188,15 @@ def validate_staging(
         raise ValueError("Staging must use the Turnstile test secret")
     if backend_env.get("TURNSTILE_HOSTNAMES_JSON") != '["dummy-key-pass"]':
         raise ValueError("Staging Turnstile hostname is unexpected")
+    try:
+        compute_keys = json.loads(backend_env.get("RESEARCH_AGENT_COMPUTE_SERVICE_KEYS_JSON", ""))
+    except json.JSONDecodeError as exc:
+        raise ValueError("Staging compute service keys are invalid") from exc
+    receiver_service = receiver.get("environment", {}).get("PSKIT_MCP_SERVICE_ID")
+    receiver_key = receiver_env.get("PSKIT_COMPUTE_SERVICE_KEY", "")
+    if (not isinstance(compute_keys, dict) or len(receiver_key) < 32
+            or compute_keys != {receiver_service: receiver_key}):
+        raise ValueError("Staging MCP receiver key does not match backend admission")
     for value in (
         supabase_env.get("POSTGRES_PASSWORD", ""), supabase_env.get("JWT_SECRET", ""),
         supabase_env.get("SUPABASE_SECRET_KEY", ""),
@@ -235,7 +253,9 @@ def _compose_commands(root: Path, env_file: Path) -> tuple[dict[str, list[str]],
     cloud_env = _env(root / "cloud.env")
     allowed_cloud_keys = {"AGENT_BACKEND_IMAGE", "AGENT_WEB_IMAGE", "AGENT_BACKEND_ENV_FILE",
                           "AGENT_AF3_PROXY_KEY_FILE", "AGENT_PUBLIC_URL",
-                          "AGENT_PG_DATA_VOLUME", "SUPABASE_DOCKER_NETWORK",
+                          "AGENT_PG_DATA_VOLUME", "AGENT_MCP_RECEIVER_ENV_FILE",
+                          "AGENT_MCP_RECEIVER_DATA_VOLUME", "AGENT_MCP_SERVICE_ID",
+                          "AGENT_MCP_WORKER_ID", "SUPABASE_DOCKER_NETWORK",
                           "TURNSTILE_SITE_KEY"}
     if set(cloud_env) != allowed_cloud_keys:
         raise ValueError("Unexpected Staging Compose interpolation variable")
@@ -368,7 +388,10 @@ def run_staging(
     _backend_env(root, key_path.read_text().strip())
     final_commands, final_env = _compose_commands(root, root / "backend.env")
     validate_staging(manifest, _render_configs(final_commands, final_env), fingerprints)
-    _run(final_commands["agent"] + ["up", "-d", "--wait", "backend"], env=final_env)
+    _run(
+        final_commands["agent"] + ["up", "-d", "--wait", "backend", "mcp-receiver"],
+        env=final_env,
+    )
 
 
 def main() -> None:

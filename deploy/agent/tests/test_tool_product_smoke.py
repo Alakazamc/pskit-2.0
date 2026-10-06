@@ -19,6 +19,21 @@ def _load_script():
 
 
 @pytest.mark.asyncio
+async def test_request_reports_api_error_code_without_echoing_token():
+    smoke = _load_script()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(422, json={"detail": {"code": "REVISION_CONFLICT"}})
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://staging.example"
+    ) as client:
+        with pytest.raises(RuntimeError, match="HTTP 422 REVISION_CONFLICT") as error:
+            await smoke._request(client, "POST", "/api/v1/admin/example", "secret-token")
+    assert "secret-token" not in str(error.value)
+
+
+@pytest.mark.asyncio
 async def test_smoke_onboards_runs_recovers_and_suspends_a_product():
     smoke = _load_script()
     calls: list[tuple[str, str]] = []

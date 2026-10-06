@@ -8,6 +8,7 @@ import asyncio
 import copy
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -35,7 +36,16 @@ async def _request(
         headers={**_headers(token), **(headers or {})},
         json=json_body,
     )
-    response.raise_for_status()
+    if not response.is_success:
+        error_code = "API_ERROR"
+        try:
+            detail = response.json().get("detail")
+            candidate = detail.get("code") if isinstance(detail, dict) else detail
+            if isinstance(candidate, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{1,120}", candidate):
+                error_code = candidate
+        except (AttributeError, TypeError, ValueError):
+            pass
+        raise RuntimeError(f"SMOKE_API_ERROR HTTP {response.status_code} {error_code}")
     value = response.json()
     if not isinstance(value, dict):
         raise RuntimeError("SMOKE_RESPONSE_NOT_OBJECT")

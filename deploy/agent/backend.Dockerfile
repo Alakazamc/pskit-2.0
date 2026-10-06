@@ -15,16 +15,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 && \
     groupadd --gid 10001 agent && useradd --uid 10001 --gid 10001 --home-dir /home/agent --create-home agent && \
     mkdir -p /data /workspace && chown agent:agent /data /workspace
 COPY pyproject.toml ./
+RUN python -c "import subprocess,sys,tomllib; dependencies=tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']; subprocess.check_call([sys.executable,'-m','pip','install','--no-cache-dir',*dependencies])"
 COPY app ./app
 COPY pskit_compute ./pskit_compute
-RUN python -m pip install --no-cache-dir .
 COPY --from=pi-build /usr/local/bin/node /usr/local/bin/node
 COPY --from=pi-build /opt/pi/node_modules /app/pi/node_modules
 COPY pi/package.json pi/extension.js pi/system-prompt.md ./pi/
 COPY skills ./skills
 COPY scripts/af3_callback_proxy.py ./scripts/af3_callback_proxy.py
 COPY scripts/compute_receiver.py ./scripts/compute_receiver.py
+COPY scripts/mcp_compute_receiver.py ./scripts/mcp_compute_receiver.py
 COPY scripts/agent_data_migrate.py ./scripts/agent_data_migrate.py
+RUN install -d -o agent -g agent -m 0750 /var/lib/pskit-mcp
 USER agent
 VOLUME /data
 EXPOSE 8000

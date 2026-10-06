@@ -123,6 +123,7 @@ def prepare_staging(target_dir: Path, *, backend_image: str, frontend_dist: Path
         postgres_password = _secret(24)
         litellm_db_password = _secret(24)
         pskit_db_password = _secret(24)
+        mcp_service_key = _secret(32)
         supabase = {
             "POSTGRES_PASSWORD": postgres_password,
             "JWT_SECRET": jwt_secret,
@@ -182,7 +183,12 @@ def prepare_staging(target_dir: Path, *, backend_image: str, frontend_dist: Path
             "TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA",
             'TURNSTILE_HOSTNAMES_JSON=["dummy-key-pass"]',
             f"RESEARCH_AGENT_ADMIN_API_KEY={_secret(32)}",
+            'RESEARCH_AGENT_ADMIN_MCP_NETWORK_ZONES_JSON={"wireguard-private":["172.31.226.126/32"]}',
+            "RESEARCH_AGENT_MCP_TIMEOUT_SECONDS=900",
             f"RESEARCH_AGENT_DATABASE_URL={app_dsn}",
+            "RESEARCH_AGENT_COMPUTE_SERVICE_KEYS_JSON=" + json.dumps(
+                {"coral-mcp": mcp_service_key}, separators=(",", ":"),
+            ),
             f"SUPABASE_PUBLISHABLE_KEY={auth['SUPABASE_PUBLISHABLE_KEY']}",
             f"SUPABASE_SECRET_KEY={auth['SUPABASE_SECRET_KEY']}",
             "MODEL_GATEWAY_BASE_URL=http://gateway:4000/v1",
@@ -197,9 +203,18 @@ def prepare_staging(target_dir: Path, *, backend_image: str, frontend_dist: Path
             "AGENT_PUBLIC_URL=http://10.9.8.1:18132",
             "TURNSTILE_SITE_KEY=1x00000000000000000000AA",
             "AGENT_PG_DATA_VOLUME=pskit-agent-staging_agent_data",
+            f"AGENT_MCP_RECEIVER_ENV_FILE={target / 'mcp.receiver.env'}",
+            "AGENT_MCP_RECEIVER_DATA_VOLUME=pskit-agent-staging_mcp_receiver_data",
+            "AGENT_MCP_SERVICE_ID=coral-mcp",
+            "AGENT_MCP_WORKER_ID=coral-mcp-staging-1",
             "SUPABASE_DOCKER_NETWORK=pskit-agent-supabase-staging_default",
         ]) + "\n")
         _private_write(temp / "proxy.env", f"RESEARCH_AGENT_COMPUTE_CALLBACK_KEY={_secret(32)}\n")
+        _private_write(temp / "mcp.receiver.env", "\n".join([
+            f"PSKIT_COMPUTE_SERVICE_KEY={mcp_service_key}",
+            "PSKIT_MCP_ENDPOINT_OVERRIDES_JSON={}",
+            "PSKIT_MCP_CREDENTIAL_REFS_JSON={}",
+        ]) + "\n")
         _private_write(temp / "seed.env", "\n".join([
             "STAGING_USER_EMAIL=staging-user@example.invalid",
             f"STAGING_USER_PASSWORD={_secret(24)}",

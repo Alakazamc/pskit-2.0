@@ -35,7 +35,8 @@ def stage(tmp_path):
              'RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON=["127.0.0.1/32"]\n'
              "RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED=true\n"
              "TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA\n"
-             'TURNSTILE_HOSTNAMES_JSON=["dummy-key-pass"]\n')
+             'TURNSTILE_HOSTNAMES_JSON=["dummy-key-pass"]\n'
+             'RESEARCH_AGENT_COMPUTE_SERVICE_KEYS_JSON={"coral-mcp":"stage-mcp-key-at-least-thirty-two-bytes"}\n')
     _private(root / "admin.env", "SHARED_POSTGRES_ADMIN_DSN=postgresql://postgres:stage-db@db:5432/postgres\n")
     _private(root / "cloud.env", "AGENT_BACKEND_IMAGE=pskit-agent-backend:fixed\n"
              "AGENT_WEB_IMAGE=pskit-agent-web:unused-staging\n"
@@ -44,7 +45,14 @@ def stage(tmp_path):
              "AGENT_PUBLIC_URL=http://10.9.8.1:18132\n"
              "TURNSTILE_SITE_KEY=1x00000000000000000000AA\n"
              "AGENT_PG_DATA_VOLUME=pskit-agent-staging_agent_data\n"
+             "AGENT_MCP_RECEIVER_ENV_FILE=" + str(root / "mcp.receiver.env") + "\n"
+             "AGENT_MCP_RECEIVER_DATA_VOLUME=pskit-agent-staging_mcp_receiver_data\n"
+             "AGENT_MCP_SERVICE_ID=coral-mcp\n"
+             "AGENT_MCP_WORKER_ID=coral-mcp-staging-1\n"
              "SUPABASE_DOCKER_NETWORK=pskit-agent-supabase-staging_default\n")
+    _private(root / "mcp.receiver.env", "PSKIT_COMPUTE_SERVICE_KEY=stage-mcp-key-at-least-thirty-two-bytes\n"
+             "PSKIT_MCP_ENDPOINT_OVERRIDES_JSON={}\n"
+             "PSKIT_MCP_CREDENTIAL_REFS_JSON={}\n")
     _private(root / "proxy.env", "RESEARCH_AGENT_COMPUTE_CALLBACK_KEY=stage-callback\n")
     _private(root / "seed.env", "STAGING_USER_EMAIL=staging-user@example.invalid\n")
     _private(root / "manifest.json", json.dumps({
@@ -90,10 +98,19 @@ def rendered():
             "environment": {"RESEARCH_AGENT_AF3_EXECUTOR": "mock",
                             "RESEARCH_AGENT_DATABASE_URL": "postgresql://pskit_app:stage-pass@db:5432/postgres",
                             "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_stage"},
+        }, "mcp-receiver": {
+            "image": "pskit-agent-backend:fixed",
+            "networks": {"app": None, "mcp_egress": None},
+            "environment": {"PSKIT_COMPUTE_SERVICE_KEY": "stage-mcp-key-at-least-thirty-two-bytes",
+                            "PSKIT_MCP_SERVICE_ID": "coral-mcp"},
+            "volumes": [{"type": "volume", "source": "mcp_receiver_data",
+                         "target": "/var/lib/pskit-mcp"}],
         }},
         "networks": {"app": {"name": "pskit-agent-staging_app"},
-                     "supabase": {"name": STAGE_NETWORK}},
-        "volumes": {"agent_data": {"name": "pskit-agent-staging_agent_data"}},
+                     "supabase": {"name": STAGE_NETWORK},
+                     "mcp_egress": {"name": "pskit-agent-staging_mcp_egress"}},
+        "volumes": {"agent_data": {"name": "pskit-agent-staging_agent_data"},
+                    "mcp_receiver_data": {"name": "pskit-agent-staging_mcp_receiver_data"}},
     }
     return {"supabase": supabase, "litellm": litellm, "agent": agent}
 
@@ -221,6 +238,8 @@ def test_up_orders_services_and_never_starts_callback(stage, rendered, monkeypat
     ) < next(i for i, line in enumerate(joined) if "migrate_postgres" in line) < next(
         i for i, line in enumerate(joined) if "litellm-staging" in line and " up " in line
     ) < next(i for i, line in enumerate(joined) if "pskit-agent-staging" in line and " up " in line)
+    agent_up = next(line for line in joined if "pskit-agent-staging" in line and " up " in line)
+    assert agent_up.endswith("up -d --wait backend mcp-receiver")
     assert all("af3-callback-proxy" not in line for line in joined)
     assert (stage / "backend.env").stat().st_mode & 0o777 == 0o600
     assert "MODEL_GATEWAY_API_KEY=sk-stage-key" in (stage / "backend.env").read_text()

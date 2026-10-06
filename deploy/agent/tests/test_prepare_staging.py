@@ -38,12 +38,13 @@ def test_generates_distinct_private_staging_secrets(release, monkeypatch):
     assert target.stat().st_mode & 0o777 == 0o700
     assert sorted(p.name for p in target.iterdir()) == sorted([
         "supabase.env", "litellm.env", "backend.env.base", "admin.env", "cloud.env",
-        "proxy.env", "seed.env", "manifest.json",
+        "proxy.env", "mcp.receiver.env", "seed.env", "manifest.json",
     ])
     assert all(p.stat().st_mode & 0o777 == 0o600 for p in target.iterdir())
     supabase = _values(target / "supabase.env")
     litellm = _values(target / "litellm.env")
     backend = _values(target / "backend.env.base")
+    receiver = _values(target / "mcp.receiver.env")
     assert supabase["POSTGRES_PASSWORD"] != "your-super-secret-and-long-postgres-password"
     assert len({supabase["POSTGRES_PASSWORD"], supabase["JWT_SECRET"],
                 litellm["LITELLM_MASTER_KEY"], litellm["LITELLM_SALT_KEY"]}) == 4
@@ -58,6 +59,10 @@ def test_generates_distinct_private_staging_secrets(release, monkeypatch):
     assert supabase["API_EXTERNAL_URL"] == "http://10.9.8.1:18132/auth/v1"
     assert backend["RESEARCH_AGENT_DATABASE_URL"].startswith("postgresql://pskit_app:")
     assert len(backend["RESEARCH_AGENT_ADMIN_API_KEY"]) >= 32
+    assert json.loads(backend["RESEARCH_AGENT_ADMIN_MCP_NETWORK_ZONES_JSON"]) == {
+        "wireguard-private": ["172.31.226.126/32"]
+    }
+    assert backend["RESEARCH_AGENT_MCP_TIMEOUT_SECONDS"] == "900"
     assert backend["RESEARCH_AGENT_AUTH_ABUSE_MODE"] == "observe"
     assert len(backend["RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET"]) >= 64
     assert len(backend["RESEARCH_AGENT_AUTH_CSRF_SECRET"]) >= 64
@@ -66,11 +71,20 @@ def test_generates_distinct_private_staging_secrets(release, monkeypatch):
     assert backend["TURNSTILE_SECRET_KEY"] == "1x0000000000000000000000000000000AA"
     assert backend["TURNSTILE_HOSTNAMES_JSON"] == '["dummy-key-pass"]'
     assert "MODEL_GATEWAY_API_KEY" not in backend
+    service_keys = json.loads(backend["RESEARCH_AGENT_COMPUTE_SERVICE_KEYS_JSON"])
+    assert service_keys == {"coral-mcp": receiver["PSKIT_COMPUTE_SERVICE_KEY"]}
+    assert len(receiver["PSKIT_COMPUTE_SERVICE_KEY"]) >= 64
+    assert receiver["PSKIT_MCP_ENDPOINT_OVERRIDES_JSON"] == "{}"
+    assert receiver["PSKIT_MCP_CREDENTIAL_REFS_JSON"] == "{}"
     assert litellm["LITELLM_PUBLIC_PORT"] == "4002"
     cloud = _values(target / "cloud.env")
     assert cloud["AGENT_BACKEND_ENV_FILE"] == str(target / "backend.env")
     assert cloud["AGENT_AF3_PROXY_KEY_FILE"] == str(target / "proxy.env")
     assert cloud["AGENT_WEB_IMAGE"] == "pskit-agent-web:unused-staging"
+    assert cloud["AGENT_MCP_RECEIVER_ENV_FILE"] == str(target / "mcp.receiver.env")
+    assert cloud["AGENT_MCP_RECEIVER_DATA_VOLUME"] == "pskit-agent-staging_mcp_receiver_data"
+    assert cloud["AGENT_MCP_SERVICE_ID"] == "coral-mcp"
+    assert cloud["AGENT_MCP_WORKER_ID"] == "coral-mcp-staging-1"
     manifest = json.loads((target / "manifest.json").read_text())
     assert manifest["backend_image"] == "pskit-agent-backend:test-fixed"
     assert manifest["frontend_dist"] == str(dist)

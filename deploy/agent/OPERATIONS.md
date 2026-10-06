@@ -34,7 +34,7 @@ python scripts/tool_product_smoke.py \
   --arguments '{"target":"6FXB"}'
 ```
 
-当前 CORAL 的一次生成、迭代生成和二维序列分析已有真实证据；口袋分析尚无消费 `af3_ipocket_dis_task_queue` 的 AF3 worker。因此 `coral.acceptance.yaml` 明确设置 `publication.eligible=false`，生产不得导入并发布该 Release，旧 CORAL 页面也暂不删除。
+当前 CORAL 的一次生成、迭代生成、口袋分析和二维序列分析均已有真实验收证据；`coral.acceptance.yaml` 记录四个 case、用量来源与产物 SHA-256，并设置 `publication.eligible=true`。其中口袋分析由受审 sampler 与真实 AF3 CIF worker 完成一个候选及 baseline。日常 Staging 生命周期验收只重跑 `coral.staging.acceptance.yaml` 中的低成本一次生成；它不能替代四 case 的 canonical evidence。旧硬编码 CORAL 页面已经由 `/tools/{slug}` 配置驱动产品页替代。
 
 **当前 A6000 迁移目标修订：** 前端改由阿里云宿主机 Nginx 直接服务固定版镜像中提取的 `dist`，新版后端和计算在 A6000，Supabase 仍在阿里云。本文件下面的云端 Web Compose 操作属于原先私网阶段；最终切换及验收以 [A6000_MIGRATION.md](A6000_MIGRATION.md) 为准。
 
