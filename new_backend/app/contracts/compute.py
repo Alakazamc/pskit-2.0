@@ -126,6 +126,26 @@ class ComputeJob(Contract):
     report: ExecutionReport | None = None
 
 
+class ExecutionResultMapping(Contract):
+    kind: Literal["json_pointer"] = "json_pointer"
+    pointer: str = Field(max_length=500)
+    renames: dict[str, str] = Field(default_factory=dict)
+    transforms: list[dict[str, Any]] = Field(default_factory=list, max_length=10)
+
+
+class ExecutionBindingSnapshot(Contract):
+    """Private immutable transport policy delivered only to trusted workers."""
+
+    adapter: Literal["immediate_mcp", "job_mcp", "mcp_tasks"]
+    endpoint_url: str = Field(min_length=1, max_length=2000)
+    credential_ref: str | None = Field(default=None, max_length=200)
+    submit_tool: str = Field(min_length=1, max_length=200)
+    status_tool: str | None = Field(default=None, max_length=200)
+    cancel_tool: str | None = Field(default=None, max_length=200)
+    remote_output_schema: dict[str, Any]
+    result_mapping: ExecutionResultMapping
+
+
 class ComputeJobSummary(Contract):
     """Owned history without potentially large sequence reports or worker details."""
 
@@ -159,6 +179,7 @@ class ExecutionGrant(Contract):
     stop_at: datetime
     lease_expires_at: datetime
     gpu_uuids: list[str] = Field(default_factory=list)
+    execution_binding: ExecutionBindingSnapshot | None = None
     recovered: bool = False
 
 

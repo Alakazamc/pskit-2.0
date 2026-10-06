@@ -9,7 +9,12 @@ from typing import Any
 from jsonschema import Draft202012Validator
 from psycopg.types.json import Jsonb
 
-from app.contracts.compute import Completed, ComputeJobRequest, Failed
+from app.contracts.compute import (
+    Completed,
+    ComputeJobRequest,
+    ExecutionBindingSnapshot,
+    Failed,
+)
 from app.contracts.tool_products import ToolRunHandoffContext, ToolRunSnapshot
 from app.domain.compute.common import admission_lock, payload_hash, utcnow
 from app.domain.tool_products.registry import ToolProductNotAvailable
@@ -30,6 +35,27 @@ class ToolRunGateway:
         self.registry = registry
         self.compute_jobs = compute_jobs
         self.compute_events = compute_events
+
+    @staticmethod
+    def _execution_binding(binding, connection) -> ExecutionBindingSnapshot:
+        endpoint = connection.execute(
+            "SELECT e.uri,e.credential_ref FROM mcp_service_revisions r "
+            "JOIN mcp_service_endpoints e ON e.endpoint_id=r.endpoint_id "
+            "WHERE r.service_id=%s AND r.revision=%s",
+            (binding["service_id"], binding["service_revision"]),
+        ).fetchone()
+        if endpoint is None:
+            raise LookupError("MCP_SERVICE_REVISION_NOT_FOUND")
+        return ExecutionBindingSnapshot(
+            adapter=binding["adapter"],
+            endpoint_url=endpoint[0],
+            credential_ref=endpoint[1],
+            submit_tool=binding["submit_tool"],
+            status_tool=binding.get("status_tool"),
+            cancel_tool=binding.get("cancel_tool"),
+            remote_output_schema=binding["remote_output_schema"],
+            result_mapping=binding["result_mapping"],
+        )
 
     def _snapshot(self, user_id: str, run_id: str, *, connection) -> ToolRunSnapshot | None:
         row = connection.execute(
@@ -165,6 +191,7 @@ class ToolRunGateway:
                 ),
             )
             binding, _service_id, capability = resolved[0]
+            execution_binding = self._execution_binding(binding, connection)
             compute = self.compute_jobs.submit(
                 user_id,
                 ComputeJobRequest(
@@ -174,6 +201,7 @@ class ToolRunGateway:
                     budget=capability.max_budget,
                 ),
                 f"tool-product:{run_id}:0",
+                execution_binding=execution_binding,
                 connection=connection,
             )
             connection.execute(
@@ -279,6 +307,7 @@ class ToolRunGateway:
                     budget=capability.max_budget,
                 ),
                 f"tool-product:{run_id}:{next_ordinal}",
+                execution_binding=self._execution_binding(binding, connection),
                 connection=connection,
             )
             connection.execute(

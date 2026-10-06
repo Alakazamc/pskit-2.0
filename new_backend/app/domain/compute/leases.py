@@ -31,7 +31,8 @@ class ComputeLeases:
 
     def _grant(self, connection, job_id):
         row = connection.execute(
-            "SELECT j.user_id,j.worker_id,j.attempts,j.lease_token,d.stop_at,j.lease_expires_at "
+            "SELECT j.user_id,j.worker_id,j.attempts,j.lease_token,d.stop_at,j.lease_expires_at,"
+            "d.execution_binding_json "
             "FROM agent_jobs j JOIN compute_job_data d ON d.job_id=j.id WHERE j.id=%s", (job_id,),
         ).fetchone()
         return ExecutionGrant(job=self.jobs.get(row[0], job_id, connection=connection),
@@ -39,7 +40,8 @@ class ComputeLeases:
                               stop_at=row[4], lease_expires_at=datetime.fromisoformat(row[5]),
                               gpu_uuids=[item[0] for item in connection.execute(
                                   "SELECT gpu_uuid FROM compute_device_leases WHERE job_id=%s "
-                                  "ORDER BY gpu_uuid", (job_id,))])
+                                  "ORDER BY gpu_uuid", (job_id,))],
+                              execution_binding=row[6])
 
     def _recover_expired(self, connection):
         now = utcnow()

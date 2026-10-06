@@ -76,11 +76,28 @@ def product_payload(*, two_actions=False):
     return payload
 
 
+def seed_coral_endpoint(database):
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO mcp_service_endpoints "
+            "(endpoint_id,uri,transport,credential_ref,network_zone,state,created_by) "
+            "VALUES ('endpoint-coral','https://coral.example.org/mcp','streamable_http',"
+            "'coral-key','public','approved','admin')"
+        )
+        connection.execute(
+            "INSERT INTO mcp_service_revisions "
+            "(service_id,revision,endpoint_id,manifest_json,manifest_digest,created_by) "
+            "VALUES ('coral',4,'endpoint-coral','{}'::jsonb,%s,'admin')",
+            ("a" * 64,),
+        )
+
+
 @pytest.fixture
 def tool_run_system(pg_schema):
     dsn, schema = pg_schema
     migrate_postgres(dsn, schema=schema)
     database = PostgresDatabase(dsn, schema=schema)
+    seed_coral_endpoint(database)
     repository = ToolProductRepository(database)
     catalog = ComputeCatalog(database)
     catalog.register(ComputeServiceManifest(
@@ -150,7 +167,9 @@ def test_start_pins_release_action_capability_and_is_idempotent(tool_run_system)
             (first.json()["run_id"],),
         ).fetchone()[0]
         steps = connection.execute(
-            "SELECT binding_id,compute_job_id FROM tool_product_run_steps WHERE run_id=%s",
+            "SELECT s.binding_id,s.compute_job_id,d.execution_binding_json "
+            "FROM tool_product_run_steps s JOIN compute_job_data d "
+            "ON d.job_id=s.compute_job_id WHERE s.run_id=%s",
             (first.json()["run_id"],),
         ).fetchall()
         count = connection.execute(
@@ -169,6 +188,9 @@ def test_start_pins_release_action_capability_and_is_idempotent(tool_run_system)
     assert run["capabilities"][0]["version"] == "1.0.0"
     assert run["service_revisions"] == {"coral": 4}
     assert steps[0][0] == "binding-one-shot" and steps[0][1].startswith("compute-")
+    assert steps[0][2]["endpoint_url"] == "https://coral.example.org/mcp"
+    assert steps[0][2]["credential_ref"] == "coral-key"
+    assert steps[0][2]["adapter"] == "immediate_mcp"
     assert count == 1
 
 

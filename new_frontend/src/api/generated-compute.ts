@@ -70,6 +70,17 @@ export type ComputeUsage = {
   "allocation_policy"?: string;
 };
 
+export type ExecutionBindingSnapshot = {
+  "adapter": "immediate_mcp" | "job_mcp" | "mcp_tasks";
+  "endpoint_url": string;
+  "credential_ref"?: string | null;
+  "submit_tool": string;
+  "status_tool"?: string | null;
+  "cancel_tool"?: string | null;
+  "remote_output_schema": Record<string, unknown>;
+  "result_mapping": ExecutionResultMapping;
+};
+
 export type ExecutionError = {
   "code": string;
   "message": string;
@@ -83,7 +94,15 @@ export type ExecutionGrant = {
   "stop_at": string;
   "lease_expires_at": string;
   "gpu_uuids"?: (string)[];
+  "execution_binding"?: ExecutionBindingSnapshot | null;
   "recovered"?: boolean;
+};
+
+export type ExecutionResultMapping = {
+  "kind"?: "json_pointer";
+  "pointer": string;
+  "renames"?: Record<string, string>;
+  "transforms"?: (Record<string, unknown>)[];
 };
 
 export type Failed = {

@@ -439,6 +439,89 @@
       "title": "ComputeUsage",
       "type": "object"
     },
+    "ExecutionBindingSnapshot": {
+      "additionalProperties": false,
+      "description": "Private immutable transport policy delivered only to trusted workers.",
+      "properties": {
+        "adapter": {
+          "enum": [
+            "immediate_mcp",
+            "job_mcp",
+            "mcp_tasks"
+          ],
+          "title": "Adapter",
+          "type": "string"
+        },
+        "endpoint_url": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Endpoint Url",
+          "type": "string"
+        },
+        "credential_ref": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Ref"
+        },
+        "submit_tool": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Submit Tool",
+          "type": "string"
+        },
+        "status_tool": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status Tool"
+        },
+        "cancel_tool": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cancel Tool"
+        },
+        "remote_output_schema": {
+          "additionalProperties": true,
+          "title": "Remote Output Schema",
+          "type": "object"
+        },
+        "result_mapping": {
+          "$ref": "#/$defs/ExecutionResultMapping"
+        }
+      },
+      "required": [
+        "adapter",
+        "endpoint_url",
+        "submit_tool",
+        "remote_output_schema",
+        "result_mapping"
+      ],
+      "title": "ExecutionBindingSnapshot",
+      "type": "object"
+    },
     "ExecutionError": {
       "additionalProperties": false,
       "properties": {
@@ -497,6 +580,17 @@
           "title": "Gpu Uuids",
           "type": "array"
         },
+        "execution_binding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionBindingSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "recovered": {
           "default": false,
           "title": "Recovered",
@@ -512,6 +606,43 @@
         "lease_expires_at"
       ],
       "title": "ExecutionGrant",
+      "type": "object"
+    },
+    "ExecutionResultMapping": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "json_pointer",
+          "default": "json_pointer",
+          "title": "Kind",
+          "type": "string"
+        },
+        "pointer": {
+          "maxLength": 500,
+          "title": "Pointer",
+          "type": "string"
+        },
+        "renames": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Renames",
+          "type": "object"
+        },
+        "transforms": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "maxItems": 10,
+          "title": "Transforms",
+          "type": "array"
+        }
+      },
+      "required": [
+        "pointer"
+      ],
+      "title": "ExecutionResultMapping",
       "type": "object"
     },
     "Failed": {
@@ -763,6 +894,9 @@
     },
     {
       "$ref": "#/$defs/ComputeJob"
+    },
+    {
+      "$ref": "#/$defs/ExecutionBindingSnapshot"
     },
     {
       "$ref": "#/$defs/ExecutionGrant"

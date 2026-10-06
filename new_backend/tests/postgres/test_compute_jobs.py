@@ -2,18 +2,28 @@
 
 from concurrent.futures import ThreadPoolExecutor
 
+import psycopg
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.auth import get_current_user
 from app.api.compute import router
-from app.contracts.compute import CapabilityVersion, ComputeJobRequest, ComputeServiceManifest
+from app.contracts.compute import (
+    CapabilityVersion,
+    ComputeClaimRequest,
+    ComputeJobRequest,
+    ComputeServiceManifest,
+    ExecutionBindingSnapshot,
+    WorkerResources,
+)
 from app.contracts.models import UserIdentity
 from app.db.postgres import PostgresDatabase
 from app.db.postgres_migrations import migrate_postgres
 from app.domain.compute.catalog import ComputeCatalog
 from app.domain.compute.jobs import ComputeJobs
+from app.domain.compute.leases import ComputeLeases
+from app.domain.compute.ledger import ComputeLedger
 
 
 @pytest.fixture
@@ -90,6 +100,46 @@ def test_legacy_af3_cannot_claim_or_simulate_generic_job(computation):
     old.advance_mock_jobs(0)
     old.expire_queued_compute_jobs(0)
     assert jobs.get("alice", job.id).status == "queued"
+
+
+def test_execution_binding_is_private_immutable_and_only_present_on_worker_grant(computation):
+    database, _catalog, jobs = computation
+    binding = ExecutionBindingSnapshot(
+        adapter="immediate_mcp",
+        endpoint_url="https://mcp.example.org/mcp",
+        credential_ref="coral-worker",
+        submit_tool="inspect",
+        remote_output_schema={"type": "object"},
+        result_mapping={"kind": "json_pointer", "pointer": "/result"},
+    )
+    job = jobs.submit(
+        "alice",
+        ComputeJobRequest(
+            capability_id="lab.inspect", version="1", arguments={"sequence": "ACG"}
+        ),
+        "private-binding",
+        execution_binding=binding,
+    )
+    assert "endpoint" not in job.model_dump_json()
+    assert "credential" not in job.model_dump_json()
+
+    leases = ComputeLeases(
+        database,
+        ComputeLedger(database, cpu_daily_limit_ms=1_000, gpu_daily_limit_ms=0),
+    )
+    grant = leases.claim(ComputeClaimRequest(
+        service_id="lab", worker_id="worker-1", resources=WorkerResources()
+    ))
+    assert grant.execution_binding == binding
+    assert "secret-value" not in grant.model_dump_json()
+    with database.connection() as connection, pytest.raises(
+        psycopg.errors.RaiseException, match="IMMUTABLE_EXECUTION_BINDING"
+    ):
+        connection.execute(
+            "UPDATE compute_job_data SET execution_binding_json='{}'::jsonb "
+            "WHERE job_id=%s",
+            (job.id,),
+        )
 
 
 def test_public_history_is_owned_filtered_bounded_and_survives_reopening(computation):

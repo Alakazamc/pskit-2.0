@@ -1,6 +1,6 @@
 import pytest
 from test_tool_product_repository import report_for
-from test_tool_product_runs import capability, product_payload
+from test_tool_product_runs import capability, product_payload, seed_coral_endpoint
 
 from app.contracts.compute import (
     Completed,
@@ -29,6 +29,7 @@ def workflow_system(pg_schema):
     dsn, schema = pg_schema
     migrate_postgres(dsn, schema=schema)
     database = PostgresDatabase(dsn, schema=schema)
+    seed_coral_endpoint(database)
     repository = ToolProductRepository(database)
     catalog = ComputeCatalog(database)
     from app.contracts.compute import ComputeServiceManifest

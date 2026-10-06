@@ -7,6 +7,7 @@ from app.contracts.compute import (
     ComputeJob,
     ComputeServiceManifest,
     ComputeUsage,
+    ExecutionBindingSnapshot,
     ExecutionGrant,
     ExecutionReport,
     UsageReceipt,
@@ -76,7 +77,8 @@ def render_event_types(schema: dict) -> str:
 def main() -> None:
     directory = Path(__file__).resolve().parents[2] / "contracts"
     event_schema = TypeAdapter(RunEvent).json_schema()
-    compute_schema = TypeAdapter(ComputeServiceManifest | ComputeJob | ExecutionGrant
+    compute_schema = TypeAdapter(ComputeServiceManifest | ComputeJob | ExecutionBindingSnapshot
+                                 | ExecutionGrant
                                  | UsageReceipt | ComputeUsage | ExecutionReport).json_schema()
     for name, schema in (
         ("openapi.json", create_app().openapi()),

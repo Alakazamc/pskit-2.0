@@ -190,7 +190,7 @@ def test_quota_migration_upgrades_existing_version_two_schema(pg_schema: tuple[s
 
 def test_auth_abuse_schema_contract(pg_schema):
     dsn, schema = pg_schema
-    assert SCHEMA_VERSION == 9
+    assert SCHEMA_VERSION == 10
     migrate_postgres(dsn, schema=schema)
     with psycopg.connect(dsn) as conn:
         columns = {row[0] for row in conn.execute(

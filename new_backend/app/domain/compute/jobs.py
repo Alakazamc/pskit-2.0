@@ -26,12 +26,18 @@ class ComputeJobs:
         *,
         run_id=None,
         tool_call_id=None,
+        execution_binding=None,
         connection=None,
     ):
         if not idempotency_key or len(idempotency_key) > 200:
             raise ValueError("INVALID_IDEMPOTENCY_KEY")
-        digest = payload_hash({**request.model_dump(mode="json"), "run_id": run_id,
-                               "tool_call_id": tool_call_id})
+        digest = payload_hash({
+            **request.model_dump(mode="json"),
+            "run_id": run_id,
+            "tool_call_id": tool_call_id,
+            "execution_binding": execution_binding.model_dump(mode="json")
+            if execution_binding is not None else None,
+        })
         if connection is None:
             with self.database.transaction() as owned_connection:
                 return self.submit(
@@ -40,6 +46,7 @@ class ComputeJobs:
                     idempotency_key,
                     run_id=run_id,
                     tool_call_id=tool_call_id,
+                    execution_binding=execution_binding,
                     connection=owned_connection,
                 )
         admission_lock(connection)
@@ -85,9 +92,12 @@ class ComputeJobs:
         )
         connection.execute(
             "INSERT INTO compute_job_data (job_id,service_id,capability_json,arguments_json,"
-            "budget_json,user_id,idempotency_key,request_hash) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+            "budget_json,user_id,idempotency_key,request_hash,execution_binding_json) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (job_id, service_id, Jsonb(capability.model_dump(mode="json")), Jsonb(request.arguments),
-             Jsonb(request.budget.model_dump()), user_id, idempotency_key, digest),
+             Jsonb(request.budget.model_dump()), user_id, idempotency_key, digest,
+             Jsonb(execution_binding.model_dump(mode="json"))
+             if execution_binding is not None else None),
         )
         if self.ledger:
             self.ledger.reserve(connection, user_id, job_id, request.budget, utcnow())
