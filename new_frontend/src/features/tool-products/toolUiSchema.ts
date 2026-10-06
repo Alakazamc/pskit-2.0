@@ -100,6 +100,19 @@ export function resolveActionTarget(action: ToolUiAction, document: unknown): st
   return selection.map[String(state)];
 }
 
+export function projectActionArguments(
+  actions: Array<{ id: string; input_schema: Record<string, unknown> }>,
+  actionId: string,
+  form: ToolForm,
+): ToolForm {
+  const schema = actions.find((action) => action.id === actionId)?.input_schema;
+  const properties = schema?.properties;
+  if (typeof properties !== "object" || properties === null || Array.isArray(properties)) return form;
+  return Object.fromEntries(
+    Object.keys(properties).filter((key) => Object.prototype.hasOwnProperty.call(form, key)).map((key) => [key, form[key]]),
+  );
+}
+
 export function applyTransforms(value: unknown, transforms: ToolUiResultView["transforms"]): unknown {
   let result = value;
   for (const transform of transforms ?? []) {

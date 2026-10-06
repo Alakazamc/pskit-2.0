@@ -7,7 +7,7 @@ import type { ResearchApi, ToolProductRun } from "../../api/types";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { personalSessionPath } from "../mono/sessionPaths";
 import { ToolUiRenderer } from "./ToolUiRenderer";
-import { localized, resolvePointer, setFormPointer, type ToolForm, type ToolUiField, type ToolUiSchema } from "./toolUiSchema";
+import { localized, projectActionArguments, resolvePointer, setFormPointer, type ToolForm, type ToolUiField, type ToolUiSchema } from "./toolUiSchema";
 
 const activeStatuses = new Set(["queued", "running", "cancelling"]);
 const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
@@ -108,7 +108,8 @@ export function ToolProductPage({ api, slug, userId, theme, onBack }: {
     if (!product.data || busy) return;
     setBusy(true); setError("");
     try {
-      const submission = await materializeFiles(product.data.ui_schema, values);
+      const selected = projectActionArguments(product.data.actions, actionId, values);
+      const submission = await materializeFiles(product.data.ui_schema, selected);
       setForm(submission);
       const signature = `${actionId}\0${formSignature(submission)}`;
       if (pendingStart.current?.signature !== signature) pendingStart.current = { signature, key: crypto.randomUUID() };

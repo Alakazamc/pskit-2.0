@@ -16,11 +16,13 @@ const product: PublishedToolProduct = {
   release_id: "release-1", product_id: "product-flex", slug: "flex-design", revision: 1,
   title: text("Flexible Design", "灵活设计"), description: text("A published scientific workflow", "已发布的科研流程"),
   state: "published", published_at: "2026-10-06T00:00:00Z",
-  actions: [{ id: "generate", label: text("Generate", "生成"), kind: "capability", binding_ids: ["binding-1"], input_schema: { type: "object" } }],
+  actions: [{ id: "generate", label: text("Generate", "生成"), kind: "capability", binding_ids: ["binding-1"], input_schema: {
+    type: "object", properties: { target: { type: "string" } }, required: ["target"], additionalProperties: false,
+  } }],
   ui_schema: {
     schema_version: "pskit.tool-ui.v1",
     product: { slug: "flex-design", title: text("Flexible Design", "灵活设计"), description: text("A published scientific workflow", "已发布的科研流程") },
-    page: { layout: "split-workspace", input_width: 5, result_width: 7 }, state: {},
+    page: { layout: "split-workspace", input_width: 5, result_width: 7 }, state: { mode: { initial: "one_shot" } },
     sections: [{ id: "input", title: text("Input", "输入"), fields: [
       { id: "target", component: "protein-input", label: text("Protein target", "蛋白质目标"), input_pointer: "/form/target", required: true },
     ] }],
@@ -119,6 +121,9 @@ it("starts a pending run, recovers real events by cursor, labels usage source an
   const actor = userEvent.setup();
   await actor.type(await screen.findByRole("textbox", { name: "Protein target" }), "1A9N");
   await actor.click(screen.getByRole("button", { name: "Run design" }));
+  expect(api.startToolProductRun).toHaveBeenCalledWith(
+    "flex-design", "generate", { target: "1A9N" }, expect.any(String),
+  );
   expect(await screen.findByText("Generate candidates")).toBeInTheDocument();
   expect(screen.getByText(/service reported/i)).toBeInTheDocument();
   expect(screen.queryByText("GGCA")).not.toBeInTheDocument();

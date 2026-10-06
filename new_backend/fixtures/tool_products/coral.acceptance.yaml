@@ -1,0 +1,102 @@
+suite:
+  suite_id: coral-provider-real-cases
+  revision: 1
+  cases:
+    - case_id: coral-one-shot-6fxb-a
+      action_id: coral-one-shot
+      arguments:
+        pdb_id: 6FXB
+        chain: A
+        num_samples: 1
+        length: 50
+      invalid_arguments:
+        - {pdb_id: bad, chain: A, num_samples: 1, length: 50}
+      result_assertions:
+        - {pointer: /generated_count, predicate: minimum, value: 1}
+        - {pointer: /protein_sequence_preview, predicate: exists}
+      required_progress_types: []
+      check_idempotency: true
+      check_cancellation: false
+    - case_id: coral-iterative-6fxb
+      action_id: coral-iterative
+      arguments:
+        target_protein_id: 6FXB
+        checkpoint_path: /data/jhli/project/CORAL/weights/finetune_flow_infonce_w_pre_w_algin_context_align_rinalmo_frozen_7/epoch_999_old_from_998_resume/ema.pt
+        per_sample: 1
+        elite_size: 2
+      invalid_arguments:
+        - {target_protein_id: "", checkpoint_path: "", per_sample: 0, elite_size: 0}
+      result_assertions:
+        - {pointer: /candidate_count, predicate: minimum, value: 1}
+      required_progress_types: []
+      check_idempotency: true
+      check_cancellation: false
+    - case_id: coral-pocket-fixture
+      action_id: coral-pocket
+      arguments:
+        binding_domain_file: /data/jhli/project/annoy-coral-pskit-mcp/pskit_mcp_cases/binding_domains.csv
+        checkpoint_path: /data/jhli/project/annoy-coral/weights/flow_finetune_model.safetensors
+        per_sample: 1
+      invalid_arguments:
+        - {binding_domain_file: "", checkpoint_path: "", per_sample: 0}
+      result_assertions:
+        - {pointer: /candidate_count, predicate: minimum, value: 1}
+      required_progress_types: []
+      check_idempotency: true
+      check_cancellation: false
+    - case_id: coral-two-dimensional-local-fixtures
+      action_id: coral-two-dimensional
+      arguments:
+        selex_fasta: /data/jhli/project/annoy-coral-pskit-mcp/pskit_mcp_cases/selex.fasta
+        ai_csv: /data/jhli/project/annoy-coral-pskit-mcp/pskit_mcp_cases/generated.csv
+        sample_size: 100
+        bootstrap: 2
+        skip_structure: true
+      invalid_arguments:
+        - {selex_fasta: "", ai_csv: "", sample_size: 1, bootstrap: 0, skip_structure: true}
+      result_assertions:
+        - {pointer: /sample_size, predicate: equals, value: 100}
+        - {pointer: /elapsed_seconds, predicate: minimum, value: 0}
+      required_progress_types: []
+      check_idempotency: true
+      check_cancellation: false
+evidence:
+  provider_host: jhli-4090-wg
+  provider_branches:
+    coral: {branch: pskit-mcp-integration, commit: 95800a4}
+    annoy_coral: {branch: pskit-mcp-integration, commit: 9592d6e}
+  cases:
+    coral-one-shot:
+      status: passed
+      case_id: coral-one-shot-6fxb-a
+      usage: {wall_ms: 42061, cpu_core_ms: 22686, gpu_device_ms: 39787, gpu_count: 1, source: service_reported}
+      artifacts:
+        - {name: generated_rna.csv, size: 70, sha256: 2aac888fa1a430215305497fffed8890c04e3eec5f5db74d06916338b8423c63}
+    coral-iterative:
+      status: passed
+      case_id: coral-iterative-6fxb
+      usage: {wall_ms: 29256, cpu_core_ms: 15488, gpu_device_ms: 27492, gpu_count: 1, source: service_reported}
+      artifacts:
+        - {name: iterative_candidates.csv, size: 2320, sha256: db6e2c6b4ae81b90c1e88d77e7bac79db5ae567801e8b12f43b9d20ce0059a18}
+    coral-pocket:
+      status: blocked
+      case_id: coral-pocket-fixture
+      blocker: AF3_WORKER_UNAVAILABLE
+      detail: No process is consuming af3_ipocket_dis_task_queue on the reviewed provider host.
+      usage: null
+      artifacts: []
+    coral-two-dimensional:
+      status: passed
+      case_id: coral-two-dimensional-local-fixtures
+      scope: Sequence analysis passed with structure calculation intentionally skipped.
+      usage: {wall_ms: 23232, cpu_core_ms: 12855, gpu_device_ms: null, gpu_count: 0, source: unknown}
+      artifacts:
+        - {name: README.md, size: 2612, sha256: 91032901e02951b9369805749e34c7129de042b23658f689b27987461af61199}
+        - {name: 02_gc_distribution.png, size: 114034, sha256: 87f11d0093b3e3759b5298c86cf263616c1c587855af30940f0c9e25822aaf3a}
+        - {name: c5_diversity_graphpad.xlsx, size: 21462, sha256: 31cce99310174294ff29e662a0dd58dc336d0985233c1ce7e355ce1de178038e}
+        - {name: C5_diversity_analysis.md, size: 10562, sha256: 898cdda714fc6275bb75a34711cad40c5e9d16f5755de2ec9ddb89eead460e0f}
+        - {name: cleaned_sequence_summary.csv, size: 807, sha256: 9a6010b0f65e02033a763bb5f42d6be017ad02beb3d29083f46c42d4ddf11e1e}
+publication:
+  eligible: false
+  required_case_status: passed
+  reason: All four real acceptance cases must pass before the CORAL product can be published.

@@ -1,0 +1,352 @@
+product_id: product-coral-scientific-workflows
+slug: coral
+revision: 1
+owner_user_id: system
+title: &product_title
+  en: CORAL Scientific Workflows
+  zh-CN: CORAL 科研工作流
+description: &product_description
+  en: Generate RNA candidates and evaluate sequence or pocket evidence with reviewed CORAL services.
+  zh-CN: 使用经过审查的 CORAL 服务生成 RNA 候选，并评估序列或口袋证据。
+ui_schema:
+  schema_version: pskit.tool-ui.v1
+  product:
+    slug: coral
+    title: *product_title
+    description: *product_description
+  page:
+    layout: split-workspace
+    input_width: 5
+    result_width: 7
+  state:
+    mode:
+      initial: one_shot
+  sections:
+    - id: coral-mode
+      title: {en: Workflow, zh-CN: 工作流}
+      fields:
+        - id: coral-mode-choice
+          component: segmented-control
+          label: {en: Mode, zh-CN: 模式}
+          input_pointer: /form/mode
+          required: true
+          options:
+            - value: one_shot
+              label: {en: One-shot, zh-CN: 一次生成}
+            - value: iterative
+              label: {en: Iterative, zh-CN: 迭代生成}
+            - value: pocket
+              label: {en: Pocket, zh-CN: 口袋分析}
+            - value: two_dimensional
+              label: {en: 2D analysis, zh-CN: 二维分析}
+    - id: one-shot-inputs
+      title: {en: Protein target, zh-CN: 蛋白质目标}
+      visible_when: {source: /form/mode, equals: one_shot}
+      fields:
+        - id: pdb-id
+          component: protein-input
+          label: {en: PDB ID, zh-CN: PDB 编号}
+          input_pointer: /form/pdb_id
+          required: true
+        - id: pdb-chain
+          component: text-input
+          label: {en: Chain, zh-CN: 蛋白链}
+          input_pointer: /form/chain
+          required: true
+        - id: one-shot-samples
+          component: number-input
+          label: {en: Candidate count, zh-CN: 候选数量}
+          input_pointer: /form/num_samples
+          default: 1
+          minimum: 1
+          maximum: 10
+          step: 1
+        - id: one-shot-length
+          component: number-input
+          label: {en: RNA length, zh-CN: RNA 长度}
+          input_pointer: /form/length
+          default: 50
+          minimum: 10
+          maximum: 500
+          step: 1
+    - id: iterative-inputs
+      title: {en: Evolutionary generation, zh-CN: 迭代生成}
+      visible_when: {source: /form/mode, equals: iterative}
+      fields:
+        - id: iterative-target
+          component: protein-input
+          label: {en: Target protein ID, zh-CN: 目标蛋白编号}
+          input_pointer: /form/target_protein_id
+          required: true
+        - id: iterative-checkpoint
+          component: text-input
+          label: {en: Approved checkpoint, zh-CN: 已批准检查点}
+          input_pointer: /form/checkpoint_path
+          required: true
+        - id: iterative-per-sample
+          component: number-input
+          label: {en: Samples per process, zh-CN: 每进程样本数}
+          input_pointer: /form/per_sample
+          default: 1
+          minimum: 1
+          maximum: 64
+          step: 1
+        - id: iterative-elite-size
+          component: number-input
+          label: {en: Elite size, zh-CN: 精英集合大小}
+          input_pointer: /form/elite_size
+          default: 2
+          minimum: 1
+          maximum: 64
+          step: 1
+    - id: pocket-inputs
+      title: {en: Pocket optimization, zh-CN: 口袋优化}
+      visible_when: {source: /form/mode, equals: pocket}
+      fields:
+        - id: pocket-domain-file
+          component: text-input
+          label: {en: Approved binding-domain file, zh-CN: 已批准结合域文件}
+          input_pointer: /form/binding_domain_file
+          required: true
+        - id: pocket-checkpoint
+          component: text-input
+          label: {en: Approved checkpoint, zh-CN: 已批准检查点}
+          input_pointer: /form/checkpoint_path
+          required: true
+        - id: pocket-per-sample
+          component: number-input
+          label: {en: Samples per process, zh-CN: 每进程样本数}
+          input_pointer: /form/per_sample
+          default: 1
+          minimum: 1
+          maximum: 64
+          step: 1
+    - id: two-dimensional-inputs
+      title: {en: Sequence and structure evidence, zh-CN: 序列与结构证据}
+      visible_when: {source: /form/mode, equals: two_dimensional}
+      fields:
+        - id: selex-fasta
+          component: text-input
+          label: {en: Approved SELEX FASTA, zh-CN: 已批准 SELEX FASTA}
+          input_pointer: /form/selex_fasta
+          required: true
+        - id: ai-csv
+          component: text-input
+          label: {en: Approved candidate CSV, zh-CN: 已批准候选 CSV}
+          input_pointer: /form/ai_csv
+          required: true
+        - id: analysis-sample-size
+          component: number-input
+          label: {en: Sample size, zh-CN: 样本量}
+          input_pointer: /form/sample_size
+          default: 100
+          minimum: 10
+          maximum: 1000000
+          step: 1
+        - id: analysis-bootstrap
+          component: number-input
+          label: {en: Bootstrap rounds, zh-CN: Bootstrap 轮数}
+          input_pointer: /form/bootstrap
+          default: 2
+          minimum: 1
+          maximum: 10000
+          step: 1
+        - id: analysis-skip-structure
+          component: switch
+          label: {en: Skip structure calculation, zh-CN: 跳过结构计算}
+          input_pointer: /form/skip_structure
+          default: true
+  actions:
+    - id: run-coral
+      label: {en: Run CORAL, zh-CN: 运行 CORAL}
+      kind: start_run
+      target:
+        by_state:
+          source: /form/mode
+          map:
+            one_shot: coral-one-shot
+            iterative: coral-iterative
+            pocket: coral-pocket
+            two_dimensional: coral-two-dimensional
+  result_views:
+    - id: stages
+      component: stage-flow
+      source: /run/status
+      title: {en: Progress, zh-CN: 运行进度}
+    - id: result-summary
+      component: metric-grid
+      source: /run/result
+      title: {en: Summary, zh-CN: 结果摘要}
+    - id: result-artifacts
+      component: artifact-list
+      source: /run/artifacts
+      title: {en: Outputs, zh-CN: 产出文件}
+      preview_limit: 128
+  handoffs:
+    - id: continue-with-agent
+      label: {en: Continue with Agent, zh-CN: 交给 Agent 继续分析}
+      summary_source: /run/result
+      artifact_sources: [/run/artifacts]
+bindings:
+  - &one_shot_binding
+    binding_id: binding-coral-one-shot
+    product_action_id: coral-one-shot
+    service_id: coral-mcp
+    service_revision: 1
+    capability_id: coral.generate.one_shot
+    capability_version: 1.0.0
+    adapter: immediate_mcp
+    submit_tool: coral.generate.one_shot
+    remote_output_schema: &execution_report
+      type: object
+      properties:
+        status: {type: string, enum: [completed, failed]}
+        result: {type: object}
+        error:
+          type: object
+          properties:
+            code: {type: string}
+            message: {type: string}
+          required: [code, message]
+          additionalProperties: false
+        usage:
+          type: object
+          properties:
+            wall_ms: {type: [integer, "null"], minimum: 0}
+            cpu_core_ms: {type: [integer, "null"], minimum: 0}
+            gpu_device_ms: {type: [integer, "null"], minimum: 0}
+            gpu_count: {type: [integer, "null"], minimum: 0}
+            source: {type: string, enum: [service_reported, measured, estimated, unknown]}
+          required: [wall_ms, cpu_core_ms, gpu_device_ms, gpu_count, source]
+          additionalProperties: false
+        artifacts:
+          type: array
+          items: {type: object}
+      required: [status, usage, artifacts]
+      additionalProperties: false
+    result_schema:
+      type: object
+      properties:
+        generated_count: {type: integer, minimum: 0}
+        protein_sequence_preview: {type: string}
+      required: [generated_count, protein_sequence_preview]
+      additionalProperties: false
+    result_mapping: {kind: json_pointer, pointer: /result}
+    required_usage: [wall_ms, cpu_core_ms, gpu_device_ms, gpu_count]
+    cancellation: none
+  - binding_id: binding-coral-iterative
+    product_action_id: coral-iterative
+    service_id: coral-mcp
+    service_revision: 1
+    capability_id: coral.generate.iterative
+    capability_version: 1.0.0
+    adapter: immediate_mcp
+    submit_tool: coral.generate.iterative
+    remote_output_schema: *execution_report
+    result_schema: &candidate_count_result
+      type: object
+      properties:
+        candidate_count: {type: integer, minimum: 1}
+      required: [candidate_count]
+      additionalProperties: false
+    result_mapping: {kind: json_pointer, pointer: /result}
+    required_usage: [wall_ms, cpu_core_ms, gpu_device_ms, gpu_count]
+    cancellation: none
+  - binding_id: binding-coral-pocket
+    product_action_id: coral-pocket
+    service_id: coral-mcp
+    service_revision: 1
+    capability_id: coral.analyze.pocket
+    capability_version: 1.0.0
+    adapter: immediate_mcp
+    submit_tool: coral.analyze.pocket
+    remote_output_schema: *execution_report
+    result_schema: *candidate_count_result
+    result_mapping: {kind: json_pointer, pointer: /result}
+    required_usage: [wall_ms, cpu_core_ms, gpu_device_ms, gpu_count]
+    cancellation: none
+  - binding_id: binding-coral-two-dimensional
+    product_action_id: coral-two-dimensional
+    service_id: coral-mcp
+    service_revision: 1
+    capability_id: coral.optimize.two_dimensional
+    capability_version: 1.0.0
+    adapter: immediate_mcp
+    submit_tool: coral.optimize.two_dimensional
+    remote_output_schema: *execution_report
+    result_schema:
+      type: object
+      properties:
+        sample_size: {type: integer, minimum: 10}
+        molecule: {type: string, enum: [dna, rna]}
+        structure_skipped: {type: boolean}
+        elapsed_seconds: {type: [number, "null"], minimum: 0}
+      required: [sample_size, molecule, structure_skipped, elapsed_seconds]
+      additionalProperties: false
+    result_mapping: {kind: json_pointer, pointer: /result}
+    required_usage: [wall_ms, cpu_core_ms]
+    cancellation: none
+actions:
+  - id: coral-one-shot
+    label: {en: One-shot generation, zh-CN: 一次生成}
+    kind: capability
+    binding_ids: [binding-coral-one-shot]
+    input_schema:
+      type: object
+      properties:
+        pdb_id: {type: string, pattern: "^[A-Za-z0-9]{4}$"}
+        chain: {type: string, pattern: "^[A-Za-z0-9]{1,4}$"}
+        num_samples: {type: integer, minimum: 1, maximum: 10}
+        length: {type: integer, minimum: 10, maximum: 500}
+      required: [pdb_id, chain, num_samples, length]
+      additionalProperties: false
+  - id: coral-iterative
+    label: {en: Iterative generation, zh-CN: 迭代生成}
+    kind: capability
+    binding_ids: [binding-coral-iterative]
+    input_schema:
+      type: object
+      properties:
+        target_protein_id: {type: string, minLength: 2, maxLength: 64}
+        checkpoint_path: {type: string, minLength: 1}
+        per_sample: {type: integer, minimum: 1, maximum: 64}
+        elite_size: {type: integer, minimum: 1, maximum: 64}
+      required: [target_protein_id, checkpoint_path, per_sample, elite_size]
+      additionalProperties: false
+  - id: coral-pocket
+    label: {en: Pocket optimization, zh-CN: 口袋优化}
+    kind: capability
+    binding_ids: [binding-coral-pocket]
+    input_schema:
+      type: object
+      properties:
+        binding_domain_file: {type: string, minLength: 1}
+        checkpoint_path: {type: string, minLength: 1}
+        per_sample: {type: integer, minimum: 1, maximum: 64}
+      required: [binding_domain_file, checkpoint_path, per_sample]
+      additionalProperties: false
+  - id: coral-two-dimensional
+    label: {en: Two-dimensional analysis, zh-CN: 二维分析}
+    kind: capability
+    binding_ids: [binding-coral-two-dimensional]
+    input_schema:
+      type: object
+      properties:
+        selex_fasta: {type: string, minLength: 1}
+        ai_csv: {type: string, minLength: 1}
+        sample_size: {type: integer, minimum: 10, maximum: 1000000}
+        bootstrap: {type: integer, minimum: 1, maximum: 10000}
+        skip_structure: {type: boolean}
+      required: [selex_fasta, ai_csv, sample_size, bootstrap, skip_structure]
+      additionalProperties: false
+visibility:
+  audience: members
+  allowed_user_ids: []
+acceptance_suite_id: coral-provider-real-cases
+acceptance_suite_revision: 1
+handoffs:
+  - id: continue-with-agent
+    label: {en: Continue with Agent, zh-CN: 交给 Agent 继续分析}
+    prompt_template_id: coral-run-analysis
+    summary_pointer: /run/result
+    artifact_pointers: [/run/artifacts]
