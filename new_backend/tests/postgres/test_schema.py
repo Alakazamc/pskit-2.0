@@ -34,6 +34,12 @@ EXPECTED_TABLES = {
     "guest_creation_events", "schema_migrations",
     "agent_session_titles",
     "auth_abuse_buckets", "auth_abuse_locks", "auth_abuse_claims", "auth_abuse_claim_items",
+    "mcp_service_endpoints", "mcp_service_revisions", "mcp_discovery_snapshots",
+    "tool_products", "tool_product_revisions", "capability_bindings",
+    "acceptance_suites", "acceptance_cases", "qualification_reports",
+    "qualification_case_results", "tool_product_releases", "review_decisions",
+    "tool_product_release_capabilities", "tool_product_runs", "tool_product_run_steps",
+    "tool_run_events", "tool_product_run_artifacts", "tool_product_run_usage",
 }
 
 
@@ -183,7 +189,7 @@ def test_quota_migration_upgrades_existing_version_two_schema(pg_schema: tuple[s
 
 def test_auth_abuse_schema_contract(pg_schema):
     dsn, schema = pg_schema
-    assert SCHEMA_VERSION == 8
+    assert SCHEMA_VERSION == 9
     migrate_postgres(dsn, schema=schema)
     with psycopg.connect(dsn) as conn:
         columns = {row[0] for row in conn.execute(
@@ -194,3 +200,44 @@ def test_auth_abuse_schema_contract(pg_schema):
             assert conn.execute(
                 "SELECT 1 FROM pg_indexes WHERE schemaname=%s AND tablename=%s AND indexdef LIKE '%%expires_at%%'", (schema, table)
             ).fetchone()
+
+
+def test_tool_product_schema_has_owned_foreign_keys(pg_schema):
+    dsn, schema = pg_schema
+    migrate_postgres(dsn, schema=schema)
+    with psycopg.connect(dsn) as connection:
+        foreign_keys = {
+            (row[0], row[1])
+            for row in connection.execute(
+                "SELECT tc.table_name, ccu.table_name "
+                "FROM information_schema.table_constraints tc "
+                "JOIN information_schema.constraint_column_usage ccu "
+                "ON ccu.constraint_schema=tc.constraint_schema AND ccu.constraint_name=tc.constraint_name "
+                "WHERE tc.constraint_schema=%s AND tc.constraint_type='FOREIGN KEY'",
+                (schema,),
+            )
+        }
+    assert {
+        ("tool_product_revisions", "tool_products"),
+        ("capability_bindings", "tool_product_revisions"),
+        ("qualification_reports", "tool_product_revisions"),
+        ("tool_product_releases", "tool_product_revisions"),
+        ("tool_product_release_capabilities", "tool_product_releases"),
+        ("tool_product_runs", "tool_product_releases"),
+        ("tool_product_run_steps", "tool_product_runs"),
+        ("tool_run_events", "tool_product_runs"),
+    } <= foreign_keys
+
+
+def test_database_pool_does_not_auto_migrate_tool_products(pg_schema):
+    dsn, schema = pg_schema
+    with psycopg.connect(dsn) as connection:
+        connection.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
+    database = PostgresDatabase(dsn, schema=schema)
+    try:
+        with pytest.raises(RuntimeError, match="not migrated"):
+            database.check_schema_version(SCHEMA_VERSION)
+        with database.connection() as connection:
+            assert connection.execute("SELECT to_regclass('tool_products')").fetchone() == (None,)
+    finally:
+        database.close()
