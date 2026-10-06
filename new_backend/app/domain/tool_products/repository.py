@@ -407,6 +407,19 @@ class ToolProductRepository:
             release = self._published(row[0], connection=connection)
             return release if release and release.state == "published" else None
 
+    def release_snapshot(self, release_id: str, *, connection=None) -> dict | None:
+        """Return the private immutable release snapshot for server-side admission only."""
+        if connection is None:
+            with self.database.connection() as conn:
+                return self.release_snapshot(release_id, connection=conn)
+        row = connection.execute(
+            "SELECT state,snapshot_json FROM tool_product_releases WHERE release_id=%s",
+            (release_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {"state": row[0], **row[1]}
+
     def list_visible(self, user_id: str | None) -> list[PublishedToolProduct]:
         with self.database.connection() as connection:
             rows = connection.execute(

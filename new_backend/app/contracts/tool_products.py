@@ -480,3 +480,10 @@ class ToolRunEvent(ToolProductContract):
     ]
     data: dict[str, Any]
     created_at: datetime
+
+
+class ToolRunHandoffContext(ToolProductContract):
+    run_id: Identifier
+    handoff_id: Identifier
+    summary: str = Field(max_length=4000)
+    artifacts: list[ArtifactRef] = Field(default_factory=list, max_length=20)

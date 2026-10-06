@@ -74,6 +74,7 @@ from app.domain.sandboxes import SandboxArtifactStore
 from app.domain.store import DemoStore
 from app.domain.tool_products.registry import ToolProductRegistry
 from app.domain.tool_products.repository import ToolProductRepository
+from app.domain.tool_products.runs import ToolRunGateway
 from app.domain.tool_runs import ToolRunStore
 from app.ports.avatars import AvatarStorage
 from app.ports.captcha import CaptchaVerifier
@@ -467,6 +468,16 @@ def create_app(
         app.state.compute_jobs = ComputeJobs(database)
         for manifest in json.loads(settings.compute_services_json):
             app.state.compute_jobs.catalog.register(ComputeServiceManifest.model_validate(manifest))
+    app.state.tool_run_gateway = (
+        ToolRunGateway(
+            database,
+            app.state.tool_product_repository,
+            app.state.tool_product_registry,
+            app.state.compute_jobs,
+        )
+        if app.state.compute_jobs is not None
+        else None
+    )
     app.state.pdf_processor = PdfProcessingPool(
         max_concurrent=settings.pdf_max_concurrent_parses,
         queue_timeout_seconds=settings.pdf_queue_timeout_seconds,
@@ -711,6 +722,7 @@ def create_app(
     app.include_router(admin_tool_products.router)
     app.include_router(sandbox_files.router)
     app.include_router(tool_products.router)
+    app.include_router(tool_products.tool_run_router)
     app.include_router(health.router)
     app.include_router(metrics.router)
     return app

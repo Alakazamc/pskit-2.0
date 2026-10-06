@@ -246,6 +246,26 @@ CREATE TABLE tool_product_run_usage (
     PRIMARY KEY (run_id, step_id)
 );
 
+CREATE FUNCTION reject_tool_product_run_identity_change()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.release_id IS DISTINCT FROM OLD.release_id
+       OR NEW.action_id IS DISTINCT FROM OLD.action_id
+       OR NEW.user_id IS DISTINCT FROM OLD.user_id
+       OR NEW.input_json IS DISTINCT FROM OLD.input_json
+       OR NEW.snapshot_json IS DISTINCT FROM OLD.snapshot_json
+       OR NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key
+       OR NEW.request_hash IS DISTINCT FROM OLD.request_hash
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+        RAISE EXCEPTION 'IMMUTABLE_TOOL_RUN_SNAPSHOT';
+    END IF;
+    RETURN NEW;
+END $$;
+
+CREATE TRIGGER tool_product_run_snapshot_immutable
+    BEFORE UPDATE ON tool_product_runs
+    FOR EACH ROW EXECUTE FUNCTION reject_tool_product_run_identity_change();
+
 CREATE FUNCTION reject_tool_product_release_snapshot_change()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
