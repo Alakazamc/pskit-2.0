@@ -8,7 +8,13 @@ import { ApiError } from "../../api/http";
 
 vi.mock("../../api/client", () => ({ isDemoAuth: false }));
 
-afterEach(() => { cleanup(); window.localStorage.removeItem("research_language"); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+afterEach(() => {
+  cleanup();
+  window.localStorage.removeItem("research_language");
+  window.sessionStorage.clear();
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
 
 it("uses Python login and Google endpoints without calling Supabase from the browser", async () => {
   const loginEmail = vi.fn().mockResolvedValue({
@@ -101,6 +107,15 @@ it("uses an explicit theme control and saves the login appearance", async () => 
 });
 
 it("signs up and verifies an email code through Python", async () => {
+  vi.stubEnv("VITE_TURNSTILE_SITE_KEY", "site-key");
+  let challengeSolved: ((token: string) => void) | undefined;
+  vi.stubGlobal("turnstile", {
+    render: vi.fn((_container: HTMLElement, options: { callback: (token: string) => void }) => {
+      challengeSolved = options.callback;
+      return "signup-widget";
+    }),
+    reset: vi.fn(), remove: vi.fn(),
+  });
   const signupEmail = vi.fn().mockResolvedValue({ status: "check_email", session: null });
   const verifyEmailCode = vi.fn().mockResolvedValue({
     access_token: "verified-jwt", expires_in: 3600,
@@ -114,8 +129,11 @@ it("signs up and verifies an email code through Python", async () => {
   await user.click(screen.getByRole("button", { name: "注册账号" }));
   await user.type(screen.getByLabelText("邮箱"), "alice@example.org");
   await user.type(screen.getByLabelText("密码"), "strong-password");
+  challengeSolved?.("signup-proof");
   await user.click(screen.getByRole("button", { name: "发送验证邮件" }));
-  expect(signupEmail).toHaveBeenCalledWith("alice@example.org", "strong-password");
+  expect(signupEmail).toHaveBeenCalledWith(
+    "alice@example.org", "strong-password", "signup-proof",
+  );
   await user.type(screen.getByLabelText("邮件验证码"), "123456");
   await user.click(screen.getByRole("button", { name: "验证邮箱" }));
   expect(verifyEmailCode).toHaveBeenCalledWith("alice@example.org", "123456", "signup");
@@ -123,6 +141,15 @@ it("signs up and verifies an email code through Python", async () => {
 });
 
 it("resets a password after verifying a recovery code", async () => {
+  vi.stubEnv("VITE_TURNSTILE_SITE_KEY", "site-key");
+  let challengeSolved: ((token: string) => void) | undefined;
+  vi.stubGlobal("turnstile", {
+    render: vi.fn((_container: HTMLElement, options: { callback: (token: string) => void }) => {
+      challengeSolved = options.callback;
+      return "recovery-widget";
+    }),
+    reset: vi.fn(), remove: vi.fn(),
+  });
   const requestPasswordRecovery = vi.fn().mockResolvedValue({ status: "email_sent" });
   const verifyEmailCode = vi.fn().mockResolvedValue({
     access_token: "recovery-jwt", expires_in: 3600,
@@ -137,8 +164,9 @@ it("resets a password after verifying a recovery code", async () => {
 
   await user.click(screen.getByRole("button", { name: "忘记密码" }));
   await user.type(screen.getByLabelText("邮箱"), "alice@example.org");
+  challengeSolved?.("recovery-proof");
   await user.click(screen.getByRole("button", { name: "发送重置邮件" }));
-  expect(requestPasswordRecovery).toHaveBeenCalledWith("alice@example.org");
+  expect(requestPasswordRecovery).toHaveBeenCalledWith("alice@example.org", "recovery-proof");
   await user.type(screen.getByLabelText("邮件验证码"), "654321");
   await user.click(screen.getByRole("button", { name: "验证邮箱" }));
   await user.type(screen.getByLabelText("新密码"), "new-strong-password");
@@ -146,4 +174,31 @@ it("resets a password after verifying a recovery code", async () => {
   expect(verifyEmailCode).toHaveBeenCalledWith("alice@example.org", "654321", "recovery");
   expect(updatePassword).toHaveBeenCalledWith("recovery-jwt", "new-strong-password");
   expect(onLogin).toHaveBeenCalledWith({ id: "alice", email: "alice@example.org", name: "Alice" }, "recovery-jwt");
+});
+
+it("uses the server Retry-After as the protected-send countdown", async () => {
+  vi.stubEnv("VITE_TURNSTILE_SITE_KEY", "site-key");
+  let challengeSolved: ((token: string) => void) | undefined;
+  vi.stubGlobal("turnstile", {
+    render: vi.fn((_container: HTMLElement, options: { callback: (token: string) => void }) => {
+      challengeSolved = options.callback;
+      return "limited-widget";
+    }),
+    reset: vi.fn(), remove: vi.fn(),
+  });
+  const signupEmail = vi.fn().mockRejectedValue(
+    new ApiError(429, { code: "AUTH_RATE_LIMITED" }, "42"),
+  );
+  const api = { signupEmail, googleLoginUrl: () => "/api/v1/auth/google/start" } as unknown as ResearchApi;
+  render(<LanguageProvider><LoginPage api={api} onLogin={() => {}} /></LanguageProvider>);
+  const user = userEvent.setup();
+
+  await user.click(screen.getByRole("button", { name: "注册账号" }));
+  await user.type(screen.getByLabelText("邮箱"), "limited@example.org");
+  await user.type(screen.getByLabelText("密码"), "strong-password");
+  challengeSolved?.("proof");
+  await user.click(screen.getByRole("button", { name: "发送验证邮件" }));
+
+  expect(await screen.findByRole("button", { name: /42 秒后可重试/ })).toBeDisabled();
+  expect(JSON.stringify(window.sessionStorage)).not.toContain("limited@example.org");
 });

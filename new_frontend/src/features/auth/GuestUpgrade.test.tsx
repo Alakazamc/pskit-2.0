@@ -5,9 +5,24 @@ import type { AuthSessionResponse, ResearchApi } from "../../api/types";
 import { LanguageProvider } from "../../i18n/LanguageProvider";
 import { GuestUpgrade } from "./GuestUpgrade";
 
-afterEach(() => { cleanup(); window.localStorage.removeItem("research_language"); });
+afterEach(() => {
+  cleanup();
+  window.localStorage.removeItem("research_language");
+  window.sessionStorage.clear();
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
 
 it("upgrades a guest through Python email verification while keeping the user identity", async () => {
+  vi.stubEnv("VITE_TURNSTILE_SITE_KEY", "site-key");
+  let challengeSolved: ((token: string) => void) | undefined;
+  vi.stubGlobal("turnstile", {
+    render: vi.fn((_container: HTMLElement, options: { callback: (token: string) => void }) => {
+      challengeSolved = options.callback;
+      return "upgrade-widget";
+    }),
+    reset: vi.fn(), remove: vi.fn(),
+  });
   const session: AuthSessionResponse = {
     access_token: "member-jwt", expires_in: 3600,
     user: { id: "guest-1", email: "new@example.org", name: "New", is_anonymous: false },
@@ -21,8 +36,9 @@ it("upgrades a guest through Python email verification while keeping the user id
 
   expect(screen.getByText("只能升级为新账号；暂不合并已有账号。")).toBeInTheDocument();
   await actor.type(screen.getByLabelText("升级邮箱"), "new@example.org");
+  challengeSolved?.("upgrade-proof");
   await actor.click(screen.getByRole("button", { name: "发送验证码" }));
-  expect(beginGuestEmailUpgrade).toHaveBeenCalledWith("new@example.org");
+  expect(beginGuestEmailUpgrade).toHaveBeenCalledWith("new@example.org", "upgrade-proof");
   await actor.type(screen.getByLabelText("邮件验证码"), "123456");
   await actor.click(screen.getByRole("button", { name: "验证并升级" }));
   expect(verifyGuestEmailUpgrade).toHaveBeenCalledWith("new@example.org", "123456");

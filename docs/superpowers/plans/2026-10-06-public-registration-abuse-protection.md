@@ -244,17 +244,17 @@ git commit -m "feat: protect public auth with Turnstile and shared limits"
 - Consumes: backend `captcha_token`, stable error codes, and `Retry-After` from Task 3.
 - Produces: reusable `AuthCaptcha`, `ApiError.retryAfterSeconds`, and per-action/email browser cooldown state containing only an expiry timestamp.
 
-- [ ] **Step 1: Write failing API, CAPTCHA, cooldown, page, and i18n tests**
+- [x] **Step 1: Write failing API, CAPTCHA, cooldown, page, and i18n tests**
 
 Cover numeric `Retry-After`; invalid/date/zero values ignored; no auth retry; action passed to Turnstile; expiry/error/reset/action-change handling; storage key SHA-256 over trimmed lowercase email; no raw email/credential/token storage; storage/Web Crypto failure fallback; signup/recovery/guest upgrade token submission; token reset after every request; 429 server countdown; success minimum 60 seconds; refresh recovery; action/email isolation; stable bilingual error copy; and unchanged login/OAuth/OTP flows.
 
-- [ ] **Step 2: Run focused tests and confirm RED**
+- [x] **Step 2: Run focused tests and confirm RED**
 
 Run: `cd new_frontend && npm test -- src/api/http.test.ts src/features/auth/AuthCaptcha.test.tsx src/features/auth/authCooldown.test.ts src/features/auth/LoginPage.live.test.tsx src/features/auth/GuestUpgrade.test.tsx src/i18n/errors.test.ts`
 
 Expected: FAIL because the shared component, cooldown module, and header parsing do not exist.
 
-- [ ] **Step 3: Implement the reusable component and cooldown UX**
+- [x] **Step 3: Implement the reusable component and cooldown UX**
 
 Implement:
 
@@ -278,13 +278,13 @@ type AuthMailAction = "signup" | "recovery" | "guest-upgrade"
 
 The cooldown key is `pskit:auth-cooldown:v1:{action}:{sha256(normalizedEmail)}` and its only value is `{ "expiresAt": number }`. CAPTCHA tokens stay in component memory, buttons never auto-resubmit, and failure resets the challenge while preserving the typed email.
 
-- [ ] **Step 4: Run focused tests and confirm GREEN**
+- [x] **Step 4: Run focused tests and confirm GREEN**
 
 Run the Step 2 command.
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit the frontend protection slice**
+- [x] **Step 5: Commit the frontend protection slice**
 
 ```bash
 git add new_frontend/src/api new_frontend/src/features/auth new_frontend/src/i18n new_frontend/src/styles

@@ -201,6 +201,7 @@
   line-height: 1.5;
 }
 .login-card form { display: flex; flex-direction: column; gap: 16px; }
+.login-page .auth-captcha { min-height: 65px; max-width: 100%; overflow: hidden; }
 .login-field { display: flex; flex-direction: column; gap: 6px; }
 .login-field label {
   color: var(--login-text);

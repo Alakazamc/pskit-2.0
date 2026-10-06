@@ -2,6 +2,31 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiError, createHttpApi } from "./http";
 
 describe("HTTP Research API", () => {
+  it("parses only positive integer Retry-After seconds", () => {
+    expect(new ApiError(429, { code: "AUTH_RATE_LIMITED" }, "17").retryAfterSeconds).toBe(17);
+    expect(new ApiError(429, {}, "0").retryAfterSeconds).toBeUndefined();
+    expect(new ApiError(429, {}, "1.5").retryAfterSeconds).toBeUndefined();
+    expect(new ApiError(429, {}, "Wed, 21 Oct 2026 07:28:00 GMT").retryAfterSeconds)
+      .toBeUndefined();
+  });
+
+  it("forwards captcha proof only to protected Python mail routes", async () => {
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
+      status: "check_email", session: null,
+    }), { status: 200 }));
+    const api = createHttpApi({ token: () => "guest-jwt", fetcher });
+
+    await api.signupEmail("new@example.org", "strong-password", "signup-proof");
+    await api.requestPasswordRecovery("new@example.org", "recovery-proof");
+    await api.beginGuestEmailUpgrade("new@example.org", "upgrade-proof");
+
+    expect(fetcher.mock.calls.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
+      { email: "new@example.org", password: "strong-password", captcha_token: "signup-proof" },
+      { email: "new@example.org", captcha_token: "recovery-proof" },
+      { email: "new@example.org", captcha_token: "upgrade-proof" },
+    ]);
+  });
+
   it("starts an anonymous Python session only when requested", async () => {
     const session = { access_token: "guest-jwt", expires_in: 3600,
       user: { id: "guest-1", email: "", name: "Guest", is_anonymous: true } };
@@ -22,7 +47,7 @@ describe("HTTP Research API", () => {
 
     expect(await api.beginGuestEmailUpgrade("new@example.org")).toEqual({ status: "check_email" });
     expect(fetcher).toHaveBeenCalledWith("/api/v1/auth/upgrade/email", expect.objectContaining({
-      method: "POST", body: JSON.stringify({ email: "new@example.org" }),
+      method: "POST", body: JSON.stringify({ email: "new@example.org", captcha_token: null }),
       headers: expect.objectContaining({ Authorization: "Bearer guest-jwt" }),
     }));
   });
@@ -278,6 +303,18 @@ describe("HTTP Research API", () => {
     const api = createHttpApi({ token: () => "signed-jwt", fetcher: fetcher as typeof fetch });
     await expect(api.sendMessage("session-1", { content: "hello", attachments: [], skills: [], resources: [] }))
       .rejects.toMatchObject({ status: 409, code: "TOKEN_QUOTA_EXCEEDED" } satisfies Partial<ApiError>);
+  });
+
+  it("keeps server Retry-After on API errors and never retries auth requests", async () => {
+    const fetcher = vi.fn(async () => new Response(
+      JSON.stringify({ detail: { code: "AUTH_RATE_LIMITED" } }),
+      { status: 429, headers: { "Retry-After": "42" } },
+    ));
+    const api = createHttpApi({ token: () => null, fetcher: fetcher as typeof fetch });
+
+    await expect(api.signupEmail("a@example.org", "password", "proof"))
+      .rejects.toMatchObject({ status: 429, code: "AUTH_RATE_LIMITED", retryAfterSeconds: 42 });
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it("cancels an owned run through the Python API", async () => {

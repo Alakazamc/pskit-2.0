@@ -6,12 +6,17 @@ type Options = { baseUrl?: string; token: () => string | null; fetcher?: typeof 
 
 export class ApiError extends Error {
   readonly code?: string;
+  readonly retryAfterSeconds?: number;
 
-  constructor(readonly status: number, detail: unknown) {
+  constructor(readonly status: number, detail: unknown, retryAfterHeader?: string | null) {
     const data = detail && typeof detail === "object" ? detail as Record<string, unknown> : null;
     super(typeof detail === "string" ? detail : typeof data?.message === "string" ? data.message : `HTTP ${status}`);
     this.name = "ApiError";
     if (typeof data?.code === "string") this.code = data.code;
+    if (retryAfterHeader && /^[1-9][0-9]*$/.test(retryAfterHeader)) {
+      const seconds = Number(retryAfterHeader);
+      if (Number.isSafeInteger(seconds)) this.retryAfterSeconds = seconds;
+    }
   }
 }
 
@@ -36,7 +41,7 @@ export function createHttpApi({ baseUrl = "/api/v1", token, fetcher = fetch, onU
     if (!response.ok) {
       const payload: unknown = await response.json().catch(() => null);
       const detail = payload && typeof payload === "object" && "detail" in payload ? payload.detail : response.statusText;
-      throw new ApiError(response.status, detail);
+      throw new ApiError(response.status, detail, response.headers.get("Retry-After"));
     }
     return response.json() as Promise<T>;
   };
@@ -53,13 +58,19 @@ export function createHttpApi({ baseUrl = "/api/v1", token, fetcher = fetch, onU
     getComputeJob: (id) => request(`/compute/jobs/${encodeURIComponent(id)}`),
     cancelComputeJob: (id) => post(`/compute/jobs/${encodeURIComponent(id)}/cancel`, {}),
     startAnonymous: (captchaToken) => post("/auth/anonymous", { captcha_token: captchaToken ?? null }),
-    beginGuestEmailUpgrade: (email) => post("/auth/upgrade/email", { email }),
+    beginGuestEmailUpgrade: (email, captchaToken) => post("/auth/upgrade/email", {
+      email, captcha_token: captchaToken ?? null,
+    }),
     verifyGuestEmailUpgrade: (email, code) => post("/auth/upgrade/email/verify", { email, token: code }),
     beginGuestGoogleUpgrade: () => post("/auth/upgrade/google/start", {}),
     loginDemo: (email) => post("/auth/demo", { email }),
     loginEmail: (email, password) => post("/auth/login", { email, password }),
-    signupEmail: (email, password) => post("/auth/signup", { email, password }),
-    requestPasswordRecovery: (email) => post("/auth/password/recover", { email }),
+    signupEmail: (email, password, captchaToken) => post("/auth/signup", {
+      email, password, captcha_token: captchaToken ?? null,
+    }),
+    requestPasswordRecovery: (email, captchaToken) => post("/auth/password/recover", {
+      email, captcha_token: captchaToken ?? null,
+    }),
     verifyEmailCode: (email, code, kind) => post("/auth/verify", { email, token: code, type: kind }),
     updatePassword: async (accessToken, password) => {
       const response = await send("/auth/password/update", {

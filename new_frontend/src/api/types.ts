@@ -65,13 +65,13 @@ export interface ResearchApi extends AdminApi {
   getComputeJob(id: string): Promise<ComputeJob>;
   cancelComputeJob(id: string): Promise<ComputeJob>;
   startAnonymous(captchaToken?: string): Promise<AuthSessionResponse>;
-  beginGuestEmailUpgrade(email: string): Promise<Api.EmailUpgradeStartResponse>;
+  beginGuestEmailUpgrade(email: string, captchaToken?: string): Promise<Api.EmailUpgradeStartResponse>;
   verifyGuestEmailUpgrade(email: string, code: string): Promise<AuthSessionResponse>;
   beginGuestGoogleUpgrade(): Promise<Api.GoogleUpgradeStartResponse>;
   loginDemo(email: string): Promise<DemoLoginResponse>;
   loginEmail(email: string, password: string): Promise<AuthSessionResponse>;
-  signupEmail(email: string, password: string): Promise<SignupResponse>;
-  requestPasswordRecovery(email: string): Promise<RecoveryResponse>;
+  signupEmail(email: string, password: string, captchaToken?: string): Promise<SignupResponse>;
+  requestPasswordRecovery(email: string, captchaToken?: string): Promise<RecoveryResponse>;
   verifyEmailCode(email: string, code: string, kind: "signup" | "recovery"): Promise<AuthSessionResponse>;
   updatePassword(accessToken: string, password: string): Promise<void>;
   refreshAuth(): Promise<AuthSessionResponse>;

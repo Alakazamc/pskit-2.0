@@ -48,3 +48,16 @@ it("explains guest-only limits and account upgrade errors", () => {
   expect(errorTranslationKey(new ApiError(410, { code: "GUEST_ACCOUNT_DELETING" })))
     .toBe("guest.accountDeleting");
 });
+
+it("maps protected auth failures to stable bilingual keys", () => {
+  expect(errorTranslationKey(new ApiError(422, { code: "CAPTCHA_REQUIRED" })))
+    .toBe("error.captchaRequired");
+  expect(errorTranslationKey(new ApiError(422, { code: "CAPTCHA_INVALID" })))
+    .toBe("error.captchaInvalid");
+  expect(errorTranslationKey(new ApiError(503, { code: "AUTH_CAPTCHA_UNAVAILABLE" })))
+    .toBe("error.captchaUnavailable");
+  expect(errorTranslationKey(new ApiError(503, { code: "IDENTITY_UNAVAILABLE" })))
+    .toBe("error.identityUnavailable");
+  expect(errorTranslationKey(new ApiError(429, { code: "AUTH_RATE_LIMITED" }, "30")))
+    .toBe("error.authRateLimited");
+});

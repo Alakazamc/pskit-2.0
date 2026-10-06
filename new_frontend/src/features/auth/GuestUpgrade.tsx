@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ApiError } from "../../api/http";
 import type { AuthSessionResponse, ResearchApi } from "../../api/types";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { errorTranslationKey } from "../../i18n/errors";
 import type { TranslationKey } from "../../i18n/translations";
+import { AuthCaptcha } from "./AuthCaptcha";
+import { readAuthCooldown, writeAuthCooldown } from "./authCooldown";
 
 export function GuestUpgrade({ api, onSession }: {
   api: ResearchApi;
@@ -15,6 +18,21 @@ export function GuestUpgrade({ api, onSession }: {
   const [busy, setBusy] = useState(false);
   const [googleUrl, setGoogleUrl] = useState<string | null>(null);
   const [error, setError] = useState<TranslationKey | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
+  const [cooldown, setCooldown] = useState(0);
+  const captchaSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY ?? "";
+
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      const seconds = await readAuthCooldown("guest-upgrade", email);
+      if (active) setCooldown(seconds);
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 1000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [email]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -22,14 +40,26 @@ export function GuestUpgrade({ api, onSession }: {
     setError(null);
     try {
       if (!sent) {
-        await api.beginGuestEmailUpgrade(email.trim());
+        await api.beginGuestEmailUpgrade(email.trim(), captchaToken ?? undefined);
+        await writeAuthCooldown("guest-upgrade", email, 60);
+        setCooldown(60);
         setSent(true);
       } else {
         onSession(await api.verifyGuestEmailUpgrade(email.trim(), code.trim()));
       }
     } catch (caught) {
+      if (!sent && caught instanceof ApiError && caught.retryAfterSeconds) {
+        setCooldown(caught.retryAfterSeconds);
+        await writeAuthCooldown("guest-upgrade", email, caught.retryAfterSeconds);
+      }
       setError(errorTranslationKey(caught) ?? "guest.upgradeFailed");
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+      if (!sent && captchaSiteKey) {
+        setCaptchaToken(null);
+        setCaptchaReset((count) => count + 1);
+      }
+    }
   };
   const beginGoogle = async () => {
     setBusy(true);
@@ -52,8 +82,15 @@ export function GuestUpgrade({ api, onSession }: {
       {sent && <><label htmlFor="guest-upgrade-code">{t("auth.emailCode")}</label>
         <input id="guest-upgrade-code" inputMode="numeric" autoComplete="one-time-code"
           value={code} onChange={(event) => setCode(event.target.value)} required /></>}
+      {!sent && captchaSiteKey && <AuthCaptcha siteKey={captchaSiteKey}
+        action="guest_upgrade_email" resetSignal={captchaReset} onToken={setCaptchaToken}
+        onUnavailable={() => setError("error.captchaUnavailable")} />}
       {error && <p role="alert">{t(error)}</p>}
-      <button type="submit" className="mono-button" disabled={busy}>{t(sent ? "guest.verifyEmail" : "guest.sendCode")}</button>
+      <button type="submit" className="mono-button"
+        disabled={busy || (!sent && (cooldown > 0 || Boolean(captchaSiteKey && !captchaToken)))}>
+        {sent ? t("guest.verifyEmail") : cooldown > 0
+          ? t("auth.retryIn", { seconds: cooldown }) : t("guest.sendCode")}
+      </button>
     </form>
     <button type="button" className="mono-button" disabled={busy} onClick={() => void beginGoogle()}>{t("guest.linkGoogle")}</button>
     {googleUrl && <a className="mono-button" href={googleUrl} referrerPolicy="no-referrer">{t("guest.continueGoogle")}</a>}
