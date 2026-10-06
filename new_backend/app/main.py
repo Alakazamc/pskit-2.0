@@ -19,6 +19,7 @@ from app.adapters.live.remote_mcp import RemoteMcp
 from app.adapters.live.sandbox_pi import SandboxPiRunner
 from app.adapters.live.supabase_auth import SupabaseIdentityAdapter
 from app.adapters.live.supabase_storage import SupabaseAvatarStorage
+from app.adapters.live.turnstile import TurnstileVerifier
 from app.adapters.mock.af3 import MockAf3
 from app.adapters.mock.auth import MockIdentityProvider
 from app.adapters.mock.avatars import MockAvatarStorage
@@ -52,6 +53,7 @@ from app.domain.admin.audit import AdminOperations
 from app.domain.admin.model_policy import ModelPolicy
 from app.domain.admin.releases import ConfigReleaseService
 from app.domain.admin.roles import AdminStore
+from app.domain.auth_abuse import AuthAbuseGuard
 from app.domain.catalog import CatalogStore
 from app.domain.conversation import ConversationStore
 from app.domain.guest_capabilities import GuestCapabilityPolicy, LoginRequired
@@ -66,8 +68,11 @@ from app.domain.sandboxes import SandboxArtifactStore
 from app.domain.store import DemoStore
 from app.domain.tool_runs import ToolRunStore
 from app.ports.avatars import AvatarStorage
+from app.ports.captcha import CaptchaVerifier
 from app.ports.providers import ProviderUnavailable
 from app.services.agent import AgentService
+from app.services.auth_protection import AuthProtection
+from app.services.client_ip import TrustedClientIpResolver
 from app.services.model_catalog import ModelCatalog
 from app.services.observability import ObservabilityMiddleware, RequestMetrics
 from app.services.pdf_processing import PdfProcessingPool
@@ -79,6 +84,8 @@ from app.services.workspace_transfer import WorkspaceTransfer
 def create_app(
     settings: Settings | None = None, *, pi_runner=None, mcp_provider=None,
     avatar_storage: AvatarStorage | None = None,
+    captcha_verifier: CaptchaVerifier | None = None,
+    auth_guard: AuthAbuseGuard | None = None,
 ) -> FastAPI:
     """Build the API with validated mock or live adapters.
 
@@ -255,6 +262,19 @@ def create_app(
         else None
     )
     storage = database if database is not None else settings.agent_db_path
+    request_metrics = RequestMetrics()
+    configured_auth_guard = auth_guard
+    if settings.auth_abuse_mode != "off" and configured_auth_guard is None:
+        if database is None:
+            raise ValueError("Auth abuse protection requires live PostgreSQL")
+        configured_auth_guard = AuthAbuseGuard(
+            database, secret=settings.auth_rate_limit_secret,
+        )
+    configured_captcha = captcha_verifier
+    if settings.auth_captcha_required and configured_captcha is None:
+        configured_captcha = TurnstileVerifier(
+            settings.turnstile_secret_key, settings.turnstile_hostnames(),
+        )
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -262,6 +282,7 @@ def create_app(
         service = application.state.agent_service
         mock_scheduler = None
         mcp_refresh_task = None
+        auth_cleanup_task = None
         if mcp_executor == "remote":
 
             async def refresh_mcp() -> None:
@@ -304,9 +325,24 @@ def create_app(
             mock_scheduler = asyncio.create_task(advance_mock_jobs())
         if application.state.session_titles:
             await application.state.session_titles.start()
+        if application.state.auth_guard is not None:
+
+            async def cleanup_auth_abuse() -> None:
+                """Bound stale auth state without delaying request admission."""
+                while True:
+                    await asyncio.sleep(3600)
+                    await asyncio.to_thread(application.state.auth_guard.cleanup_expired, 1000)
+
+            auth_cleanup_task = asyncio.create_task(cleanup_auth_abuse())
         try:
             yield
         finally:
+            if auth_cleanup_task:
+                auth_cleanup_task.cancel()
+                try:
+                    await auth_cleanup_task
+                except asyncio.CancelledError:
+                    pass
             if application.state.session_titles:
                 await application.state.session_titles.stop()
             if mcp_refresh_task:
@@ -360,10 +396,19 @@ def create_app(
         """Tell a guest that cleanup has locked the account."""
         return JSONResponse(status_code=410, content={"detail": {"code": "GUEST_ACCOUNT_DELETING"}})
 
-    app.state.metrics = RequestMetrics()
+    app.state.metrics = request_metrics
     app.add_middleware(ObservabilityMiddleware, metrics=app.state.metrics)
     app.state.settings = settings
     app.state.database = database
+    app.state.auth_guard = configured_auth_guard
+    app.state.auth_protection = AuthProtection(
+        guard=configured_auth_guard,
+        captcha=configured_captcha,
+        resolver=TrustedClientIpResolver(settings.auth_trusted_proxy_cidrs()),
+        metrics=request_metrics,
+        mode=settings.auth_abuse_mode,
+        captcha_required=settings.auth_captcha_required,
+    )
     app.state.compute_jobs = None
     app.state.compute_leases = None
     if settings.compute_enabled:

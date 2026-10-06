@@ -55,17 +55,21 @@ class EmailLoginRequest(BaseModel):
 class SignupRequest(BaseModel):
     email: str = Field(min_length=3)
     password: str = Field(min_length=8)
+    captcha_token: str | None = None
 
 
 class EmailRequest(BaseModel):
     email: str = Field(min_length=3)
+    captcha_token: str | None = None
 
 
 class EmailUpgradeRequest(BaseModel):
     email: str = Field(min_length=3, max_length=320)
+    captcha_token: str | None = None
 
 
-class EmailUpgradeVerifyRequest(EmailUpgradeRequest):
+class EmailUpgradeVerifyRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
     token: str = Field(pattern=r"^[0-9]{6}$")
 
 

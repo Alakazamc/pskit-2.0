@@ -27,8 +27,10 @@ from app.contracts.models import (
 )
 from app.db.migrations import migrate_oauth_schema
 from app.db.postgres import PostgresDatabase, PostgresStatements
+from app.domain.auth_abuse import AuthAbuseLimited
 from app.domain.store import DemoStore
-from app.ports.providers import ProviderUnavailable
+from app.ports.captcha import CaptchaInvalid, CaptchaRequired, CaptchaUnavailable
+from app.ports.providers import IdentityTransportUnavailable, ProviderUnavailable
 
 router = APIRouter(prefix="/api/v1", tags=["auth"])
 bearer = HTTPBearer(auto_error=False)
@@ -38,6 +40,37 @@ def _rate_limited(exc: AuthRateLimited) -> HTTPException:
     """Translate a Supabase rate limit into an HTTP 429 with Retry-After."""
     headers = {"Retry-After": exc.retry_after} if exc.retry_after else None
     return HTTPException(status_code=429, detail={"code": "AUTH_RATE_LIMITED"}, headers=headers)
+
+
+def _guard_limited(exc: AuthAbuseLimited) -> HTTPException:
+    """Expose a stable application limit without leaking its internal bucket key."""
+    return HTTPException(
+        status_code=429,
+        detail={"code": "AUTH_RATE_LIMITED"},
+        headers={"Retry-After": str(exc.retry_after)},
+    )
+
+
+def _network(request: Request) -> dict[str, str | None]:
+    """Return the socket peer and private proxy assertion for trusted resolution."""
+    return {
+        "peer_ip": request.client.host if request.client else None,
+        "asserted_ip": request.headers.get("X-PSKit-Client-IP"),
+    }
+
+
+def _captcha_error(exc: Exception) -> HTTPException:
+    """Translate classified challenge failures to stable public errors."""
+    if isinstance(exc, CaptchaRequired):
+        return HTTPException(status_code=422, detail={"code": "CAPTCHA_REQUIRED"})
+    if isinstance(exc, CaptchaInvalid):
+        return HTTPException(status_code=422, detail={"code": "CAPTCHA_INVALID"})
+    return HTTPException(status_code=503, detail={"code": "AUTH_CAPTCHA_UNAVAILABLE"})
+
+
+def _record_provider(request: Request, action: str, outcome: str) -> None:
+    """Record only fixed provider outcomes, never auth subjects or credentials."""
+    request.app.state.metrics.record_auth_security("provider", action, outcome)
 
 
 async def get_store(request: Request) -> DemoStore:
@@ -90,17 +123,40 @@ async def email_login(
     if request.app.state.settings.mode != "live":
         raise HTTPException(status_code=404, detail="Email login is unavailable")
     provider = request.app.state.identity_provider
+    protection = request.app.state.auth_protection
     try:
-        session = await provider.sign_in_password(payload.email, payload.password)
+        authorized = protection.authorize_login(payload.email, **_network(request))
+    except AuthAbuseLimited as exc:
+        raise _guard_limited(exc) from exc
+    try:
+        session = await provider.sign_in_password(
+            payload.email,
+            payload.password,
+            client_ip=authorized.client_ip,
+        )
         user = await provider.verify(session.access_token)
     except InvalidCredentials as exc:
+        protection.settle(authorized.claim, "rejected")
+        _record_provider(request, "login", "rejected")
         raise HTTPException(status_code=401, detail="Invalid credentials") from exc
     except AuthRateLimited as exc:
+        protection.settle(authorized.claim, "rejected")
+        _record_provider(request, "login", "rate_limited")
         raise _rate_limited(exc) from exc
+    except IdentityTransportUnavailable as exc:
+        protection.settle(authorized.claim, exc.delivery)
+        _record_provider(request, "login", exc.delivery)
+        raise HTTPException(status_code=503, detail={"code": "IDENTITY_UNAVAILABLE"}) from exc
     except ProviderUnavailable as exc:
-        raise HTTPException(status_code=503, detail="Identity provider unavailable") from exc
+        protection.settle(authorized.claim, "unknown")
+        _record_provider(request, "login", "unknown")
+        raise HTTPException(status_code=503, detail={"code": "IDENTITY_UNAVAILABLE"}) from exc
     if user is None:
+        protection.settle(authorized.claim, "rejected")
+        _record_provider(request, "login", "rejected")
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    protection.settle(authorized.claim, "success")
+    _record_provider(request, "login", "success")
     request.app.state.identity_policy.observe_verified_user(user.id, user.is_anonymous)
     _set_refresh_cookie(response, session.refresh_token, request)
     return AuthSessionResponse(
@@ -110,27 +166,62 @@ async def email_login(
 
 @router.post("/auth/signup")
 async def signup(
-    payload: SignupRequest, request: Request, response: Response,
+    payload: SignupRequest,
+    request: Request,
+    response: Response,
 ) -> SignupResponse:
     """Create a Supabase email account and handle email confirmation."""
     if request.app.state.settings.mode != "live":
         raise HTTPException(status_code=404, detail="Signup is unavailable")
     provider = request.app.state.identity_provider
+    protection = request.app.state.auth_protection
     try:
-        session = await provider.sign_up(payload.email, payload.password)
+        authorized = await protection.authorize_email_send(
+            "signup",
+            payload.email,
+            payload.captcha_token,
+            **_network(request),
+        )
+    except AuthAbuseLimited as exc:
+        raise _guard_limited(exc) from exc
+    except (CaptchaRequired, CaptchaInvalid, CaptchaUnavailable) as exc:
+        raise _captcha_error(exc) from exc
+    try:
+        session = await provider.sign_up(
+            payload.email,
+            payload.password,
+            client_ip=authorized.client_ip,
+        )
         user = await provider.verify(session.access_token) if session else None
     except AuthRateLimited as exc:
+        protection.settle(authorized.claim, "rejected")
+        _record_provider(request, "signup", "rate_limited")
         raise _rate_limited(exc) from exc
     except InvalidCredentials as exc:
+        protection.settle(authorized.claim, "rejected")
+        _record_provider(request, "signup", "rejected")
         raise HTTPException(status_code=422, detail={"code": "SIGNUP_REJECTED"}) from exc
+    except IdentityTransportUnavailable as exc:
+        protection.settle(authorized.claim, exc.delivery)
+        _record_provider(request, "signup", exc.delivery)
+        raise HTTPException(status_code=503, detail={"code": "IDENTITY_UNAVAILABLE"}) from exc
     except ProviderUnavailable as exc:
-        raise HTTPException(status_code=503, detail="Identity provider unavailable") from exc
+        protection.settle(authorized.claim, "unknown")
+        _record_provider(request, "signup", "unknown")
+        raise HTTPException(status_code=503, detail={"code": "IDENTITY_UNAVAILABLE"}) from exc
+    protection.settle(authorized.claim, "success")
+    _record_provider(request, "signup", "success")
     if session and user:
         request.app.state.identity_policy.observe_verified_user(user.id, user.is_anonymous)
         _set_refresh_cookie(response, session.refresh_token, request)
-        return SignupResponse(status="signed_in", session=AuthSessionResponse(
-            access_token=session.access_token, expires_in=session.expires_in, user=user,
-        ))
+        return SignupResponse(
+            status="signed_in",
+            session=AuthSessionResponse(
+                access_token=session.access_token,
+                expires_in=session.expires_in,
+                user=user,
+            ),
+        )
     return SignupResponse(status="check_email")
 
 
@@ -139,46 +230,107 @@ async def recover_password(payload: EmailRequest, request: Request) -> RecoveryR
     """Request a Supabase password recovery email."""
     if request.app.state.settings.mode != "live":
         raise HTTPException(status_code=404, detail="Password recovery is unavailable")
+    protection = request.app.state.auth_protection
     try:
-        await request.app.state.identity_provider.recover_password(payload.email)
+        authorized = await protection.authorize_email_send(
+            "recovery",
+            payload.email,
+            payload.captcha_token,
+            **_network(request),
+        )
+    except AuthAbuseLimited as exc:
+        raise _guard_limited(exc) from exc
+    except (CaptchaRequired, CaptchaInvalid, CaptchaUnavailable) as exc:
+        raise _captcha_error(exc) from exc
+    try:
+        await request.app.state.identity_provider.recover_password(
+            payload.email,
+            client_ip=authorized.client_ip,
+        )
     except AuthRateLimited as exc:
+        protection.settle(authorized.claim, "rejected")
+        _record_provider(request, "recovery", "rate_limited")
         raise _rate_limited(exc) from exc
-    except InvalidCredentials as exc:
-        raise HTTPException(status_code=422, detail={"code": "RECOVERY_REJECTED"}) from exc
+    except InvalidCredentials:
+        protection.settle(authorized.claim, "rejected")
+        _record_provider(request, "recovery", "rejected")
+        return RecoveryResponse()
+    except IdentityTransportUnavailable as exc:
+        protection.settle(authorized.claim, exc.delivery)
+        _record_provider(request, "recovery", exc.delivery)
+        raise HTTPException(status_code=503, detail={"code": "IDENTITY_UNAVAILABLE"}) from exc
     except ProviderUnavailable as exc:
-        raise HTTPException(status_code=503, detail="Identity provider unavailable") from exc
+        protection.settle(authorized.claim, "unknown")
+        _record_provider(request, "recovery", "unknown")
+        raise HTTPException(status_code=503, detail={"code": "IDENTITY_UNAVAILABLE"}) from exc
+    protection.settle(authorized.claim, "success")
+    _record_provider(request, "recovery", "success")
     return RecoveryResponse()
 
 
 @router.post("/auth/verify")
 async def verify_otp(
-    payload: OtpVerifyRequest, request: Request, response: Response,
+    payload: OtpVerifyRequest,
+    request: Request,
+    response: Response,
 ) -> AuthSessionResponse:
     """Verify an email code and issue the resulting login session."""
     if request.app.state.settings.mode != "live":
         raise HTTPException(status_code=404, detail="OTP verification is unavailable")
     provider = request.app.state.identity_provider
+    protection = request.app.state.auth_protection
     try:
-        session = await provider.verify_otp(payload.email, payload.token, payload.type)
+        authorized = protection.authorize_verification(
+            "otp_verify",
+            payload.email,
+            **_network(request),
+        )
+    except AuthAbuseLimited as exc:
+        raise _guard_limited(exc) from exc
+    try:
+        session = await provider.verify_otp(
+            payload.email,
+            payload.token,
+            payload.type,
+            client_ip=authorized.client_ip,
+        )
         user = await provider.verify(session.access_token)
     except AuthRateLimited as exc:
+        protection.settle(authorized.claim, "rejected")
+        _record_provider(request, "verify", "rate_limited")
         raise _rate_limited(exc) from exc
     except InvalidCredentials as exc:
+        protection.settle(authorized.claim, "rejected")
+        _record_provider(request, "verify", "rejected")
         raise HTTPException(status_code=401, detail={"code": "INVALID_OTP"}) from exc
+    except IdentityTransportUnavailable as exc:
+        protection.settle(authorized.claim, exc.delivery)
+        _record_provider(request, "verify", exc.delivery)
+        raise HTTPException(status_code=503, detail={"code": "IDENTITY_UNAVAILABLE"}) from exc
     except ProviderUnavailable as exc:
-        raise HTTPException(status_code=503, detail="Identity provider unavailable") from exc
+        protection.settle(authorized.claim, "unknown")
+        _record_provider(request, "verify", "unknown")
+        raise HTTPException(status_code=503, detail={"code": "IDENTITY_UNAVAILABLE"}) from exc
     if user is None:
+        protection.settle(authorized.claim, "rejected")
+        _record_provider(request, "verify", "rejected")
         raise HTTPException(status_code=401, detail={"code": "INVALID_OTP"})
+    protection.settle(authorized.claim, "success")
+    _record_provider(request, "verify", "success")
     request.app.state.identity_policy.observe_verified_user(user.id, user.is_anonymous)
     _set_refresh_cookie(response, session.refresh_token, request)
     return AuthSessionResponse(
-        access_token=session.access_token, expires_in=session.expires_in, user=user,
+        access_token=session.access_token,
+        expires_in=session.expires_in,
+        user=user,
     )
 
 
 @router.post("/auth/password/update", status_code=204)
 async def update_password(
-    payload: PasswordUpdateRequest, user: CurrentUserDep, request: Request,
+    payload: PasswordUpdateRequest,
+    user: CurrentUserDep,
+    request: Request,
 ) -> None:
     """Change the authenticated user's password through Supabase."""
     if request.app.state.settings.mode != "live":
@@ -230,9 +382,12 @@ async def refresh_login(request: Request, response: Response) -> AuthSessionResp
 def _set_refresh_cookie(response: Response, refresh_token: str, request: Request) -> None:
     """Set the restricted HttpOnly session refresh cookie."""
     response.set_cookie(
-        "research_refresh_token", refresh_token,
-        httponly=True, secure=request.app.state.settings.auth_cookie_secure,
-        samesite="lax", path="/api/v1/auth",
+        "research_refresh_token",
+        refresh_token,
+        httponly=True,
+        secure=request.app.state.settings.auth_cookie_secure,
+        samesite="lax",
+        path="/api/v1/auth",
     )
 
 
@@ -270,12 +425,11 @@ class OAuthFlowStore:
                 self.db.execute("DELETE FROM oauth_flows WHERE expires_at<=?", (now,))
                 self.db.execute(
                     "INSERT INTO oauth_flows (state,verifier,expires_at,guest_user_id) "
-                    "VALUES (?,?,?,?)", (state, verifier, now + 300, guest_user_id),
+                    "VALUES (?,?,?,?)",
+                    (state, verifier, now + 300, guest_user_id),
                 )
             return state, verifier
-        self._pending = {
-            key: entry for key, entry in self._pending.items() if entry[1] > now
-        }
+        self._pending = {key: entry for key, entry in self._pending.items() if entry[1] > now}
         self._pending[state] = (verifier, now + 300, guest_user_id)
         return state, verifier
 
@@ -285,7 +439,8 @@ class OAuthFlowStore:
             self.db.execute("BEGIN IMMEDIATE")
             try:
                 entry = self.db.execute(
-                    "SELECT verifier,expires_at,guest_user_id FROM oauth_flows WHERE state=?", (state,)
+                    "SELECT verifier,expires_at,guest_user_id FROM oauth_flows WHERE state=?",
+                    (state,),
                 ).fetchone()
                 self.db.execute("DELETE FROM oauth_flows WHERE state=?", (state,))
                 self.db.commit()
@@ -312,22 +467,34 @@ async def google_start(request: Request) -> RedirectResponse:
     if settings.mode != "live":
         raise HTTPException(status_code=404, detail="Google login is unavailable")
     state, verifier = request.app.state.oauth_flows.create()
-    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+    challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+    )
     callback = f"{settings.public_api_url.rstrip('/')}/api/v1/auth/google/callback?{urlencode({'state': state})}"
     supabase_browser_url = settings.supabase_public_url or settings.supabase_url
     authorize = f"{supabase_browser_url.rstrip('/')}/auth/v1/authorize?{urlencode({'provider': 'google', 'redirect_to': callback, 'code_challenge': challenge, 'code_challenge_method': 's256'})}"
-    response = RedirectResponse(authorize, status_code=302, headers={"Referrer-Policy": "no-referrer"})
+    response = RedirectResponse(
+        authorize, status_code=302, headers={"Referrer-Policy": "no-referrer"}
+    )
     response.set_cookie(
-        "research_oauth_state", state, httponly=True, max_age=300,
-        secure=settings.auth_cookie_secure, samesite="lax", path="/api/v1/auth/google/callback",
+        "research_oauth_state",
+        state,
+        httponly=True,
+        max_age=300,
+        secure=settings.auth_cookie_secure,
+        samesite="lax",
+        path="/api/v1/auth/google/callback",
     )
     return response
 
 
 @router.get("/auth/google/callback")
 async def google_callback(
-    request: Request, state: str, code: str | None = None,
-    error: str | None = None, error_code: str | None = None,
+    request: Request,
+    state: str,
+    code: str | None = None,
+    error: str | None = None,
+    error_code: str | None = None,
 ) -> RedirectResponse:
     """Complete Google login or guest upgrade and redirect to the frontend."""
     settings = request.app.state.settings
@@ -347,7 +514,8 @@ async def google_callback(
             else "GOOGLE_LINK_REJECTED"
         )
         response = RedirectResponse(
-            f"{callback_url}?{urlencode({'error': failure_code})}", status_code=303,
+            f"{callback_url}?{urlencode({'error': failure_code})}",
+            status_code=303,
             headers={"Referrer-Policy": "no-referrer"},
         )
         response.delete_cookie("research_oauth_state", path="/api/v1/auth/google/callback")
@@ -357,10 +525,16 @@ async def google_callback(
     if settings.mode == "mock":
         token = request.cookies.get("research_refresh_token", "")
         guest = request.app.state.demo_store.user_for_token(token)
-        if code != "mock-google" or guest is None or guest.id != guest_user_id or not guest.is_anonymous:
+        if (
+            code != "mock-google"
+            or guest is None
+            or guest.id != guest_user_id
+            or not guest.is_anonymous
+        ):
             raise HTTPException(status_code=409, detail={"code": "GOOGLE_IDENTITY_CONFLICT"})
         upgraded = request.app.state.demo_store.upgrade_anonymous(
-            token, f"guest-google-{guest_user_id}@example.invalid",
+            token,
+            f"guest-google-{guest_user_id}@example.invalid",
         )
         if upgraded is None:
             raise HTTPException(status_code=409, detail={"code": "GOOGLE_IDENTITY_CONFLICT"})
@@ -381,14 +555,16 @@ async def google_callback(
         refresh_token = session.refresh_token
     if guest_user_id and (user.id != guest_user_id or user.is_anonymous):
         response = RedirectResponse(
-            f"{callback_url}?error=GOOGLE_IDENTITY_CONFLICT", status_code=303,
+            f"{callback_url}?error=GOOGLE_IDENTITY_CONFLICT",
+            status_code=303,
             headers={"Referrer-Policy": "no-referrer"},
         )
         response.delete_cookie("research_oauth_state", path="/api/v1/auth/google/callback")
         return response
     request.app.state.identity_policy.observe_verified_user(user.id, user.is_anonymous)
     response = RedirectResponse(
-        callback_url, status_code=303,
+        callback_url,
+        status_code=303,
         headers={"Referrer-Policy": "no-referrer"},
     )
     _set_refresh_cookie(response, refresh_token, request)
@@ -410,7 +586,9 @@ async def logout(request: Request, response: Response) -> None:
         return
     if authorization.startswith("Bearer "):
         try:
-            await request.app.state.identity_provider.sign_out(authorization.removeprefix("Bearer "))
+            await request.app.state.identity_provider.sign_out(
+                authorization.removeprefix("Bearer ")
+            )
         except (AuthRateLimited, ProviderUnavailable):
             pass
     response.delete_cookie("research_refresh_token", path="/api/v1/auth")

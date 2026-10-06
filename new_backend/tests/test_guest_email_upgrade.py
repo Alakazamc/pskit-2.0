@@ -2,7 +2,10 @@ import httpx
 import pytest
 
 from app.adapters.live.supabase_auth import (
-    EmailAlreadyInUse, InvalidCredentials, SupabaseIdentityAdapter, SupabaseSession,
+    EmailAlreadyInUse,
+    InvalidCredentials,
+    SupabaseIdentityAdapter,
+    SupabaseSession,
 )
 from app.config import Settings
 from app.contracts.models import UserIdentity
@@ -98,10 +101,10 @@ async def test_live_email_upgrade_rejects_verified_session_for_different_user(tm
             return UserIdentity(id="someone-else", email="new@example.org",
                                 name="Other", is_anonymous=False)
 
-        async def update_guest_email(self, access_token, email):
+        async def update_guest_email(self, access_token, email, *, client_ip=None):
             assert access_token == "guest-token" and email == "new@example.org"
 
-        async def verify_otp(self, email, token, kind):
+        async def verify_otp(self, email, token, kind, *, client_ip=None):
             assert kind == "email_change"
             return SupabaseSession("other-token", "other-refresh", 3600)
 
@@ -166,10 +169,10 @@ async def test_live_upgrade_can_finish_on_another_python_instance_with_same_user
                                     name="New", is_anonymous=False)
             return None
 
-        async def update_guest_email(self, access_token, email):
+        async def update_guest_email(self, access_token, email, *, client_ip=None):
             assert access_token == "guest-token" and email == "new@example.org"
 
-        async def verify_otp(self, email, token, kind):
+        async def verify_otp(self, email, token, kind, *, client_ip=None):
             if token != "123456":
                 raise InvalidCredentials
             assert email == "new@example.org" and kind == "email_change"

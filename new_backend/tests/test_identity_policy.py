@@ -76,7 +76,9 @@ async def test_email_login_persists_verified_member_tier_without_me_request(tmp_
     app = create_app(settings)
 
     class VerifiedLogin:
-        async def sign_in_password(self, email: str, password: str) -> SupabaseSession:
+        async def sign_in_password(
+            self, email: str, password: str, *, client_ip: str | None = None
+        ) -> SupabaseSession:
             return SupabaseSession("member-access", "member-refresh", 3600)
 
         async def verify(self, access_token: str) -> UserIdentity:
@@ -130,7 +132,9 @@ async def test_signed_in_signup_persists_verified_member_tier(tmp_path):
     app = create_app(settings)
 
     class VerifiedSignup:
-        async def sign_up(self, email: str, password: str) -> SupabaseSession:
+        async def sign_up(
+            self, email: str, password: str, *, client_ip: str | None = None
+        ) -> SupabaseSession:
             return SupabaseSession("signup-access", "signup-refresh", 3600)
 
         async def verify(self, access_token: str) -> UserIdentity:
@@ -158,7 +162,9 @@ async def test_email_verification_persists_verified_member_tier(tmp_path):
     app = create_app(settings)
 
     class VerifiedOtp:
-        async def verify_otp(self, email: str, token: str, kind: str) -> SupabaseSession:
+        async def verify_otp(
+            self, email: str, token: str, kind: str, *, client_ip: str | None = None
+        ) -> SupabaseSession:
             return SupabaseSession("otp-access", "otp-refresh", 3600)
 
         async def verify(self, access_token: str) -> UserIdentity:

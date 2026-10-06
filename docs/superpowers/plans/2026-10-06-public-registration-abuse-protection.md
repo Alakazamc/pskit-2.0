@@ -51,17 +51,17 @@
 - Consumes: `PostgresDatabase.transaction()` and a shared secret of at least 32 characters.
 - Produces: `AuthClaim`, `AuthAbuseLimited`, and `AuthAbuseGuard.claim_email_send()`, `claim_login()`, `claim_verification()`, `settle()`, and `cleanup_expired()`.
 
-- [ ] **Step 1: Write failing schema and guard tests**
+- [x] **Step 1: Write failing schema and guard tests**
 
 Cover schema version 8 and least-privilege access; namespaced HMAC keys; atomic email/IP multi-window claims; 60-second cooldown across a fixed-window boundary; hourly, UTC-day, OTP lock, and login windows; longest positive `Retry-After`; two independent guard instances racing; no partial deduction; idempotent settlement; success/not-sent/unknown outcomes; and cleanup independent of correctness.
 
-- [ ] **Step 2: Run the focused tests and confirm RED**
+- [x] **Step 2: Run the focused tests and confirm RED**
 
 Run: `cd new_backend && TEST_POSTGRES_DSN=postgresql://postgres:pskit-test-only@127.0.0.1:15433/postgres PYTHONPATH=.:.. .venv/bin/python -m pytest tests/postgres/test_auth_abuse.py tests/postgres/test_schema.py ../deploy/agent/tests/test_shared_litellm_postgres.py -q`
 
 Expected: FAIL because schema version 8 and `AuthAbuseGuard` do not exist.
 
-- [ ] **Step 3: Add migration 008 and implement the guard**
+- [x] **Step 3: Add migration 008 and implement the guard**
 
 Create bucket, cooldown/lock, claim, and claim-item tables with expiry indexes and no raw PII columns. Use deterministic PostgreSQL advisory locks plus a single transaction for all rules; use an injectable UTC clock. Implement these signatures:
 
@@ -91,13 +91,13 @@ class AuthAbuseGuard:
 
 Email-send IP items never refund. Email-send claims refund only `not_sent`. Login/verification `success` and `not_sent` release account/email items while retaining IP attempts. `rejected` and `unknown` retain all items.
 
-- [ ] **Step 4: Run focused tests and confirm GREEN**
+- [x] **Step 4: Run focused tests and confirm GREEN**
 
 Run the Step 2 command.
 
 Expected: PASS, including concurrent two-instance and permissions tests.
 
-- [ ] **Step 5: Commit the database guard slice**
+- [x] **Step 5: Commit the database guard slice**
 
 ```bash
 git add new_backend/app/domain/auth_abuse.py new_backend/app/db/postgres_migrations new_backend/tests/postgres deploy/agent/tests/test_shared_litellm_postgres.py
@@ -119,17 +119,17 @@ git commit -m "feat: add atomic auth abuse guard"
 - Consumes: exact `trusted_proxy_cidrs` and internal header name `X-PSKit-Client-IP`.
 - Produces: `TrustedClientIpResolver.resolve(peer, asserted) -> str` and provider transport failures classified as `not_sent` or `unknown` without retries.
 
-- [ ] **Step 1: Write failing trusted-IP and provider tests**
+- [x] **Step 1: Write failing trusted-IP and provider tests**
 
 Cover untrusted spoofed custom header and XFF, trusted loopback proxy, invalid asserted address fallback, IPv4-mapped IPv6 normalization, empty peer, internal header overwrite on signup/recover/login/verify/guest-upgrade, one request on 429, connect failure `not_sent`, and read/write/response failures `unknown`.
 
-- [ ] **Step 2: Run the focused tests and confirm RED**
+- [x] **Step 2: Run the focused tests and confirm RED**
 
 Run: `cd new_backend && PYTHONPATH=.:.. .venv/bin/python -m pytest tests/test_client_ip.py tests/test_live_adapters.py tests/test_config.py -q`
 
 Expected: FAIL because the resolver, settings, header propagation, and outcome classification do not exist.
 
-- [ ] **Step 3: Implement exact proxy trust and provider classification**
+- [x] **Step 3: Implement exact proxy trust and provider classification**
 
 Implement:
 
@@ -144,13 +144,13 @@ class IdentityTransportUnavailable(ProviderUnavailable):
 
 Only `ConnectError`, `ConnectTimeout`, and `PoolTimeout` before transmission may be `not_sent`; everything ambiguous is `unknown`. Add keyword-only `client_ip` to affected identity adapter methods and construct the internal header exclusively from the resolver result. Add strict settings for abuse mode, HMAC secret, trusted CIDRs, CAPTCHA requirements, Turnstile hostnames, and rate policy; live protection rejects invalid or missing required values.
 
-- [ ] **Step 4: Run focused tests and confirm GREEN**
+- [x] **Step 4: Run focused tests and confirm GREEN**
 
 Run the Step 2 command.
 
 Expected: PASS with no adapter retry and no caller-controlled internal IP.
 
-- [ ] **Step 5: Commit the trusted network slice**
+- [x] **Step 5: Commit the trusted network slice**
 
 ```bash
 git add new_backend/app/services/client_ip.py new_backend/app/adapters/live/supabase_auth.py new_backend/app/ports/providers.py new_backend/app/config.py new_backend/tests/test_client_ip.py new_backend/tests/test_live_adapters.py new_backend/tests/test_config.py
@@ -179,17 +179,17 @@ git commit -m "feat: trust and propagate verified auth client IPs"
 - Consumes: Task 1 claims, Task 2 client IP and transport outcome.
 - Produces: protected signup, recovery, login, OTP, and guest-email-upgrade endpoints with stable CAPTCHA/rate-limit/unavailable errors and PII-free security metrics.
 
-- [ ] **Step 1: Write failing verifier, orchestration, route, wiring, and metric tests**
+- [x] **Step 1: Write failing verifier, orchestration, route, wiring, and metric tests**
 
 Cover Turnstile payload and no retries; missing/invalid/expired/duplicate token; action and hostname mismatch; network timeout fail-closed; IP accounting before CAPTCHA; email claim only after valid CAPTCHA; concurrent send admits one upstream request; positive integer `Retry-After`; identical recovery response for known and unknown email; provider outcome settlement; login/OTP success release; guest upgrade parity; startup validation; shared PostgreSQL state; and fixed-dimension metrics without PII.
 
-- [ ] **Step 2: Run the focused tests and confirm RED**
+- [x] **Step 2: Run the focused tests and confirm RED**
 
 Run: `cd new_backend && PYTHONPATH=.:.. .venv/bin/python -m pytest tests/test_turnstile.py tests/test_auth_protection.py tests/test_identity_policy.py tests/test_guest_email_upgrade.py tests/postgres/test_app_wiring.py tests/test_observability.py -q`
 
 Expected: FAIL because the verifier and orchestration service do not exist and DTOs lack `captcha_token`.
 
-- [ ] **Step 3: Implement Turnstile verification and the one protected auth entry point**
+- [x] **Step 3: Implement Turnstile verification and the one protected auth entry point**
 
 Implement:
 
@@ -206,13 +206,13 @@ class AuthProtection:
 
 Use fixed route-to-action mappings `signup`, `recovery`, and `guest_upgrade_email`; never accept expected action from the browser. Split the guest upgrade start and verify DTOs so CAPTCHA is required only for sending. Return `CAPTCHA_REQUIRED`/`CAPTCHA_INVALID` as 422, `AUTH_RATE_LIMITED` with integer `Retry-After` as 429, and `AUTH_CAPTCHA_UNAVAILABLE`/`IDENTITY_UNAVAILABLE` as 503. Add injected verifier/guard wiring for tests and a bounded expired-row cleanup task. Leave the existing anonymous GoTrue CAPTCHA path unchanged.
 
-- [ ] **Step 4: Run focused tests and confirm GREEN**
+- [x] **Step 4: Run focused tests and confirm GREEN**
 
 Run the Step 2 command.
 
 Expected: PASS, including the timeout-retains-claim and recovery-enumeration tests.
 
-- [ ] **Step 5: Commit the protected auth slice**
+- [x] **Step 5: Commit the protected auth slice**
 
 ```bash
 git add new_backend/app/ports/captcha.py new_backend/app/adapters/live/turnstile.py new_backend/app/services/auth_protection.py new_backend/app/contracts/models.py new_backend/app/api/auth.py new_backend/app/api/guest_auth.py new_backend/app/main.py new_backend/app/services/observability.py new_backend/tests

@@ -15,6 +15,7 @@ class RequestMetrics:
     def __init__(self) -> None:
         """Initialize an empty route metrics map."""
         self._values: dict[tuple[str, str, int], tuple[int, float]] = defaultdict(lambda: (0, 0.0))
+        self._auth_security: dict[tuple[str, str, str, str], int] = defaultdict(int)
 
     def record(self, method: str, route: str, status: int, duration_ms: float) -> None:
         """Add one request's count and elapsed time to its route bucket."""
@@ -22,13 +23,36 @@ class RequestMetrics:
         count, total = self._values[key]
         self._values[key] = (count + 1, total + duration_ms)
 
+    def record_auth_security(
+        self, component: str, action: str, outcome: str, rule: str = ""
+    ) -> None:
+        """Count a fixed auth outcome without recording email, IP, token or request data."""
+        self._auth_security[(component, action, outcome, rule)] += 1
+
     def snapshot(self) -> dict[str, list[dict[str, str | int | float]]]:
         """Return sorted counters suitable for the protected metrics route."""
-        return {"requests": [
-            {"method": method, "route": route, "status": status,
-             "count": count, "duration_ms_sum": round(total, 3)}
-            for (method, route, status), (count, total) in sorted(self._values.items())
-        ]}
+        return {
+            "requests": [
+                {
+                    "method": method,
+                    "route": route,
+                    "status": status,
+                    "count": count,
+                    "duration_ms_sum": round(total, 3),
+                }
+                for (method, route, status), (count, total) in sorted(self._values.items())
+            ],
+            "auth_security": [
+                {
+                    "component": component,
+                    "action": action,
+                    "outcome": outcome,
+                    "rule": rule,
+                    "count": count,
+                }
+                for (component, action, outcome, rule), count in sorted(self._auth_security.items())
+            ],
+        }
 
 
 class ObservabilityMiddleware:
@@ -62,7 +86,14 @@ class ObservabilityMiddleware:
             route = getattr(scope.get("route"), "path", "unmatched")
             elapsed = (perf_counter() - started) * 1000
             self.metrics.record(scope["method"], route, status, elapsed)
-            logger.info(json.dumps({
-                "request_id": request_id, "method": scope["method"],
-                "route": route, "status": status, "duration_ms": round(elapsed, 3),
-            }))
+            logger.info(
+                json.dumps(
+                    {
+                        "request_id": request_id,
+                        "method": scope["method"],
+                        "route": route,
+                        "status": status,
+                        "duration_ms": round(elapsed, 3),
+                    }
+                )
+            )
