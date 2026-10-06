@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from deploy.agent.scripts.prepare_staging import prepare_staging
 
 
@@ -57,6 +58,12 @@ def test_generates_distinct_private_staging_secrets(release, monkeypatch):
     assert supabase["API_EXTERNAL_URL"] == "http://10.9.8.1:18132/auth/v1"
     assert backend["RESEARCH_AGENT_DATABASE_URL"].startswith("postgresql://pskit_app:")
     assert len(backend["RESEARCH_AGENT_ADMIN_API_KEY"]) >= 32
+    assert backend["RESEARCH_AGENT_AUTH_ABUSE_MODE"] == "observe"
+    assert len(backend["RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET"]) >= 64
+    assert backend["RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON"] == '["127.0.0.1/32"]'
+    assert backend["RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED"] == "true"
+    assert backend["TURNSTILE_SECRET_KEY"] == "1x0000000000000000000000000000000AA"
+    assert backend["TURNSTILE_HOSTNAMES_JSON"] == '["dummy-key-pass"]'
     assert "MODEL_GATEWAY_API_KEY" not in backend
     assert litellm["LITELLM_PUBLIC_PORT"] == "4002"
     cloud = _values(target / "cloud.env")

@@ -8,9 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from deploy.agent.scripts import staging_preflight as staging
 from deploy.agent.scripts import prepare_staging
-
+from deploy.agent.scripts import staging_preflight as staging
 
 STAGE_NETWORK = "pskit-agent-supabase-staging_default"
 IMAGE_ID = "sha256:" + "a" * 64
@@ -30,13 +29,20 @@ def stage(tmp_path):
     _private(root / "litellm.env", "LITELLM_MASTER_KEY=stage-master\n"
              "SUPABASE_DOCKER_NETWORK=pskit-agent-supabase-staging_default\n")
     _private(root / "backend.env.base", "RESEARCH_AGENT_DATABASE_URL=postgresql://pskit_app:stage-pass@db:5432/postgres\n"
-             "SUPABASE_PUBLISHABLE_KEY=sb_publishable_stage\n")
+             "SUPABASE_PUBLISHABLE_KEY=sb_publishable_stage\n"
+             "RESEARCH_AGENT_AUTH_ABUSE_MODE=observe\n"
+             "RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET=stage-auth-secret-at-least-thirty-two-bytes\n"
+             'RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON=["127.0.0.1/32"]\n'
+             "RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED=true\n"
+             "TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA\n"
+             'TURNSTILE_HOSTNAMES_JSON=["dummy-key-pass"]\n')
     _private(root / "admin.env", "SHARED_POSTGRES_ADMIN_DSN=postgresql://postgres:stage-db@db:5432/postgres\n")
     _private(root / "cloud.env", "AGENT_BACKEND_IMAGE=pskit-agent-backend:fixed\n"
              "AGENT_WEB_IMAGE=pskit-agent-web:unused-staging\n"
              "AGENT_BACKEND_ENV_FILE=" + str(root / "backend.env") + "\n"
              "AGENT_AF3_PROXY_KEY_FILE=" + str(root / "proxy.env") + "\n"
              "AGENT_PUBLIC_URL=http://10.9.8.1:18132\n"
+             "TURNSTILE_SITE_KEY=1x00000000000000000000AA\n"
              "AGENT_PG_DATA_VOLUME=pskit-agent-staging_agent_data\n"
              "SUPABASE_DOCKER_NETWORK=pskit-agent-supabase-staging_default\n")
     _private(root / "proxy.env", "RESEARCH_AGENT_COMPUTE_CALLBACK_KEY=stage-callback\n")

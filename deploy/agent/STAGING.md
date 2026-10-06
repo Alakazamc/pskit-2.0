@@ -13,7 +13,7 @@ Staging 是阿里云上按需启动的预发布环境。它有单独的 Supabase
      --frontend-dist /home/ecs-user/pskit-agent-cloud-20261002/frontend-dist
    ```
 
-   生成器拒绝覆盖现有目录，自动设置目录 0700、文件 0600；密钥只保留在这台主机上。不要把目录或任何 `.env` 加入 Git、备份到公共位置或复制生产 `.env`。
+   生成器拒绝覆盖现有目录，自动设置目录 0700、文件 0600；密钥只保留在这台主机上。不要把目录或任何 `.env` 加入 Git、备份到公共位置或复制生产 `.env`。生成器还会创建独立的认证限流 HMAC，并使用 Cloudflare 官方测试 Turnstile key；这些值不能复制到生产。Staging Nginx 使用独立的 `pskit_staging_auth_*` zone，可以与生产 vhost 同时加载。
 3. 确认 `10.9.8.1` WireGuard 地址、端口 `18131`、`18090`、`4002`、`18132` 空闲，阿里云可用内存至少 4 GiB、可用磁盘至少 10 GiB。正式生产不需要停止。
 
 ## 启动和验收

@@ -19,6 +19,12 @@ services:
       GOTRUE_DISABLE_SIGNUP: "true"
       GOTRUE_MAILER_AUTOCONFIRM: "false"
       GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      GOTRUE_SMTP_MAX_FREQUENCY: "60s"
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: "60"
+      GOTRUE_RATE_LIMIT_OTP: "30"
+      GOTRUE_RATE_LIMIT_VERIFY: "30"
+      GOTRUE_RATE_LIMIT_TOKEN_REFRESH: "150"
+      GOTRUE_RATE_LIMIT_HEADER: X-PSKit-Client-IP
 
   rest:
     container_name: supabase-rest-staging

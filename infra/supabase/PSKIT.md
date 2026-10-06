@@ -24,8 +24,8 @@ docker compose ps
 
 `docker compose down` 会停止服务但保留数据库；不要使用 `down -v` 或 `reset.sh`，除非确定要删除这套实例的数据。前端在 `new_frontend/` 执行 `npm run dev -- --strictPort`；Python 在 `new_backend/` 执行 `python -m uvicorn app.main:app --env-file .env --host 127.0.0.1 --port 18080`。当前 `RESEARCH_AGENT_RUNTIME=mock`，因此切换的是**真实 Supabase 认证**，Agent 仍是 mock，且本地未连接模型网关、远程 MCP 或 AF3 计算服务。
 
-邮箱注册、验证码确认、密码登录及 Python JWT 校验已通过本地接口联调。Mailpit 只供开发使用，不会把邮件送到真实邮箱。Google 登录需要另行设置 Google OAuth 凭据及回调地址；游客登录在 Python live 模式下仍关闭，因为上线前必须配置 CAPTCHA/Turnstile 和共享限流密钥。生产部署也需要 HTTPS、真实 SMTP、备份与可信反向代理。
+邮箱注册、验证码确认、密码登录及 Python JWT 校验已通过本地接口联调。Mailpit 只供开发使用，不会把邮件送到真实邮箱。Google 登录需要另行设置 Google OAuth 凭据及回调地址；游客登录在 Python live 模式下仍关闭，因为上线前必须配置 CAPTCHA/Turnstile 和共享限流密钥。生产部署也需要 HTTPS、真实 SMTP、备份与可信反向代理。GoTrue 使用显式邮件、OTP、确认和刷新限额，并只从 Nginx 覆盖写入的 `X-PSKit-Client-IP` 读取来源。不要开启 GoTrue 全局 CAPTCHA；注册、找回密码和游客升级由 Python 定向校验 Turnstile action 与 hostname。
 
 ## 阿里云独立实例
 
-`compose.cloud.yaml` 在固定版本配置上建立 `pskit-agent-supabase`，只向宿主机回环地址发布网关，Postgres 与文件存储使用独立 Docker 命名卷。应用步骤见 [`../../deploy/agent/OPERATIONS.md`](../../deploy/agent/OPERATIONS.md)。必须生成全新密钥，不复制本机 `.env`、账号或数据库。未配置真实 SMTP 时保持 `CLOUD_DISABLE_SIGNUP=true`，仅供私网验证。
+`compose.cloud.yaml` 在固定版本配置上建立 `pskit-agent-supabase`，只向宿主机回环地址发布网关，Postgres 与文件存储使用独立 Docker 命名卷。应用步骤见 [`../../deploy/agent/OPERATIONS.md`](../../deploy/agent/OPERATIONS.md)。必须生成全新密钥，不复制本机 `.env`、账号或数据库。未配置真实 SMTP、Turnstile 公私钥、Python HMAC secret、可信代理网段并完成 canary 时保持 `CLOUD_DISABLE_SIGNUP=true`，仅供私网验证。

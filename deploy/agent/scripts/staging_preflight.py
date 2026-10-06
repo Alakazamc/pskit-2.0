@@ -10,12 +10,11 @@ import shutil
 import socket
 import subprocess
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
 from urllib.parse import urlsplit
 
 from deploy.agent.scripts.prepare_staging import _image_id
-
 
 ROOT = Path(__file__).resolve().parents[3]
 AGENT = ROOT / "deploy/agent"
@@ -168,6 +167,18 @@ def validate_staging(
         "RESEARCH_AGENT_DATABASE_URL", ""), user="pskit_app", database="postgres")
     _check_dsn(rendered["litellm"]["services"]["gateway"]["environment"].get(
         "DATABASE_URL", ""), user="litellm", database="litellm")
+    if backend_env.get("RESEARCH_AGENT_AUTH_ABUSE_MODE") not in {"observe", "enforce"}:
+        raise ValueError("Staging auth abuse mode is unsafe")
+    if len(backend_env.get("RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET", "")) < 32:
+        raise ValueError("Staging auth rate-limit secret is missing")
+    if backend_env.get("RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON") != '["127.0.0.1/32"]':
+        raise ValueError("Staging trusted proxy boundary is unexpected")
+    if backend_env.get("RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED") != "true":
+        raise ValueError("Staging CAPTCHA must remain enabled")
+    if backend_env.get("TURNSTILE_SECRET_KEY") != "1x0000000000000000000000000000000AA":
+        raise ValueError("Staging must use the Turnstile test secret")
+    if backend_env.get("TURNSTILE_HOSTNAMES_JSON") != '["dummy-key-pass"]':
+        raise ValueError("Staging Turnstile hostname is unexpected")
     for value in (
         supabase_env.get("POSTGRES_PASSWORD", ""), supabase_env.get("JWT_SECRET", ""),
         supabase_env.get("SUPABASE_SECRET_KEY", ""),
@@ -224,7 +235,8 @@ def _compose_commands(root: Path, env_file: Path) -> tuple[dict[str, list[str]],
     cloud_env = _env(root / "cloud.env")
     allowed_cloud_keys = {"AGENT_BACKEND_IMAGE", "AGENT_WEB_IMAGE", "AGENT_BACKEND_ENV_FILE",
                           "AGENT_AF3_PROXY_KEY_FILE", "AGENT_PUBLIC_URL",
-                          "AGENT_PG_DATA_VOLUME", "SUPABASE_DOCKER_NETWORK"}
+                          "AGENT_PG_DATA_VOLUME", "SUPABASE_DOCKER_NETWORK",
+                          "TURNSTILE_SITE_KEY"}
     if set(cloud_env) != allowed_cloud_keys:
         raise ValueError("Unexpected Staging Compose interpolation variable")
     agent_env.update(cloud_env)
@@ -348,8 +360,8 @@ def run_staging(
                "--env-file", str(root / "admin.env"), "--read-only", "--cap-drop", "ALL",
                "--security-opt", "no-new-privileges", "--entrypoint", "python",
                release["backend_image"], "-c",
-               'import os; from app.db.postgres_migrations import migrate_postgres; '
-               'migrate_postgres(os.environ["SHARED_POSTGRES_ADMIN_DSN"])']
+                 ('import os; from app.db.postgres_migrations import migrate_postgres; '
+                  'migrate_postgres(os.environ["SHARED_POSTGRES_ADMIN_DSN"])')]
     _run(migrate, env=env)
     _run(commands["litellm"] + ["up", "-d", "--wait"], env=env)
     key_path = _bootstrap_key(root)

@@ -61,7 +61,8 @@ bash deploy/agent/stack.sh logs agent
 ```bash
 cd new_frontend
 npm ci
-VITE_AUTH_MODE=supabase VITE_API_BASE_URL=/api/v1 npm run build
+VITE_AUTH_MODE=supabase VITE_API_BASE_URL=/api/v1 \
+VITE_TURNSTILE_SITE_KEY='<public-site-key>' npm run build
 ```
 
 产物是 `new_frontend/dist`。由有权限的运维进程把本次**完整且已核对**的产物发布到 `/var/www/agent.bioailab.net`。生产 Nginx 使用 [`host-nginx-agent-aliyun.conf`](host-nginx-agent-aliyun.conf)：`/api/v1/` 转到本机 Python，`/internal/` 返回 404，其余路径由 SPA 处理。发布静态文件时无需启动 `web` 容器。
@@ -76,6 +77,14 @@ systemctl reload nginx
 ```
 
 只有 `nginx -t` 成功才 reload。日常仅更新后端镜像或 React `dist` 时，不需要重新配置域名、证书或 Nginx 路由。
+
+### 公网认证防滥用
+
+认证入口使用三层保护：Nginx 只限制注册、找回密码、游客升级、登录和验证码确认；Python 使用 PostgreSQL 原子计数器执行用户、IP 与邮箱桶；GoTrue 继续执行邮件冷却与内部限额。Nginx 必须覆盖客户端提交的 `X-PSKit-Client-IP`，Python 只信任 `cloud.backend.env` 中声明的代理网段。日志只记录请求 ID、状态码和 `$limit_req_status`，不得记录邮箱、验证码、Cookie、Token 或原始 IP。
+
+首次发布保持 `limit_req_dry_run on`、`RESEARCH_AGENT_AUTH_ABUSE_MODE=observe` 和 `CLOUD_DISABLE_SIGNUP=true`。先配置真实 SMTP、Turnstile site key、server secret、独立 HMAC secret 与可信代理网段；再用 Staging 和受控账号验证注册、重发、找回、游客升级及错误恢复。观察 24–48 小时的聚合指标后，先把 Python 切到 `enforce`，再把三个 vhost 中的 `limit_req_dry_run` 改为 `off`。每次修改都必须先运行 `nginx -t`，失败时恢复安装脚本留下的备份。
+
+上述保护通过 canary 后，才把 Supabase 私有环境中的 `CLOUD_DISABLE_SIGNUP` 与 `DISABLE_SIGNUP` 改为 `false`。发生误拦截时，先把 Nginx 恢复为 dry-run，再把 Python 恢复为 observe；不要放宽普通 API、SSE、上传和管理入口。此阶段不启用阿里云付费 DDoS/WAF。
 
 管理员页面 `/admin` 和管理 API `/api/v1/admin` 只允许源地址为 WireGuard `10.9.8.0/24` 的连接。修改现有生产配置时，在阿里云 root 会话运行 `bash deploy/agent/scripts/install_private_admin_ingress.sh`；脚本先备份原配置，验证 Nginx 并探测公网拒绝、私网可达，失败则恢复原配置。浏览器需先连接 WireGuard，并在浏览器所在机器将 `agent.bioailab.net` 临时解析到 `10.9.8.1`，这样 HTTPS 证书与域名仍匹配。断开 WireGuard 后移除该临时解析。管理角色还需按 [管理台手册](../../new_backend/ADMIN.md)授予已验证账号；接入私网本身不会授予权限。
 

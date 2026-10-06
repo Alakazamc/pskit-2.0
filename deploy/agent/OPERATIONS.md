@@ -24,7 +24,7 @@ curl -I https://agent.bioailab.net/
 curl -I https://pskit.bioailab.net/
 ```
 
-真实 SMTP 主机、端口、用户、密码及发件人填写到云端 Supabase `.env`（权限 `0600`），之后才将 `CLOUD_DISABLE_SIGNUP=false` 并验证邮箱验证码全流程。Google 登录另需提供者凭据及真实回调验证。公网检查 `/internal/` 为 404、登录 Refresh Cookie 带 `Secure`，并确认旧站仍可访问。
+真实 SMTP 主机、端口、用户、密码及发件人填写到云端 Supabase `.env`（权限 `0600`）。同时配置 Turnstile 前端 site key、后端 secret、认证限流 HMAC 和可信代理网段。先以 Nginx dry-run 与 Python observe 运行 24–48 小时并完成 canary，之后才将 `CLOUD_DISABLE_SIGNUP=false` 并验证邮箱验证码全流程；再分步启用 Python 和 Nginx enforcement。回退顺序是 Nginx dry-run、Python observe、关闭注册。Google 登录另需提供者凭据及真实回调验证。公网检查 `/internal/` 为 404、登录 Refresh Cookie 带 `Secure`，并确认旧站仍可访问。本阶段不配置阿里云付费 DDoS/WAF。
 
 ## A6000 私网 AF3：需先排查 WireGuard
 

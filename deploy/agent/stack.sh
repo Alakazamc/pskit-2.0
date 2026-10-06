@@ -74,10 +74,30 @@ preflight() {
   require_value "$backend_env" RESEARCH_AGENT_DATABASE_URL
   require_value "$backend_env" MODEL_GATEWAY_API_KEY
   require_value "$backend_env" MODEL_GATEWAY_MODEL
+  require_value "$backend_env" RESEARCH_AGENT_AUTH_ABUSE_MODE
+  require_value "$backend_env" RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET
+  require_value "$backend_env" RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON
+  require_value "$backend_env" RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED
+  require_value "$backend_env" TURNSTILE_SECRET_KEY
+  require_value "$backend_env" TURNSTILE_HOSTNAMES_JSON
+  require_value "$cloud_env" TURNSTILE_SITE_KEY
   require_value "$litellm_env" LITELLM_DB_PASSWORD
   require_value "$litellm_env" LITELLM_MASTER_KEY
   require_value "$litellm_env" LITELLM_SALT_KEY
   require_value "$proxy_env" RESEARCH_AGENT_COMPUTE_CALLBACK_KEY
+  auth_mode=$(value_in_file "$backend_env" RESEARCH_AGENT_AUTH_ABUSE_MODE)
+  [[ "$auth_mode" == observe || "$auth_mode" == enforce ]] ||
+    die "RESEARCH_AGENT_AUTH_ABUSE_MODE must be observe or enforce"
+  auth_secret=$(value_in_file "$backend_env" RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET)
+  (( ${#auth_secret} >= 32 )) || die "RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET is too short"
+  [[ $(value_in_file "$backend_env" RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED) == true ]] ||
+    die "RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED must be true"
+  if [[ $(value_in_file "$supabase_env" CLOUD_DISABLE_SIGNUP 2>/dev/null || printf true) == false ]]; then
+    require_value "$supabase_env" SMTP_HOST
+    require_value "$supabase_env" SMTP_USER
+    require_value "$supabase_env" SMTP_PASS
+    require_value "$supabase_env" SMTP_ADMIN_EMAIL
+  fi
   if [[ -z "$backend_image" ]]; then
     backend_image=$(value_in_file "$cloud_env" AGENT_BACKEND_IMAGE) || die "AGENT_BACKEND_IMAGE is missing"
   fi
