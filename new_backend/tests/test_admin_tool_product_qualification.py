@@ -296,6 +296,20 @@ async def test_qualification_proves_protocol_science_idempotency_and_cancellatio
 
 
 @pytest.mark.asyncio
+async def test_separate_qualification_runs_do_not_reuse_execution_idempotency_key():
+    executor = QualificationExecutor(completed_execution())
+    evaluator = QualificationEvaluator(executor)
+
+    await evaluator.evaluate(qualification_draft(), acceptance_suite())
+    await evaluator.evaluate(qualification_draft(), acceptance_suite())
+
+    assert len(executor.calls) == 4
+    assert executor.calls[0][2] == executor.calls[1][2]
+    assert executor.calls[2][2] == executor.calls[3][2]
+    assert executor.calls[0][2] != executor.calls[2][2]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("mutate", "assertion"),
     [

@@ -181,7 +181,7 @@ class DirectMcpQualificationExecutor:
         return report
 
     async def execute(self, binding, arguments: dict[str, Any], idempotency_key: str):
-        cached = self._cache.get(idempotency_key)
+        cached = self._cache.pop(idempotency_key, None)
         if cached is not None:
             return copy.deepcopy(cached)
         endpoint, transport_name, credential = self.binding_resolver(binding)
@@ -206,6 +206,8 @@ class DirectMcpQualificationExecutor:
             "remote_execution_id": report.get("job_id")
             or f"qualification-{payload_hash({'key': idempotency_key})[:32]}",
         }
+        if len(self._cache) >= 1024:
+            self._cache.pop(next(iter(self._cache)))
         self._cache[idempotency_key] = copy.deepcopy(evidence)
         return evidence
 
@@ -324,6 +326,7 @@ class QualificationEvaluator:
         draft: ToolProductDraft,
         suite: AcceptanceSuite,
     ) -> QualificationReport:
+        evaluation_id = uuid.uuid4()
         actions = {action.id: action for action in draft.actions}
         bindings = {binding.binding_id: binding for binding in draft.bindings}
         case_results: list[QualificationCaseResult] = []
@@ -343,7 +346,10 @@ class QualificationEvaluator:
             execution = None
             repeated = None
             if valid_input:
-                key = f"qualification:{draft.product_id}:{draft.revision}:{case.case_id}"
+                key = (
+                    f"qualification:{evaluation_id}:{draft.product_id}:"
+                    f"{draft.revision}:{case.case_id}"
+                )
                 execution = await self.executor.execute(binding, case.arguments, key)
                 if case.check_idempotency:
                     repeated = await self.executor.execute(binding, case.arguments, key)
@@ -492,6 +498,7 @@ class McpQualification:
                 "SELECT e.uri,e.transport,e.credential_ref,e.network_zone "
                 "FROM mcp_service_revisions r JOIN mcp_service_endpoints e "
                 "ON e.endpoint_id=r.endpoint_id WHERE r.service_id=%s AND r.revision=%s "
+                "AND e.state='approved' "
                 "AND EXISTS (SELECT 1 FROM mcp_discovery_snapshots d "
                 "WHERE d.service_id=r.service_id AND d.service_revision=r.revision)",
                 (binding.service_id, binding.service_revision),
