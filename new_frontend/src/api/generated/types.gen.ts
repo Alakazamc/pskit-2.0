@@ -5,6 +5,66 @@ export type ClientOptions = {
 };
 
 /**
+ * AcceptanceCase
+ */
+export type AcceptanceCase = {
+    /**
+     * Case Id
+     */
+    case_id: string;
+    /**
+     * Action Id
+     */
+    action_id: string;
+    /**
+     * Arguments
+     */
+    arguments: {
+        [key: string]: unknown;
+    };
+    /**
+     * Invalid Arguments
+     */
+    invalid_arguments?: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Result Assertions
+     */
+    result_assertions?: Array<ResultAssertion>;
+    /**
+     * Required Progress Types
+     */
+    required_progress_types?: Array<string>;
+    /**
+     * Check Idempotency
+     */
+    check_idempotency?: boolean;
+    /**
+     * Check Cancellation
+     */
+    check_cancellation?: boolean;
+};
+
+/**
+ * AcceptanceSuite
+ */
+export type AcceptanceSuite = {
+    /**
+     * Suite Id
+     */
+    suite_id: string;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Cases
+     */
+    cases: Array<AcceptanceCase>;
+};
+
+/**
  * AdminJob
  */
 export type AdminJob = {
@@ -439,6 +499,29 @@ export type Af3JobRequest = {
 };
 
 /**
+ * AgentHandoff
+ */
+export type AgentHandoff = {
+    /**
+     * Id
+     */
+    id: string;
+    label: LocalizedText;
+    /**
+     * Prompt Template Id
+     */
+    prompt_template_id: string;
+    /**
+     * Summary Pointer
+     */
+    summary_pointer: string;
+    /**
+     * Artifact Pointers
+     */
+    artifact_pointers?: Array<string>;
+};
+
+/**
  * AnonymousLoginRequest
  */
 export type AnonymousLoginRequest = {
@@ -609,6 +692,73 @@ export type AuthSessionResponse = {
      */
     expires_in: number;
     user: UserIdentity;
+};
+
+/**
+ * CapabilityBinding
+ */
+export type CapabilityBinding = {
+    /**
+     * Binding Id
+     */
+    binding_id: string;
+    /**
+     * Product Action Id
+     */
+    product_action_id: string;
+    /**
+     * Service Id
+     */
+    service_id: string;
+    /**
+     * Service Revision
+     */
+    service_revision: number;
+    /**
+     * Capability Id
+     */
+    capability_id: string;
+    /**
+     * Capability Version
+     */
+    capability_version: string;
+    /**
+     * Adapter
+     */
+    adapter: 'immediate_mcp' | 'job_mcp' | 'mcp_tasks';
+    /**
+     * Submit Tool
+     */
+    submit_tool: string;
+    /**
+     * Status Tool
+     */
+    status_tool?: string | null;
+    /**
+     * Cancel Tool
+     */
+    cancel_tool?: string | null;
+    /**
+     * Remote Output Schema
+     */
+    remote_output_schema: {
+        [key: string]: unknown;
+    };
+    /**
+     * Result Schema
+     */
+    result_schema: {
+        [key: string]: unknown;
+    };
+    result_mapping: ResultMapping;
+    /**
+     * Required Usage
+     */
+    required_usage?: Array<'wall_ms' | 'cpu_core_ms' | 'gpu_device_ms' | 'peak_memory_bytes' | 'peak_gpu_memory_bytes' | 'gpu_count'>;
+    /**
+     * Cancellation
+     */
+    cancellation?: 'none' | 'cooperative' | 'confirmed_stop';
 };
 
 /**
@@ -1137,6 +1287,92 @@ export type DependencyReport = {
 };
 
 /**
+ * DirectActionTarget
+ */
+export type DirectActionTarget = {
+    /**
+     * Action Id
+     */
+    action_id: string;
+};
+
+/**
+ * DiscoveredTool
+ */
+export type DiscoveredTool = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Description
+     */
+    description?: string;
+    /**
+     * Input Schema
+     */
+    input_schema: {
+        [key: string]: unknown;
+    };
+    /**
+     * Remote Output Schema
+     */
+    remote_output_schema: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * DiscoveryRequest
+ */
+export type DiscoveryRequest = {
+    /**
+     * Service Revision
+     */
+    service_revision: number;
+    /**
+     * Reason
+     */
+    reason: string;
+};
+
+/**
+ * DiscoverySnapshot
+ */
+export type DiscoverySnapshot = {
+    /**
+     * Discovery Id
+     */
+    discovery_id: string;
+    /**
+     * Service Id
+     */
+    service_id: string;
+    /**
+     * Service Revision
+     */
+    service_revision: number;
+    /**
+     * Protocol
+     */
+    protocol: {
+        [key: string]: unknown;
+    };
+    /**
+     * Tools
+     */
+    tools: Array<DiscoveredTool>;
+    /**
+     * Digest
+     */
+    digest: string;
+    /**
+     * Discovered At
+     */
+    discovered_at: string;
+};
+
+/**
  * EmailLoginRequest
  */
 export type EmailLoginRequest = {
@@ -1221,6 +1457,45 @@ export type ErrorPart = {
 };
 
 /**
+ * ExecutionBindingSnapshot
+ *
+ * Private immutable transport policy delivered only to trusted workers.
+ */
+export type ExecutionBindingSnapshot = {
+    /**
+     * Adapter
+     */
+    adapter: 'immediate_mcp' | 'job_mcp' | 'mcp_tasks';
+    /**
+     * Endpoint Url
+     */
+    endpoint_url: string;
+    /**
+     * Credential Ref
+     */
+    credential_ref?: string | null;
+    /**
+     * Submit Tool
+     */
+    submit_tool: string;
+    /**
+     * Status Tool
+     */
+    status_tool?: string | null;
+    /**
+     * Cancel Tool
+     */
+    cancel_tool?: string | null;
+    /**
+     * Remote Output Schema
+     */
+    remote_output_schema: {
+        [key: string]: unknown;
+    };
+    result_mapping: ExecutionResultMapping;
+};
+
+/**
  * ExecutionError
  */
 export type ExecutionError = {
@@ -1263,10 +1538,37 @@ export type ExecutionGrant = {
      * Gpu Uuids
      */
     gpu_uuids?: Array<string>;
+    execution_binding?: ExecutionBindingSnapshot | null;
     /**
      * Recovered
      */
     recovered?: boolean;
+};
+
+/**
+ * ExecutionResultMapping
+ */
+export type ExecutionResultMapping = {
+    /**
+     * Kind
+     */
+    kind?: 'json_pointer';
+    /**
+     * Pointer
+     */
+    pointer: string;
+    /**
+     * Renames
+     */
+    renames?: {
+        [key: string]: string;
+    };
+    /**
+     * Transforms
+     */
+    transforms?: Array<{
+        [key: string]: unknown;
+    }>;
 };
 
 /**
@@ -1527,6 +1829,20 @@ export type LimitsUpdate = {
 };
 
 /**
+ * LocalizedText
+ */
+export type LocalizedText = {
+    /**
+     * En
+     */
+    en: string;
+    /**
+     * Zh-Cn
+     */
+    'zh-CN': string;
+};
+
+/**
  * McpInvokeResult
  */
 export type McpInvokeResult = {
@@ -1548,6 +1864,32 @@ export type McpInvokeResult = {
      * Run Id
      */
     run_id?: string | null;
+};
+
+/**
+ * McpProbeRequest
+ */
+export type McpProbeRequest = {
+    /**
+     * Service Id
+     */
+    service_id: string;
+    /**
+     * Uri
+     */
+    uri: string;
+    /**
+     * Transport
+     */
+    transport?: 'streamable_http' | 'sse';
+    /**
+     * Credential Ref
+     */
+    credential_ref?: string | null;
+    /**
+     * Network Zone
+     */
+    network_zone?: string;
 };
 
 /**
@@ -1737,6 +2079,114 @@ export type PrepareFiles = {
 };
 
 /**
+ * ProbeSnapshot
+ */
+export type ProbeSnapshot = {
+    /**
+     * Probe Id
+     */
+    probe_id: string;
+    /**
+     * Endpoint Id
+     */
+    endpoint_id: string;
+    /**
+     * Service Id
+     */
+    service_id: string;
+    /**
+     * Service Revision
+     */
+    service_revision: number;
+    /**
+     * Uri
+     */
+    uri: string;
+    /**
+     * Transport
+     */
+    transport: 'streamable_http' | 'sse';
+    /**
+     * Credential Ref
+     */
+    credential_ref?: string | null;
+    /**
+     * Network Zone
+     */
+    network_zone: string;
+    /**
+     * Protocol
+     */
+    protocol: {
+        [key: string]: unknown;
+    };
+    /**
+     * Addresses
+     */
+    addresses: Array<string>;
+    /**
+     * Checked At
+     */
+    checked_at: string;
+};
+
+/**
+ * ProductAction
+ */
+export type ProductAction = {
+    /**
+     * Id
+     */
+    id: string;
+    label: LocalizedText;
+    description?: LocalizedText | null;
+    /**
+     * Kind
+     */
+    kind: 'capability' | 'workflow';
+    /**
+     * Binding Ids
+     */
+    binding_ids: Array<string>;
+    /**
+     * Input Schema
+     */
+    input_schema?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * ProductDraftRequest
+ */
+export type ProductDraftRequest = {
+    /**
+     * Expected Revision
+     */
+    expected_revision: number;
+    /**
+     * Reason
+     */
+    reason: string;
+    draft: ToolProductDraftInput;
+    acceptance_suite?: AcceptanceSuite | null;
+};
+
+/**
+ * ProductVisibility
+ */
+export type ProductVisibility = {
+    /**
+     * Audience
+     */
+    audience?: 'public' | 'members' | 'restricted';
+    /**
+     * Allowed User Ids
+     */
+    allowed_user_ids?: Array<string>;
+};
+
+/**
  * ProfileUpdateRequest
  */
 export type ProfileUpdateRequest = {
@@ -1836,6 +2286,163 @@ export type ProjectSkillSettings = {
      * Default Skill Ids
      */
     default_skill_ids?: Array<string>;
+};
+
+/**
+ * PublishProductRequest
+ */
+export type PublishProductRequest = {
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Reason
+     */
+    reason: string;
+};
+
+/**
+ * PublishedToolProduct
+ */
+export type PublishedToolProduct = {
+    /**
+     * Release Id
+     */
+    release_id: string;
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Revision
+     */
+    revision: number;
+    title: LocalizedText;
+    description: LocalizedText;
+    ui_schema: ToolUiSchemaOutput;
+    /**
+     * Actions
+     */
+    actions: Array<ProductAction>;
+    /**
+     * State
+     */
+    state: 'published' | 'suspended';
+    /**
+     * Published At
+     */
+    published_at: string;
+};
+
+/**
+ * QualificationCaseResult
+ */
+export type QualificationCaseResult = {
+    /**
+     * Case Id
+     */
+    case_id: string;
+    /**
+     * Status
+     */
+    status: 'passed' | 'failed';
+    /**
+     * Protocol Assertions
+     */
+    protocol_assertions?: {
+        [key: string]: boolean;
+    };
+    /**
+     * Scientific Assertions
+     */
+    scientific_assertions?: {
+        [key: string]: boolean;
+    };
+    /**
+     * Message
+     */
+    message?: string;
+};
+
+/**
+ * QualificationReport
+ */
+export type QualificationReport = {
+    /**
+     * Report Id
+     */
+    report_id: string;
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Product Revision
+     */
+    product_revision: number;
+    /**
+     * Service Revision
+     */
+    service_revision: number;
+    /**
+     * Binding Digest
+     */
+    binding_digest: string;
+    /**
+     * Ui Digest
+     */
+    ui_digest: string;
+    /**
+     * Suite Digest
+     */
+    suite_digest: string;
+    /**
+     * Status
+     */
+    status: 'passed' | 'failed';
+    /**
+     * Protocol Passed
+     */
+    protocol_passed: boolean;
+    /**
+     * Scientific Passed
+     */
+    scientific_passed: boolean;
+    /**
+     * Cases
+     */
+    cases: Array<QualificationCaseResult>;
+    /**
+     * Qualified At
+     */
+    qualified_at: string;
+};
+
+/**
+ * QualificationRequest
+ */
+export type QualificationRequest = {
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Suite Revision
+     */
+    suite_revision: number;
+    /**
+     * Reason
+     */
+    reason: string;
 };
 
 /**
@@ -1940,6 +2547,16 @@ export type RegisterSkillRequest = {
 };
 
 /**
+ * ReleaseActionRequest
+ */
+export type ReleaseActionRequest = {
+    /**
+     * Reason
+     */
+    reason: string;
+};
+
+/**
  * ReleaseServiceVersion
  */
 export type ReleaseServiceVersion = {
@@ -1973,6 +2590,48 @@ export type ResourceCounter = {
      * Remaining
      */
     remaining: number;
+};
+
+/**
+ * ResultAssertion
+ */
+export type ResultAssertion = {
+    /**
+     * Pointer
+     */
+    pointer: string;
+    /**
+     * Predicate
+     */
+    predicate: 'equals' | 'exists' | 'min_items' | 'maximum' | 'minimum';
+    /**
+     * Value
+     */
+    value?: unknown;
+};
+
+/**
+ * ResultMapping
+ */
+export type ResultMapping = {
+    /**
+     * Kind
+     */
+    kind?: 'json_pointer';
+    /**
+     * Pointer
+     */
+    pointer: string;
+    /**
+     * Renames
+     */
+    renames?: {
+        [key: string]: string;
+    };
+    /**
+     * Transforms
+     */
+    transforms?: Array<ToolUiTransform>;
 };
 
 /**
@@ -2249,6 +2908,29 @@ export type SignupResponse = {
 };
 
 /**
+ * StateActionSelection
+ */
+export type StateActionSelection = {
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Map
+     */
+    map: {
+        [key: string]: string;
+    };
+};
+
+/**
+ * StateActionTarget
+ */
+export type StateActionTarget = {
+    by_state: StateActionSelection;
+};
+
+/**
  * StorageQuota
  */
 export type StorageQuota = {
@@ -2308,6 +2990,112 @@ export type ToolCallPart = {
      * Summary
      */
     summary: string;
+};
+
+/**
+ * ToolProductDraft
+ */
+export type ToolProductDraftInput = {
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Owner User Id
+     */
+    owner_user_id: string;
+    title: LocalizedText;
+    description: LocalizedText;
+    ui_schema: ToolUiSchemaInput;
+    /**
+     * Bindings
+     */
+    bindings: Array<CapabilityBinding>;
+    /**
+     * Actions
+     */
+    actions: Array<ProductAction>;
+    visibility?: ProductVisibility;
+    /**
+     * Acceptance Suite Id
+     */
+    acceptance_suite_id: string;
+    /**
+     * Acceptance Suite Revision
+     */
+    acceptance_suite_revision: number;
+    /**
+     * Handoffs
+     */
+    handoffs?: Array<AgentHandoff>;
+};
+
+/**
+ * ToolProductDraft
+ */
+export type ToolProductDraftOutput = {
+    /**
+     * Product Id
+     */
+    product_id: string;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Owner User Id
+     */
+    owner_user_id: string;
+    title: LocalizedText;
+    description: LocalizedText;
+    ui_schema: ToolUiSchemaOutput;
+    /**
+     * Bindings
+     */
+    bindings: Array<CapabilityBinding>;
+    /**
+     * Actions
+     */
+    actions: Array<ProductAction>;
+    visibility?: ProductVisibility;
+    /**
+     * Acceptance Suite Id
+     */
+    acceptance_suite_id: string;
+    /**
+     * Acceptance Suite Revision
+     */
+    acceptance_suite_revision: number;
+    /**
+     * Handoffs
+     */
+    handoffs?: Array<AgentHandoff>;
+};
+
+/**
+ * ToolProductPage
+ */
+export type ToolProductPage = {
+    /**
+     * Items
+     */
+    items: Array<PublishedToolProduct>;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: string | null;
 };
 
 /**
@@ -2373,6 +3161,60 @@ export type ToolRun = {
 };
 
 /**
+ * ToolRunEvent
+ */
+export type ToolRunEvent = {
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Sequence
+     */
+    sequence: number;
+    /**
+     * Type
+     */
+    type: 'run.queued' | 'run.started' | 'stage.started' | 'stage.progress' | 'artifact.created' | 'usage.updated' | 'stage.completed' | 'run.cancelling' | 'run.completed' | 'run.failed' | 'run.cancelled';
+    /**
+     * Data
+     */
+    data: {
+        [key: string]: unknown;
+    };
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
+ * ToolRunHandoffContext
+ */
+export type ToolRunHandoffContext = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Handoff Id
+     */
+    handoff_id: string;
+    /**
+     * Summary
+     */
+    summary: string;
+    /**
+     * Artifacts
+     */
+    artifacts?: Array<ArtifactRef>;
+};
+
+/**
  * ToolRunMove
  */
 export type ToolRunMove = {
@@ -2380,6 +3222,551 @@ export type ToolRunMove = {
      * Project Id
      */
     project_id: string;
+};
+
+/**
+ * ToolRunSnapshot
+ */
+export type ToolRunSnapshot = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Product Slug
+     */
+    product_slug: string;
+    /**
+     * Release Id
+     */
+    release_id: string;
+    /**
+     * Action Id
+     */
+    action_id: string;
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Status
+     */
+    status: 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled';
+    /**
+     * Progress
+     */
+    progress: number;
+    /**
+     * Result
+     */
+    result: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Artifacts
+     */
+    artifacts: Array<ArtifactRef>;
+    usage: UsageReport | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * ToolRunStartRequest
+ */
+export type ToolRunStartRequest = {
+    /**
+     * Arguments
+     */
+    arguments?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * ToolUiAction
+ */
+export type ToolUiActionInput = {
+    /**
+     * Id
+     */
+    id: string;
+    label: LocalizedText;
+    /**
+     * Kind
+     */
+    kind?: 'start_run';
+    /**
+     * Target
+     */
+    target: DirectActionTarget | StateActionTarget;
+    visible_when?: ToolUiConditionInput | null;
+};
+
+/**
+ * ToolUiAction
+ */
+export type ToolUiActionOutput = {
+    /**
+     * Id
+     */
+    id: string;
+    label: LocalizedText;
+    /**
+     * Kind
+     */
+    kind?: 'start_run';
+    /**
+     * Target
+     */
+    target: DirectActionTarget | StateActionTarget;
+    visible_when?: ToolUiConditionOutput | null;
+};
+
+/**
+ * ToolUiCondition
+ */
+export type ToolUiConditionInput = {
+    /**
+     * Source
+     */
+    source?: string | null;
+    /**
+     * Equals
+     */
+    equals?: unknown;
+    /**
+     * In
+     */
+    in?: Array<unknown> | null;
+    /**
+     * Exists
+     */
+    exists?: boolean | null;
+    /**
+     * And
+     */
+    and?: Array<ToolUiConditionInput> | null;
+    /**
+     * Or
+     */
+    or?: Array<ToolUiConditionInput> | null;
+    not?: ToolUiConditionInput | null;
+};
+
+/**
+ * ToolUiCondition
+ */
+export type ToolUiConditionOutput = {
+    /**
+     * Source
+     */
+    source?: string | null;
+    /**
+     * Equals
+     */
+    equals?: unknown;
+    /**
+     * In
+     */
+    in?: Array<unknown> | null;
+    /**
+     * Exists
+     */
+    exists?: boolean | null;
+    /**
+     * And
+     */
+    and?: Array<ToolUiConditionOutput> | null;
+    /**
+     * Or
+     */
+    or?: Array<ToolUiConditionOutput> | null;
+    not?: ToolUiConditionOutput | null;
+};
+
+/**
+ * ToolUiField
+ */
+export type ToolUiFieldInput = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Component
+     */
+    component: 'text-input' | 'number-input' | 'textarea' | 'select' | 'segmented-control' | 'checkbox' | 'switch' | 'file-upload' | 'protein-input' | 'sequence-input' | 'parameter-group' | 'advanced-section';
+    label: LocalizedText;
+    /**
+     * Input Pointer
+     */
+    input_pointer?: string | null;
+    help?: LocalizedText | null;
+    /**
+     * Required
+     */
+    required?: boolean;
+    /**
+     * Default
+     */
+    default?: unknown;
+    /**
+     * Options
+     */
+    options?: Array<ToolUiOption>;
+    /**
+     * Minimum
+     */
+    minimum?: number | null;
+    /**
+     * Maximum
+     */
+    maximum?: number | null;
+    /**
+     * Step
+     */
+    step?: number | null;
+    /**
+     * Accepted Types
+     */
+    accepted_types?: Array<string>;
+    /**
+     * Max Files
+     */
+    max_files?: number | null;
+    visible_when?: ToolUiConditionInput | null;
+    /**
+     * Fields
+     */
+    fields?: Array<ToolUiFieldInput>;
+};
+
+/**
+ * ToolUiField
+ */
+export type ToolUiFieldOutput = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Component
+     */
+    component: 'text-input' | 'number-input' | 'textarea' | 'select' | 'segmented-control' | 'checkbox' | 'switch' | 'file-upload' | 'protein-input' | 'sequence-input' | 'parameter-group' | 'advanced-section';
+    label: LocalizedText;
+    /**
+     * Input Pointer
+     */
+    input_pointer?: string | null;
+    help?: LocalizedText | null;
+    /**
+     * Required
+     */
+    required?: boolean;
+    /**
+     * Default
+     */
+    default?: unknown;
+    /**
+     * Options
+     */
+    options?: Array<ToolUiOption>;
+    /**
+     * Minimum
+     */
+    minimum?: number | null;
+    /**
+     * Maximum
+     */
+    maximum?: number | null;
+    /**
+     * Step
+     */
+    step?: number | null;
+    /**
+     * Accepted Types
+     */
+    accepted_types?: Array<string>;
+    /**
+     * Max Files
+     */
+    max_files?: number | null;
+    visible_when?: ToolUiConditionOutput | null;
+    /**
+     * Fields
+     */
+    fields?: Array<ToolUiFieldOutput>;
+};
+
+/**
+ * ToolUiHandoff
+ */
+export type ToolUiHandoff = {
+    /**
+     * Id
+     */
+    id: string;
+    label: LocalizedText;
+    /**
+     * Summary Source
+     */
+    summary_source: string;
+    /**
+     * Artifact Sources
+     */
+    artifact_sources?: Array<string>;
+};
+
+/**
+ * ToolUiOption
+ */
+export type ToolUiOption = {
+    /**
+     * Value
+     */
+    value: string | number | boolean;
+    label: LocalizedText;
+};
+
+/**
+ * ToolUiPageLayout
+ */
+export type ToolUiPageLayout = {
+    /**
+     * Layout
+     */
+    layout: 'split-workspace' | 'single-column';
+    /**
+     * Input Width
+     */
+    input_width?: number;
+    /**
+     * Result Width
+     */
+    result_width?: number;
+};
+
+/**
+ * ToolUiProduct
+ */
+export type ToolUiProduct = {
+    /**
+     * Slug
+     */
+    slug: string;
+    title: LocalizedText;
+    description: LocalizedText;
+};
+
+/**
+ * ToolUiResultView
+ */
+export type ToolUiResultViewInput = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Component
+     */
+    component: 'metric-grid' | 'stage-flow' | 'sequence-table' | 'data-table' | 'line-chart' | 'scatter-plot' | 'heatmap' | 'structure-viewer' | 'artifact-list' | 'json-inspector';
+    /**
+     * Source
+     */
+    source: string;
+    title?: LocalizedText | null;
+    empty?: LocalizedText | null;
+    /**
+     * Preview Limit
+     */
+    preview_limit?: number;
+    /**
+     * Full Data Artifact
+     */
+    full_data_artifact?: string | null;
+    visible_when?: ToolUiConditionInput | null;
+    /**
+     * Transforms
+     */
+    transforms?: Array<ToolUiTransform>;
+};
+
+/**
+ * ToolUiResultView
+ */
+export type ToolUiResultViewOutput = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Component
+     */
+    component: 'metric-grid' | 'stage-flow' | 'sequence-table' | 'data-table' | 'line-chart' | 'scatter-plot' | 'heatmap' | 'structure-viewer' | 'artifact-list' | 'json-inspector';
+    /**
+     * Source
+     */
+    source: string;
+    title?: LocalizedText | null;
+    empty?: LocalizedText | null;
+    /**
+     * Preview Limit
+     */
+    preview_limit?: number;
+    /**
+     * Full Data Artifact
+     */
+    full_data_artifact?: string | null;
+    visible_when?: ToolUiConditionOutput | null;
+    /**
+     * Transforms
+     */
+    transforms?: Array<ToolUiTransform>;
+};
+
+/**
+ * ToolUiSchema
+ */
+export type ToolUiSchemaInput = {
+    /**
+     * Schema Version
+     */
+    schema_version?: 'pskit.tool-ui.v1';
+    product: ToolUiProduct;
+    page: ToolUiPageLayout;
+    /**
+     * State
+     */
+    state?: {
+        [key: string]: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * Sections
+     */
+    sections?: Array<ToolUiSectionInput>;
+    /**
+     * Actions
+     */
+    actions: Array<ToolUiActionInput>;
+    /**
+     * Result Views
+     */
+    result_views?: Array<ToolUiResultViewInput>;
+    /**
+     * Handoffs
+     */
+    handoffs?: Array<ToolUiHandoff>;
+};
+
+/**
+ * ToolUiSchema
+ */
+export type ToolUiSchemaOutput = {
+    /**
+     * Schema Version
+     */
+    schema_version?: 'pskit.tool-ui.v1';
+    product: ToolUiProduct;
+    page: ToolUiPageLayout;
+    /**
+     * State
+     */
+    state?: {
+        [key: string]: {
+            [key: string]: unknown;
+        };
+    };
+    /**
+     * Sections
+     */
+    sections?: Array<ToolUiSectionOutput>;
+    /**
+     * Actions
+     */
+    actions: Array<ToolUiActionOutput>;
+    /**
+     * Result Views
+     */
+    result_views?: Array<ToolUiResultViewOutput>;
+    /**
+     * Handoffs
+     */
+    handoffs?: Array<ToolUiHandoff>;
+};
+
+/**
+ * ToolUiSection
+ */
+export type ToolUiSectionInput = {
+    /**
+     * Id
+     */
+    id: string;
+    title: LocalizedText;
+    description?: LocalizedText | null;
+    visible_when?: ToolUiConditionInput | null;
+    /**
+     * Fields
+     */
+    fields: Array<ToolUiFieldInput>;
+};
+
+/**
+ * ToolUiSection
+ */
+export type ToolUiSectionOutput = {
+    /**
+     * Id
+     */
+    id: string;
+    title: LocalizedText;
+    description?: LocalizedText | null;
+    visible_when?: ToolUiConditionOutput | null;
+    /**
+     * Fields
+     */
+    fields: Array<ToolUiFieldOutput>;
+};
+
+/**
+ * ToolUiTransform
+ */
+export type ToolUiTransform = {
+    /**
+     * Name
+     */
+    name: 'identity' | 'limit' | 'sort' | 'number-format' | 'rename-fields';
+    /**
+     * Limit
+     */
+    limit?: number | null;
+    /**
+     * Field
+     */
+    field?: string | null;
+    /**
+     * Direction
+     */
+    direction?: 'asc' | 'desc' | null;
+    /**
+     * Digits
+     */
+    digits?: number | null;
+    /**
+     * Renames
+     */
+    renames?: {
+        [key: string]: string;
+    };
 };
 
 /**
@@ -5702,6 +7089,271 @@ export type AuditEventsApiV1AdminAuditEventsGetResponses = {
 
 export type AuditEventsApiV1AdminAuditEventsGetResponse = AuditEventsApiV1AdminAuditEventsGetResponses[keyof AuditEventsApiV1AdminAuditEventsGetResponses];
 
+export type ProbeMcpApiV1AdminMcpProbesPostData = {
+    body: McpProbeRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/mcp-probes';
+};
+
+export type ProbeMcpApiV1AdminMcpProbesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProbeMcpApiV1AdminMcpProbesPostError = ProbeMcpApiV1AdminMcpProbesPostErrors[keyof ProbeMcpApiV1AdminMcpProbesPostErrors];
+
+export type ProbeMcpApiV1AdminMcpProbesPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProbeSnapshot;
+};
+
+export type ProbeMcpApiV1AdminMcpProbesPostResponse = ProbeMcpApiV1AdminMcpProbesPostResponses[keyof ProbeMcpApiV1AdminMcpProbesPostResponses];
+
+export type GetMcpProbeApiV1AdminMcpProbesProbeIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Probe Id
+         */
+        probe_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/mcp-probes/{probe_id}';
+};
+
+export type GetMcpProbeApiV1AdminMcpProbesProbeIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetMcpProbeApiV1AdminMcpProbesProbeIdGetError = GetMcpProbeApiV1AdminMcpProbesProbeIdGetErrors[keyof GetMcpProbeApiV1AdminMcpProbesProbeIdGetErrors];
+
+export type GetMcpProbeApiV1AdminMcpProbesProbeIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProbeSnapshot;
+};
+
+export type GetMcpProbeApiV1AdminMcpProbesProbeIdGetResponse = GetMcpProbeApiV1AdminMcpProbesProbeIdGetResponses[keyof GetMcpProbeApiV1AdminMcpProbesProbeIdGetResponses];
+
+export type DiscoverMcpApiV1AdminServicesServiceIdDiscoveriesPostData = {
+    body: DiscoveryRequest;
+    path: {
+        /**
+         * Service Id
+         */
+        service_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/services/{service_id}/discoveries';
+};
+
+export type DiscoverMcpApiV1AdminServicesServiceIdDiscoveriesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DiscoverMcpApiV1AdminServicesServiceIdDiscoveriesPostError = DiscoverMcpApiV1AdminServicesServiceIdDiscoveriesPostErrors[keyof DiscoverMcpApiV1AdminServicesServiceIdDiscoveriesPostErrors];
+
+export type DiscoverMcpApiV1AdminServicesServiceIdDiscoveriesPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DiscoverySnapshot;
+};
+
+export type DiscoverMcpApiV1AdminServicesServiceIdDiscoveriesPostResponse = DiscoverMcpApiV1AdminServicesServiceIdDiscoveriesPostResponses[keyof DiscoverMcpApiV1AdminServicesServiceIdDiscoveriesPostResponses];
+
+export type SaveProductDraftApiV1AdminToolProductsProductIdDraftPutData = {
+    body: ProductDraftRequest;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/tool-products/{product_id}/draft';
+};
+
+export type SaveProductDraftApiV1AdminToolProductsProductIdDraftPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SaveProductDraftApiV1AdminToolProductsProductIdDraftPutError = SaveProductDraftApiV1AdminToolProductsProductIdDraftPutErrors[keyof SaveProductDraftApiV1AdminToolProductsProductIdDraftPutErrors];
+
+export type SaveProductDraftApiV1AdminToolProductsProductIdDraftPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: ToolProductDraftOutput;
+};
+
+export type SaveProductDraftApiV1AdminToolProductsProductIdDraftPutResponse = SaveProductDraftApiV1AdminToolProductsProductIdDraftPutResponses[keyof SaveProductDraftApiV1AdminToolProductsProductIdDraftPutResponses];
+
+export type QualifyProductApiV1AdminToolProductsProductIdQualificationsPostData = {
+    body: QualificationRequest;
+    path: {
+        /**
+         * Product Id
+         */
+        product_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/tool-products/{product_id}/qualifications';
+};
+
+export type QualifyProductApiV1AdminToolProductsProductIdQualificationsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type QualifyProductApiV1AdminToolProductsProductIdQualificationsPostError = QualifyProductApiV1AdminToolProductsProductIdQualificationsPostErrors[keyof QualifyProductApiV1AdminToolProductsProductIdQualificationsPostErrors];
+
+export type QualifyProductApiV1AdminToolProductsProductIdQualificationsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: QualificationReport;
+};
+
+export type QualifyProductApiV1AdminToolProductsProductIdQualificationsPostResponse = QualifyProductApiV1AdminToolProductsProductIdQualificationsPostResponses[keyof QualifyProductApiV1AdminToolProductsProductIdQualificationsPostResponses];
+
+export type GetQualificationApiV1AdminQualificationsReportIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Report Id
+         */
+        report_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/qualifications/{report_id}';
+};
+
+export type GetQualificationApiV1AdminQualificationsReportIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetQualificationApiV1AdminQualificationsReportIdGetError = GetQualificationApiV1AdminQualificationsReportIdGetErrors[keyof GetQualificationApiV1AdminQualificationsReportIdGetErrors];
+
+export type GetQualificationApiV1AdminQualificationsReportIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: QualificationReport;
+};
+
+export type GetQualificationApiV1AdminQualificationsReportIdGetResponse = GetQualificationApiV1AdminQualificationsReportIdGetResponses[keyof GetQualificationApiV1AdminQualificationsReportIdGetResponses];
+
+export type PublishProductApiV1AdminToolProductReleasesReportIdPublishPostData = {
+    body: PublishProductRequest;
+    path: {
+        /**
+         * Report Id
+         */
+        report_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/tool-product-releases/{report_id}/publish';
+};
+
+export type PublishProductApiV1AdminToolProductReleasesReportIdPublishPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PublishProductApiV1AdminToolProductReleasesReportIdPublishPostError = PublishProductApiV1AdminToolProductReleasesReportIdPublishPostErrors[keyof PublishProductApiV1AdminToolProductReleasesReportIdPublishPostErrors];
+
+export type PublishProductApiV1AdminToolProductReleasesReportIdPublishPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: PublishedToolProduct;
+};
+
+export type PublishProductApiV1AdminToolProductReleasesReportIdPublishPostResponse = PublishProductApiV1AdminToolProductReleasesReportIdPublishPostResponses[keyof PublishProductApiV1AdminToolProductReleasesReportIdPublishPostResponses];
+
+export type SuspendProductApiV1AdminToolProductReleasesReleaseIdSuspendPostData = {
+    body: ReleaseActionRequest;
+    path: {
+        /**
+         * Release Id
+         */
+        release_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/tool-product-releases/{release_id}/suspend';
+};
+
+export type SuspendProductApiV1AdminToolProductReleasesReleaseIdSuspendPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SuspendProductApiV1AdminToolProductReleasesReleaseIdSuspendPostError = SuspendProductApiV1AdminToolProductReleasesReleaseIdSuspendPostErrors[keyof SuspendProductApiV1AdminToolProductReleasesReleaseIdSuspendPostErrors];
+
+export type SuspendProductApiV1AdminToolProductReleasesReleaseIdSuspendPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: PublishedToolProduct;
+};
+
+export type SuspendProductApiV1AdminToolProductReleasesReleaseIdSuspendPostResponse = SuspendProductApiV1AdminToolProductReleasesReleaseIdSuspendPostResponses[keyof SuspendProductApiV1AdminToolProductReleasesReleaseIdSuspendPostResponses];
+
+export type RollbackProductApiV1AdminToolProductReleasesReleaseIdRollbackPostData = {
+    body: ReleaseActionRequest;
+    path: {
+        /**
+         * Release Id
+         */
+        release_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/tool-product-releases/{release_id}/rollback';
+};
+
+export type RollbackProductApiV1AdminToolProductReleasesReleaseIdRollbackPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RollbackProductApiV1AdminToolProductReleasesReleaseIdRollbackPostError = RollbackProductApiV1AdminToolProductReleasesReleaseIdRollbackPostErrors[keyof RollbackProductApiV1AdminToolProductReleasesReleaseIdRollbackPostErrors];
+
+export type RollbackProductApiV1AdminToolProductReleasesReleaseIdRollbackPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: PublishedToolProduct;
+};
+
+export type RollbackProductApiV1AdminToolProductReleasesReleaseIdRollbackPostResponse = RollbackProductApiV1AdminToolProductReleasesReleaseIdRollbackPostResponses[keyof RollbackProductApiV1AdminToolProductReleasesReleaseIdRollbackPostResponses];
+
 export type PrepareApiV1SandboxSessionsSessionIdFilesPostData = {
     body: PrepareFiles;
     path: {
@@ -5779,6 +7431,288 @@ export type DownloadApiV1SandboxArtifactsArtifactIdDownloadGetResponses = {
      */
     200: unknown;
 };
+
+export type ListToolProductsApiV1ToolProductsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Cursor
+         */
+        cursor?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/tool-products';
+};
+
+export type ListToolProductsApiV1ToolProductsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListToolProductsApiV1ToolProductsGetError = ListToolProductsApiV1ToolProductsGetErrors[keyof ListToolProductsApiV1ToolProductsGetErrors];
+
+export type ListToolProductsApiV1ToolProductsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ToolProductPage;
+};
+
+export type ListToolProductsApiV1ToolProductsGetResponse = ListToolProductsApiV1ToolProductsGetResponses[keyof ListToolProductsApiV1ToolProductsGetResponses];
+
+export type GetToolProductApiV1ToolProductsSlugGetData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/v1/tool-products/{slug}';
+};
+
+export type GetToolProductApiV1ToolProductsSlugGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetToolProductApiV1ToolProductsSlugGetError = GetToolProductApiV1ToolProductsSlugGetErrors[keyof GetToolProductApiV1ToolProductsSlugGetErrors];
+
+export type GetToolProductApiV1ToolProductsSlugGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PublishedToolProduct;
+};
+
+export type GetToolProductApiV1ToolProductsSlugGetResponse = GetToolProductApiV1ToolProductsSlugGetResponses[keyof GetToolProductApiV1ToolProductsSlugGetResponses];
+
+export type StartToolRunApiV1ToolProductsSlugActionsActionIdRunsPostData = {
+    body: ToolRunStartRequest;
+    headers: {
+        /**
+         * Idempotency-Key
+         */
+        'Idempotency-Key': string;
+    };
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+        /**
+         * Action Id
+         */
+        action_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tool-products/{slug}/actions/{action_id}/runs';
+};
+
+export type StartToolRunApiV1ToolProductsSlugActionsActionIdRunsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StartToolRunApiV1ToolProductsSlugActionsActionIdRunsPostError = StartToolRunApiV1ToolProductsSlugActionsActionIdRunsPostErrors[keyof StartToolRunApiV1ToolProductsSlugActionsActionIdRunsPostErrors];
+
+export type StartToolRunApiV1ToolProductsSlugActionsActionIdRunsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ToolRunSnapshot;
+};
+
+export type StartToolRunApiV1ToolProductsSlugActionsActionIdRunsPostResponse = StartToolRunApiV1ToolProductsSlugActionsActionIdRunsPostResponses[keyof StartToolRunApiV1ToolProductsSlugActionsActionIdRunsPostResponses];
+
+export type ToolRunHistoryApiV1ToolProductsSlugRunsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/tool-products/{slug}/runs';
+};
+
+export type ToolRunHistoryApiV1ToolProductsSlugRunsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ToolRunHistoryApiV1ToolProductsSlugRunsGetError = ToolRunHistoryApiV1ToolProductsSlugRunsGetErrors[keyof ToolRunHistoryApiV1ToolProductsSlugRunsGetErrors];
+
+export type ToolRunHistoryApiV1ToolProductsSlugRunsGetResponses = {
+    /**
+     * Response Tool Run History Api V1 Tool Products  Slug  Runs Get
+     *
+     * Successful Response
+     */
+    200: Array<ToolRunSnapshot>;
+};
+
+export type ToolRunHistoryApiV1ToolProductsSlugRunsGetResponse = ToolRunHistoryApiV1ToolProductsSlugRunsGetResponses[keyof ToolRunHistoryApiV1ToolProductsSlugRunsGetResponses];
+
+export type GetToolRunApiV1ToolRunsRunIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Run Id
+         */
+        run_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tool-runs/{run_id}';
+};
+
+export type GetToolRunApiV1ToolRunsRunIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetToolRunApiV1ToolRunsRunIdGetError = GetToolRunApiV1ToolRunsRunIdGetErrors[keyof GetToolRunApiV1ToolRunsRunIdGetErrors];
+
+export type GetToolRunApiV1ToolRunsRunIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ToolRunSnapshot;
+};
+
+export type GetToolRunApiV1ToolRunsRunIdGetResponse = GetToolRunApiV1ToolRunsRunIdGetResponses[keyof GetToolRunApiV1ToolRunsRunIdGetResponses];
+
+export type GetToolRunEventsApiV1ToolRunsRunIdEventsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Accept
+         */
+        accept?: string | null;
+    };
+    path: {
+        /**
+         * Run Id
+         */
+        run_id: string;
+    };
+    query?: {
+        /**
+         * Cursor
+         */
+        cursor?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/tool-runs/{run_id}/events';
+};
+
+export type GetToolRunEventsApiV1ToolRunsRunIdEventsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetToolRunEventsApiV1ToolRunsRunIdEventsGetError = GetToolRunEventsApiV1ToolRunsRunIdEventsGetErrors[keyof GetToolRunEventsApiV1ToolRunsRunIdEventsGetErrors];
+
+export type GetToolRunEventsApiV1ToolRunsRunIdEventsGetResponses = {
+    /**
+     * Response Get Tool Run Events Api V1 Tool Runs  Run Id  Events Get
+     *
+     * Successful Response
+     */
+    200: Array<ToolRunEvent>;
+};
+
+export type GetToolRunEventsApiV1ToolRunsRunIdEventsGetResponse = GetToolRunEventsApiV1ToolRunsRunIdEventsGetResponses[keyof GetToolRunEventsApiV1ToolRunsRunIdEventsGetResponses];
+
+export type CancelToolRunApiV1ToolRunsRunIdCancelPostData = {
+    body?: never;
+    path: {
+        /**
+         * Run Id
+         */
+        run_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tool-runs/{run_id}/cancel';
+};
+
+export type CancelToolRunApiV1ToolRunsRunIdCancelPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CancelToolRunApiV1ToolRunsRunIdCancelPostError = CancelToolRunApiV1ToolRunsRunIdCancelPostErrors[keyof CancelToolRunApiV1ToolRunsRunIdCancelPostErrors];
+
+export type CancelToolRunApiV1ToolRunsRunIdCancelPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ToolRunSnapshot;
+};
+
+export type CancelToolRunApiV1ToolRunsRunIdCancelPostResponse = CancelToolRunApiV1ToolRunsRunIdCancelPostResponses[keyof CancelToolRunApiV1ToolRunsRunIdCancelPostResponses];
+
+export type HandoffToolRunApiV1ToolRunsRunIdAgentHandoffsHandoffIdPostData = {
+    body?: never;
+    path: {
+        /**
+         * Run Id
+         */
+        run_id: string;
+        /**
+         * Handoff Id
+         */
+        handoff_id: string;
+    };
+    query?: never;
+    url: '/api/v1/tool-runs/{run_id}/agent-handoffs/{handoff_id}';
+};
+
+export type HandoffToolRunApiV1ToolRunsRunIdAgentHandoffsHandoffIdPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type HandoffToolRunApiV1ToolRunsRunIdAgentHandoffsHandoffIdPostError = HandoffToolRunApiV1ToolRunsRunIdAgentHandoffsHandoffIdPostErrors[keyof HandoffToolRunApiV1ToolRunsRunIdAgentHandoffsHandoffIdPostErrors];
+
+export type HandoffToolRunApiV1ToolRunsRunIdAgentHandoffsHandoffIdPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ToolRunHandoffContext;
+};
+
+export type HandoffToolRunApiV1ToolRunsRunIdAgentHandoffsHandoffIdPostResponse = HandoffToolRunApiV1ToolRunsRunIdAgentHandoffsHandoffIdPostResponses[keyof HandoffToolRunApiV1ToolRunsRunIdAgentHandoffsHandoffIdPostResponses];
 
 export type LiveHealthLiveGetData = {
     body?: never;
