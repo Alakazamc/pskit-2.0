@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 
 from .common import (
     call_add_column_if_missing as add_column_if_missing,
+)
+from .common import (
     migrate_component_database,
 )
 

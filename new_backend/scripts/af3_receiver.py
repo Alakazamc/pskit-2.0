@@ -24,7 +24,6 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-
 LOG = logging.getLogger("af3_receiver")
 MAX_ARTIFACT_BYTES = 20 * 1024 * 1024
 JOB_ID = re.compile(r"^[0-9a-fA-F-]{36}$")
@@ -313,8 +312,8 @@ def compute_loop(spool_dir: Path, gpu_device: str, dry_run: bool,
                     model_dir=model_dir, db_dir=db_dir,
                     diffusion_samples=diffusion_samples,
                 )
-            except OSError as exc:
-                LOG.exception("Could not run AF3 job %s: %s", job_dir.name, exc)
+            except OSError:
+                LOG.exception("Could not run AF3 job %s", job_dir.name)
         time.sleep(poll_seconds)
 
 

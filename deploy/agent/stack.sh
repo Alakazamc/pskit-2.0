@@ -90,8 +90,14 @@ preflight() {
     die "RESEARCH_AGENT_AUTH_ABUSE_MODE must be observe or enforce"
   auth_secret=$(value_in_file "$backend_env" RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET)
   (( ${#auth_secret} >= 32 )) || die "RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET is too short"
+  [[ $(value_in_file "$backend_env" RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON) == '["127.0.0.1/32"]' ]] ||
+    die "RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON must trust only the local Nginx proxy"
   [[ $(value_in_file "$backend_env" RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED) == true ]] ||
     die "RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED must be true"
+  [[ $(value_in_file "$backend_env" TURNSTILE_SECRET_KEY) != 1x0000000000000000000000000000000AA ]] ||
+    die "TURNSTILE_SECRET_KEY must not use the public test secret"
+  [[ $(value_in_file "$cloud_env" TURNSTILE_SITE_KEY) != 1x00000000000000000000AA ]] ||
+    die "TURNSTILE_SITE_KEY must not use the public test site key"
   if [[ $(value_in_file "$supabase_env" CLOUD_DISABLE_SIGNUP 2>/dev/null || printf true) == false ]]; then
     require_value "$supabase_env" SMTP_HOST
     require_value "$supabase_env" SMTP_USER

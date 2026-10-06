@@ -1,7 +1,7 @@
 """Guard stable backend imports while their implementations move into packages."""
 
-from app.domain import persistent_conversation
 from app.db import migrations
+from app.domain import persistent_conversation
 
 
 def test_persistent_conversation_store_is_exported_from_domain_package() -> None:

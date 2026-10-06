@@ -6,7 +6,6 @@ import pytest
 from app.config import Settings
 from app.main import create_app
 
-
 FOLD_INPUT = {
     "name": "recovery test", "modelSeeds": [1],
     "sequences": [{"protein": {"id": "A", "sequence": "PVLSCGEWQL"}}],

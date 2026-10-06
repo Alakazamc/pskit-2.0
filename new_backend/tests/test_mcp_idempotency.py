@@ -37,7 +37,7 @@ async def running_mcp_run(tmp_path, mcp, settings=None):
         settings or Settings(agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3")),
         pi_runner=pi, mcp_provider=mcp,
     )
-    async with app.router.lifespan_context(app):
+    async with app.router.lifespan_context(app):  # noqa: SIM117
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             auth = (await client.post("/api/v1/auth/demo", json={"email": "alice@example.org"})).json()
             headers = {"Authorization": f"Bearer {auth['access_token']}"}
@@ -69,7 +69,7 @@ async def test_repeated_pi_tool_call_returns_saved_result_without_reinvoking_mcp
         pi_runner=pi, mcp_provider=mcp,
     )
     try:
-        async with app.router.lifespan_context(app):
+        async with app.router.lifespan_context(app):  # noqa: SIM117
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
                 auth = (await client.post("/api/v1/auth/demo", json={"email": "alice@example.org"})).json()
                 headers = {"Authorization": f"Bearer {auth['access_token']}"}

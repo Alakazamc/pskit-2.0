@@ -79,36 +79,35 @@ async def test_registered_skill_upgrade_uses_latest_trusted_instructions_and_too
         "name": "RNA Review", "description": "Review RNA and proteins",
         "tools": ["fetch_uniprot"], "instructions": "Use UniProt for RNA evidence.",
     }
-    async with app.router.lifespan_context(app):
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://test",
-        ) as client:
-            alice = await _login(client)
-            assert (await client.put(f"{url}/1", json=first)).status_code == 403
-            assert (await client.put(f"{url}/1", headers=admin, json=first)).status_code == 200
-            assert (await client.put(f"{url}/1", headers=admin, json=first)).status_code == 200
-            conflict = await client.put(f"{url}/1", headers=admin, json=second)
-            assert conflict.status_code == 409
-            assert conflict.json()["detail"]["code"] == "SKILL_VERSION_CONFLICT"
-            upgraded = await client.put(f"{url}/2", headers=admin, json=second)
-            assert upgraded.status_code == 200, upgraded.text
-            assert {skill["id"]: skill for skill in (
-                await client.get("/api/v1/skills", headers=alice)
-            ).json()}["rna-review"]["version"] == 2
-            session_id = (
-                await client.get("/api/v1/g", headers=alice)
-            ).json()[0]["id"].replace("project-", "session-")
-            sent = await client.post(
-                f"/api/v1/c/{session_id}/messages", headers=alice,
-                json={"content": "Review this", "skills": [{
-                    "id": "rna-review", "name": "forged Skill name",
-                }]},
-            )
-            assert sent.status_code == 200, sent.text
-            for _ in range(100):
-                if pi.calls:
-                    break
-                await asyncio.sleep(0.01)
+    async with app.router.lifespan_context(app), httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test",
+    ) as client:
+        alice = await _login(client)
+        assert (await client.put(f"{url}/1", json=first)).status_code == 403
+        assert (await client.put(f"{url}/1", headers=admin, json=first)).status_code == 200
+        assert (await client.put(f"{url}/1", headers=admin, json=first)).status_code == 200
+        conflict = await client.put(f"{url}/1", headers=admin, json=second)
+        assert conflict.status_code == 409
+        assert conflict.json()["detail"]["code"] == "SKILL_VERSION_CONFLICT"
+        upgraded = await client.put(f"{url}/2", headers=admin, json=second)
+        assert upgraded.status_code == 200, upgraded.text
+        assert {skill["id"]: skill for skill in (
+            await client.get("/api/v1/skills", headers=alice)
+        ).json()}["rna-review"]["version"] == 2
+        session_id = (
+            await client.get("/api/v1/g", headers=alice)
+        ).json()[0]["id"].replace("project-", "session-")
+        sent = await client.post(
+            f"/api/v1/c/{session_id}/messages", headers=alice,
+            json={"content": "Review this", "skills": [{
+                "id": "rna-review", "name": "forged Skill name",
+            }]},
+        )
+        assert sent.status_code == 200, sent.text
+        for _ in range(100):
+            if pi.calls:
+                break
+            await asyncio.sleep(0.01)
     assert len(pi.calls) == 1
     assert "Use UniProt for RNA evidence." in pi.calls[0]["system_prompt_suffix"]
     assert "Use PDB for RNA evidence." not in pi.calls[0]["system_prompt_suffix"]

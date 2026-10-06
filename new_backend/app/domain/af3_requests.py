@@ -6,7 +6,6 @@ from app.contracts.capabilities import Af3JobRequest
 
 class Af3IdempotencyConflict(Exception):
     """An AF3 request key was reused with a different payload."""
-    pass
 
 
 def af3_request_fingerprint(payload: Af3JobRequest) -> str:

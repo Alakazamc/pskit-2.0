@@ -24,9 +24,7 @@ MESSAGE_PARTS_ADAPTER = TypeAdapter(list[MessagePart])
 
 class ComputeLeaseConflict(Exception):
     """A compute result used an expired or mismatched lease token."""
-    pass
 
 
 class GpuReconciliationConflict(ValueError):
     """A GPU charge could not be reconciled with the recorded job state."""
-    pass

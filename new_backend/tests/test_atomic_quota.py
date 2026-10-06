@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier
 from datetime import UTC, datetime
+from threading import Barrier
 
 import pytest
 

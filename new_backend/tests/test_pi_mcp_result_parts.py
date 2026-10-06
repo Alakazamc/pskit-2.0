@@ -38,7 +38,7 @@ async def test_completed_pi_mcp_result_is_saved_as_a_message_part_from_the_serve
         Settings(agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3")), pi_runner=pi,
     )
     pi.app = app
-    async with app.router.lifespan_context(app):
+    async with app.router.lifespan_context(app):  # noqa: SIM117
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             login = (await client.post("/api/v1/auth/demo", json={"email": "alice@example.org"})).json()
             headers = {"Authorization": f"Bearer {login['access_token']}"}

@@ -14,7 +14,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-
 JOB = r"[0-9a-fA-F-]{36}"
 ARTIFACT = r"[A-Za-z0-9_-]{1,128}"
 ROUTES = {
@@ -45,8 +44,7 @@ def request_matches_worker(
     if method == "GET" and path == "/internal/compute/af3/jobs/owned":
         return parse_qs(query) == {"worker_id": [worker_id]}
     if (method == "POST" and (
-        path == "/internal/compute/af3/jobs/claim"
-        or path.endswith("/heartbeat") or path.endswith("/progress")
+        path == "/internal/compute/af3/jobs/claim" or path.endswith(("/heartbeat", "/progress"))
     )):
         try:
             payload = json.loads(body)

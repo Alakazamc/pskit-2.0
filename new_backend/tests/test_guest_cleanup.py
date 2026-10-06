@@ -2,14 +2,15 @@
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from typing import ClassVar
 
 import httpx
 import pytest
 
 from app.adapters.live.supabase_admin import SupabaseGuestAdmin
 from app.config import Settings
-from app.contracts.models import UserIdentity
 from app.contracts.conversation import MessageRequest
+from app.contracts.models import UserIdentity
 from app.domain.identity_policy import GuestAccountDeleting, IdentityPolicyStore
 from app.domain.mcp_tool_calls import McpToolCallStore
 from app.domain.persistent_conversation import PersistentConversationStore
@@ -80,7 +81,7 @@ async def test_cleanup_requires_admin_and_deletes_only_verified_anonymous_accoun
     assert policy.tier_for("guest-1") == "guest"
 
     class Admin:
-        deleted = []
+        deleted: ClassVar[list[str]] = []
 
         async def get_user(self, user_id):
             return {"id": user_id, "is_anonymous": True}

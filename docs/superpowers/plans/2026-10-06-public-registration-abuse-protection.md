@@ -398,7 +398,7 @@ npm run generate:api
 
 Do not manually edit generated files.
 
-- [ ] **Step 4: Run complete verification**
+- [x] **Step 4: Run complete verification**
 
 Run:
 
@@ -418,7 +418,7 @@ python -m pytest deploy/agent/tests -q
 
 Expected: all tests and static checks pass; build succeeds; no test contacts real SMTP or Turnstile.
 
-- [ ] **Step 5: Record evidence and commit generated contracts**
+- [x] **Step 5: Record evidence and commit generated contracts**
 
 Update the task checkboxes and append the exact passing command summaries without secrets.
 
@@ -437,21 +437,30 @@ git commit -m "test: verify public auth abuse protection"
 - Consumes: all completed tasks and verification output.
 - Produces: independent spec/standards review with every P0/P1 resolved before completion.
 
-- [ ] **Step 1: Build a review package from the implementation-plan base**
+- [x] **Step 1: Build a review package from the implementation-plan base**
 
 Include the spec, plan, commit range, verification output, and deployment boundary.
 
-- [ ] **Step 2: Run an independent whole-branch review**
+- [x] **Step 2: Run an independent whole-branch review**
 
 Review for spec coverage, transaction races, spoofed-IP behavior, refund classification, PII leakage, CAPTCHA fail-closed behavior, route scope, generated-contract drift, and paid-service scope creep.
 
-- [ ] **Step 3: Fix findings with TDD and rerun affected plus complete verification**
+- [x] **Step 3: Fix findings with TDD and rerun affected plus complete verification**
 
 Expected: zero unresolved P0/P1 findings and no new paid Alibaba DDoS/WAF configuration.
 
-- [ ] **Step 4: Commit review fixes, if any**
+- [x] **Step 4: Commit review fixes, if any**
 
 ```bash
 git add <reviewed-fix-files>
 git commit -m "fix: resolve auth protection review findings"
 ```
+
+## Verification Evidence
+
+- Backend: `714 passed, 1 skipped` against the local PostgreSQL test service; no test used real SMTP or Turnstile.
+- Backend static gates: repository-wide Ruff passed and `compileall` completed successfully.
+- Frontend: `240 passed`; TypeScript typecheck, ESLint, and the Vite production build passed. Vite retained the existing large-chunk warnings.
+- Deployment: `126 passed, 3 skipped` with existing local Docker images; focused auth/deployment contracts passed `64 passed` before the final review fixes.
+- Review fixes: the site-wide mail budget now uses a vhost-wide key; direct and guest-upgrade verification routes share the verify ceiling; every general API proxy overwrites the private client-IP header; production preflight rejects the public Turnstile always-pass test keys and any trusted-proxy range broader than local Nginx.
+- Scope: no Alibaba Cloud paid DDoS/WAF service, Redis, public backend port, direct browser-to-Supabase auth call, or GoTrue global CAPTCHA was added.

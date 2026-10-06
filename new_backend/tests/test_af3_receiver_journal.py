@@ -1,10 +1,13 @@
 import json
 
 from scripts.af3_receiver import (
-    Journal, Receiver, SpoolAf3Engine, af3_command, execute_job,
+    Journal,
+    Receiver,
+    SpoolAf3Engine,
+    af3_command,
+    execute_job,
     needs_data_pipeline,
 )
-
 
 CLAIM = {
     "id": "eebfc6dc-d74a-4f10-ab33-04d45881e7e4", "attempt": 1,

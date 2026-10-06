@@ -5,10 +5,9 @@ import httpx
 import pytest
 
 from app.config import Settings
-from app.main import create_app
 from app.contracts.capabilities import Af3FoldInput, ComputeWorkerResources
 from app.domain.persistent_conversation import ComputeLeaseConflict, PersistentConversationStore
-
+from app.main import create_app
 
 FOLD_INPUT = {
     "name": "small protein", "modelSeeds": [1],
@@ -31,7 +30,7 @@ async def test_timed_out_running_af3_holds_gpu_budget_until_late_usage_report(tm
         af3_executor="callback", compute_callback_key="compute-key",
         af3_execution_timeout_seconds=60,
     ), pi_runner=object())
-    async with app.router.lifespan_context(app):
+    async with app.router.lifespan_context(app):  # noqa: SIM117
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                      base_url="http://test") as client:
             login = (await client.post("/api/v1/auth/demo",

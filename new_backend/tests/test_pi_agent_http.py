@@ -37,7 +37,7 @@ async def test_initial_pi_run_retries_transient_process_failure_without_duplicat
     runner = FlakyPi()
     app = create_app(Settings(agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3"),
                               resume_retry_seconds=0.01), pi_runner=runner)
-    async with app.router.lifespan_context(app):
+    async with app.router.lifespan_context(app):  # noqa: SIM117
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             headers = await login(client)
             project_id = (await client.get("/api/v1/g", headers=headers)).json()[0]["id"]
@@ -88,7 +88,7 @@ async def test_initial_pi_retry_stops_for_provider_limits_side_effects_and_exhau
     runner = FailingPi()
     app = create_app(Settings(agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3"),
                               resume_retry_seconds=0.01), pi_runner=runner)
-    async with app.router.lifespan_context(app):
+    async with app.router.lifespan_context(app):  # noqa: SIM117
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             headers = await login(client)
             project_id = (await client.get("/api/v1/g", headers=headers)).json()[0]["id"]
@@ -110,7 +110,7 @@ async def test_initial_pi_retry_stops_for_provider_limits_side_effects_and_exhau
     assert runner.attempts == expected_attempts
     assert [message["role"] for message in messages] == ["user"]
     assert len([event for event in run_events if event["type"] == "run.retrying"]) == expected_attempts - 1
-    assert [event for event in run_events if event["type"] == "run.failed"][0]["data"]["code"] == code
+    assert next(event for event in run_events if event["type"] == "run.failed")["data"]["code"] == code
 
 
 @pytest.mark.parametrize(("content", "reported_tokens"), [("hello", 17), ("x" * 40, 3)])
@@ -230,18 +230,17 @@ async def test_reported_model_usage_is_charged_across_an_interrupted_pi_retry(tm
     path = str(tmp_path / "agent.sqlite3")
     settings = Settings(agent_runtime="pi", agent_db_path=path, resume_retry_seconds=0.01)
     first_app = create_app(settings, pi_runner=InterruptedPi())
-    async with first_app.router.lifespan_context(first_app):
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=first_app), base_url="http://test",
-        ) as client:
-            headers = await login(client)
-            project_id = (await client.get("/api/v1/g", headers=headers)).json()[0]["id"]
-            session_id = f"session-{project_id.removeprefix('project-')}"
-            run_id = (await client.post(
-                f"/api/v1/c/{session_id}/messages", headers=headers,
-                json={"content": "Analyze"},
-            )).json()["run_id"]
-            await asyncio.wait_for(first_reported.wait(), timeout=2)
+    async with first_app.router.lifespan_context(first_app), httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=first_app), base_url="http://test",
+    ) as client:
+        headers = await login(client)
+        project_id = (await client.get("/api/v1/g", headers=headers)).json()[0]["id"]
+        session_id = f"session-{project_id.removeprefix('project-')}"
+        run_id = (await client.post(
+            f"/api/v1/c/{session_id}/messages", headers=headers,
+            json={"content": "Analyze"},
+        )).json()["run_id"]
+        await asyncio.wait_for(first_reported.wait(), timeout=2)
 
     class RetriedPi:
         async def prompt(self, session_id, message, on_event, **kwargs):
@@ -251,19 +250,18 @@ async def test_reported_model_usage_is_charged_across_an_interrupted_pi_retry(tm
             return {"session_file": f"/tmp/{session_id}.jsonl", "text": "完成"}
 
     second_app = create_app(settings, pi_runner=RetriedPi())
-    async with second_app.router.lifespan_context(second_app):
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=second_app), base_url="http://test",
-        ) as client:
-            headers = await login(client)
-            for _ in range(100):
-                status = (await client.get(f"/api/v1/runs/{run_id}", headers=headers)).json()["status"]
-                if status == "completed":
-                    break
-                await asyncio.sleep(0.02)
-            assert status == "completed"
-            entries = (await client.get("/api/v1/usage/entries", headers=headers)).json()
-            used = (await client.get("/api/v1/usage", headers=headers)).json()["tokens"]["used"]
+    async with second_app.router.lifespan_context(second_app), httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=second_app), base_url="http://test",
+    ) as client:
+        headers = await login(client)
+        for _ in range(100):
+            status = (await client.get(f"/api/v1/runs/{run_id}", headers=headers)).json()["status"]
+            if status == "completed":
+                break
+            await asyncio.sleep(0.02)
+        assert status == "completed"
+        entries = (await client.get("/api/v1/usage/entries", headers=headers)).json()
+        used = (await client.get("/api/v1/usage", headers=headers)).json()["tokens"]["used"]
 
     assert [entry["amount"] for entry in entries if entry["kind"] == "model_attempt"] == [17, 3]
     assert used == 20
@@ -293,18 +291,17 @@ async def test_interrupted_af3_wakeup_releases_unused_token_reservation_before_r
     first_runner = InterruptedResumePi()
     first_app = create_app(settings, pi_runner=first_runner)
     first_runner.app = first_app
-    async with first_app.router.lifespan_context(first_app):
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=first_app), base_url="http://test",
-        ) as client:
-            headers = await login(client)
-            project_id = (await client.get("/api/v1/g", headers=headers)).json()[0]["id"]
-            session_id = f"session-{project_id.removeprefix('project-')}"
-            run_id = (await client.post(
-                f"/api/v1/c/{session_id}/messages", headers=headers,
-                json={"content": "Analyze with AF3"},
-            )).json()["run_id"]
-            await asyncio.wait_for(first_resume_reported.wait(), timeout=3)
+    async with first_app.router.lifespan_context(first_app), httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=first_app), base_url="http://test",
+    ) as client:
+        headers = await login(client)
+        project_id = (await client.get("/api/v1/g", headers=headers)).json()[0]["id"]
+        session_id = f"session-{project_id.removeprefix('project-')}"
+        run_id = (await client.post(
+            f"/api/v1/c/{session_id}/messages", headers=headers,
+            json={"content": "Analyze with AF3"},
+        )).json()["run_id"]
+        await asyncio.wait_for(first_resume_reported.wait(), timeout=3)
 
     class RetriedResumePi:
         async def prompt(self, session_id, message, on_event, **kwargs):
@@ -315,19 +312,18 @@ async def test_interrupted_af3_wakeup_releases_unused_token_reservation_before_r
             return {"session_file": f"/tmp/{session_id}-resumed.jsonl", "text": "完成"}
 
     second_app = create_app(settings, pi_runner=RetriedResumePi())
-    async with second_app.router.lifespan_context(second_app):
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=second_app), base_url="http://test",
-        ) as client:
-            headers = await login(client)
-            for _ in range(100):
-                status = (await client.get(f"/api/v1/runs/{run_id}", headers=headers)).json()["status"]
-                if status == "completed":
-                    break
-                await asyncio.sleep(0.02)
-            assert status == "completed"
-            entries = (await client.get("/api/v1/usage/entries", headers=headers)).json()
-            used = (await client.get("/api/v1/usage", headers=headers)).json()["tokens"]["used"]
+    async with second_app.router.lifespan_context(second_app), httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=second_app), base_url="http://test",
+    ) as client:
+        headers = await login(client)
+        for _ in range(100):
+            status = (await client.get(f"/api/v1/runs/{run_id}", headers=headers)).json()["status"]
+            if status == "completed":
+                break
+            await asyncio.sleep(0.02)
+        assert status == "completed"
+        entries = (await client.get("/api/v1/usage/entries", headers=headers)).json()
+        used = (await client.get("/api/v1/usage", headers=headers)).json()["tokens"]["used"]
 
     assert [entry["amount"] for entry in entries if entry["kind"] == "model_attempt"] == [2, 4, 3]
     assert used == 9
@@ -441,7 +437,7 @@ async def test_internal_model_preflight_requires_run_token_and_caps_each_request
         Settings(agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3")),
         pi_runner=runner,
     )
-    async with app.router.lifespan_context(app):
+    async with app.router.lifespan_context(app):  # noqa: SIM117
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             headers = await login(client)
             project_id = (await client.get("/api/v1/g", headers=headers)).json()[0]["id"]
@@ -498,7 +494,7 @@ async def test_model_proxy_keeps_upstream_key_server_side_and_releases_rejected_
     app.state.agent_service.model_gateway_api_key = "server-secret"
     async with httpx.AsyncClient(transport=httpx.MockTransport(upstream)) as gateway_client:
         app.state.model_gateway_http_client = gateway_client
-        async with app.router.lifespan_context(app):
+        async with app.router.lifespan_context(app):  # noqa: SIM117
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
                 headers = await login(client)
                 project_id = (await client.get("/api/v1/g", headers=headers)).json()[0]["id"]
