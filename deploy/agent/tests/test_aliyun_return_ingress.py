@@ -75,7 +75,9 @@ def test_public_installer_restores_previous_config_if_reload_fails(tmp_path: Pat
     )
     assert result.returncode != 0
     assert target.read_text() == "old upstream\n"
-    assert (config_dir / "agent.bioailab.net.conf.pre-aliyun-20261003").exists()
+    backups = list(config_dir.glob("agent.bioailab.net.conf.pre-update-*"))
+    assert len(backups) == 1
+    assert backups[0].read_text() == "old upstream\n"
     assert (tmp_path / "reload-count").read_text() == "2"
 
 
@@ -85,7 +87,7 @@ def test_public_installer_waits_for_new_upstream_after_reload(tmp_path: Path):
     target = config_dir / "agent.bioailab.net.conf"
     target.write_text("old upstream\n")
     backup = config_dir / "agent.bioailab.net.conf.pre-aliyun-20261003"
-    backup.write_text("old upstream\n")
+    backup.write_text("original migration baseline\n")
     environment = _fake_commands(tmp_path, curl_status="401")
     (tmp_path / "bin/systemctl").write_text("#!/bin/sh\nexit 0\n")
     (tmp_path / "bin/curl").write_text(
@@ -102,7 +104,10 @@ def test_public_installer_waits_for_new_upstream_after_reload(tmp_path: Path):
     assert result.returncode == 0, result.stderr
     assert (tmp_path / "curl-count").read_text() == "4"
     assert "proxy_pass http://127.0.0.1:18088" in target.read_text()
-    assert backup.read_text() == "old upstream\n"
+    assert backup.read_text() == "original migration baseline\n"
+    update_backups = list(config_dir.glob("agent.bioailab.net.conf.pre-update-*"))
+    assert len(update_backups) == 1
+    assert update_backups[0].read_text() == "old upstream\n"
 
 
 def test_private_installer_restores_disabled_config_if_reload_fails(tmp_path: Path):

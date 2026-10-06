@@ -11,16 +11,9 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source_conf="$script_dir/../host-nginx-agent-aliyun.conf"
 conf_dir="${AGENT_NGINX_CONF_DIR:-/etc/nginx/conf.d}"
 target_conf="$conf_dir/agent.bioailab.net.conf"
-backup_conf="$conf_dir/agent.bioailab.net.conf.pre-aliyun-20261003"
 
 test -f "$source_conf"
 test -f "$target_conf"
-if [ -e "$backup_conf" ]; then
-    if ! cmp -s -- "$target_conf" "$backup_conf"; then
-        echo "Review the existing rollback copy before another cutover: $backup_conf" >&2
-        exit 1
-    fi
-fi
 
 status="$(curl --noproxy '*' --connect-timeout 5 --max-time 10 -sS \
     -o /dev/null -w '%{http_code}' http://127.0.0.1:18088/api/v1/usage)"
@@ -29,9 +22,8 @@ if [ "$status" != 401 ]; then
     exit 1
 fi
 
-if [ ! -e "$backup_conf" ]; then
-    cp -a -- "$target_conf" "$backup_conf"
-fi
+backup_conf="$(mktemp "$conf_dir/agent.bioailab.net.conf.pre-update-XXXXXXXX")"
+cp -a -- "$target_conf" "$backup_conf"
 install -m 0644 "$source_conf" "$target_conf"
 
 restore_previous() {
@@ -75,3 +67,4 @@ if [ "$status" != 401 ]; then
 fi
 
 echo "Public Agent API now routes to the Aliyun backend"
+echo "Rollback configuration: $backup_conf"
