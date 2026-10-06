@@ -1,4 +1,4 @@
-from typing import Protocol
+from typing import Literal, Protocol
 
 from app.contracts.capabilities import Af3Job, Af3JobRequest, McpInvokeResult, McpTool
 from app.contracts.models import UserIdentity
@@ -6,6 +6,14 @@ from app.contracts.models import UserIdentity
 
 class ProviderUnavailable(Exception):
     """An optional external capability cannot currently serve requests."""
+
+
+class IdentityTransportUnavailable(ProviderUnavailable):
+    """Identity transport failed with a known request-delivery boundary."""
+
+    def __init__(self, delivery: Literal["not_sent", "unknown"]) -> None:
+        super().__init__("Identity provider transport unavailable")
+        self.delivery = delivery
 
 
 class IdentityProvider(Protocol):

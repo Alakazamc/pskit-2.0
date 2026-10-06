@@ -7,11 +7,106 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 
-from app.adapters.live.supabase_auth import SupabaseIdentityAdapter
+from app.adapters.live.supabase_auth import AuthRateLimited, SupabaseIdentityAdapter
 from app.config import Settings
 from app.main import create_app
+from app.ports.providers import IdentityTransportUnavailable
 
 pytestmark = pytest.mark.usefixtures("live_database")
+
+
+@pytest.mark.asyncio
+async def test_supabase_auth_calls_receive_only_the_server_client_ip_header():
+    requests: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/auth/v1/token":
+            return httpx.Response(200, json={
+                "access_token": "access", "refresh_token": "refresh", "expires_in": 3600,
+            })
+        if request.url.path == "/auth/v1/verify":
+            return httpx.Response(200, json={
+                "access_token": "access", "refresh_token": "refresh", "expires_in": 3600,
+            })
+        if request.url.path == "/auth/v1/signup" and json.loads(request.content).get("email") is None:
+            return httpx.Response(200, json={
+                "access_token": "guest", "refresh_token": "refresh", "expires_in": 3600,
+            })
+        return httpx.Response(200, json={})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        adapter = SupabaseIdentityAdapter(
+            "https://example.supabase.co", "publishable-test", client,
+        )
+        await adapter.sign_in_password("a@example.org", "secret", client_ip="198.51.100.7")
+        await adapter.sign_up("a@example.org", "secret", client_ip="198.51.100.7")
+        await adapter.recover_password("a@example.org", client_ip="198.51.100.7")
+        await adapter.verify_otp("a@example.org", "123456", "signup", client_ip="198.51.100.7")
+        await adapter.update_guest_email("guest", "a@example.org", client_ip="198.51.100.7")
+        await adapter.sign_in_anonymously("captcha", client_ip="198.51.100.7")
+
+    assert len(requests) == 6
+    assert {request.headers["X-PSKit-Client-IP"] for request in requests} == {"198.51.100.7"}
+
+
+class FailingTransport(httpx.AsyncBaseTransport):
+    def __init__(self, error_type):
+        self.error_type = error_type
+        self.calls = 0
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        self.calls += 1
+        raise self.error_type("provider failed", request=request)
+
+
+@pytest.mark.parametrize(
+    ("error_type", "delivery"),
+    [
+        (httpx.ConnectError, "not_sent"),
+        (httpx.ConnectTimeout, "not_sent"),
+        (httpx.PoolTimeout, "not_sent"),
+        (httpx.WriteTimeout, "unknown"),
+        (httpx.ReadTimeout, "unknown"),
+        (httpx.RemoteProtocolError, "unknown"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_supabase_transport_failure_classifies_delivery_without_retry(error_type, delivery):
+    transport = FailingTransport(error_type)
+    async with httpx.AsyncClient(transport=transport) as client:
+        adapter = SupabaseIdentityAdapter(
+            "https://example.supabase.co", "publishable-test", client,
+        )
+        with pytest.raises(IdentityTransportUnavailable) as caught:
+            await adapter.sign_up(
+                "a@example.org", "secret", client_ip="198.51.100.7",
+            )
+
+    assert caught.value.delivery == delivery
+    assert transport.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_supabase_explicit_rate_limit_is_not_transport_failure_or_retried():
+    calls = 0
+
+    def respond(_: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(429, headers={"Retry-After": "17"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        adapter = SupabaseIdentityAdapter(
+            "https://example.supabase.co", "publishable-test", client,
+        )
+        with pytest.raises(AuthRateLimited) as caught:
+            await adapter.sign_up(
+                "a@example.org", "secret", client_ip="198.51.100.7",
+            )
+
+    assert caught.value.retry_after == "17"
+    assert calls == 1
 
 
 @pytest.mark.asyncio

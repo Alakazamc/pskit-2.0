@@ -2,6 +2,7 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
+from ipaddress import ip_network
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -83,6 +84,12 @@ class Settings:
     anonymous_captcha_required: bool = False
     anonymous_rate_secret: str = ""
     anonymous_rate_limit_per_hour: int = 10
+    auth_abuse_mode: Literal["off", "observe", "enforce"] = "off"
+    auth_rate_limit_secret: str = field(default="", repr=False)
+    auth_trusted_proxy_cidrs_json: str = "[]"
+    auth_captcha_required: bool = False
+    turnstile_secret_key: str = field(default="", repr=False)
+    turnstile_hostnames_json: str = "[]"
     guest_monthly_token_limit: int = 20_000
     guest_daily_gpu_minute_limit: int = 0
     member_monthly_token_limit: int = 1_000_000
@@ -175,6 +182,16 @@ class Settings:
             in {"1", "true", "yes"},
             anonymous_rate_secret=os.getenv("RESEARCH_AGENT_ANON_RATE_SECRET", ""),
             anonymous_rate_limit_per_hour=int(os.getenv("RESEARCH_AGENT_ANON_RATE_LIMIT_PER_HOUR", "10")),
+            auth_abuse_mode=os.getenv("RESEARCH_AGENT_AUTH_ABUSE_MODE", "off"),
+            auth_rate_limit_secret=os.getenv("RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET", ""),
+            auth_trusted_proxy_cidrs_json=os.getenv(
+                "RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON", "[]"
+            ),
+            auth_captcha_required=os.getenv(
+                "RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED", "false"
+            ).lower() in {"1", "true", "yes"},
+            turnstile_secret_key=os.getenv("TURNSTILE_SECRET_KEY", ""),
+            turnstile_hostnames_json=os.getenv("TURNSTILE_HOSTNAMES_JSON", "[]"),
             guest_monthly_token_limit=int(os.getenv("RESEARCH_AGENT_GUEST_MONTHLY_TOKEN_LIMIT", "20000")),
             guest_daily_gpu_minute_limit=int(os.getenv("RESEARCH_AGENT_GUEST_DAILY_GPU_MINUTES", "0")),
             member_monthly_token_limit=int(os.getenv("RESEARCH_AGENT_MEMBER_MONTHLY_TOKEN_LIMIT", "1000000")),
@@ -239,6 +256,62 @@ class Settings:
         mapping = json.loads(self.new_api_user_tokens_json)
         if mapping != {}:
             raise ValueError("NEW_API_USER_TOKENS_JSON is no longer supported; use MODEL_GATEWAY_API_KEY")
+        if self.auth_abuse_mode not in {"off", "observe", "enforce"}:
+            raise ValueError("RESEARCH_AGENT_AUTH_ABUSE_MODE must be off, observe, or enforce")
+        if self.auth_abuse_mode == "off":
+            if self.auth_captcha_required:
+                raise ValueError("Auth CAPTCHA cannot be required while auth abuse protection is off")
+            return
+        if len(self.auth_rate_limit_secret) < 32:
+            raise ValueError("RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET must contain at least 32 characters")
+        if not self.auth_trusted_proxy_cidrs():
+            raise ValueError("RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON cannot be empty")
+        if self.auth_captcha_required:
+            if not self.turnstile_secret_key:
+                raise ValueError("TURNSTILE_SECRET_KEY is required when auth CAPTCHA is enabled")
+            if not self.turnstile_hostnames():
+                raise ValueError("TURNSTILE_HOSTNAMES_JSON cannot be empty when auth CAPTCHA is enabled")
+
+    def auth_trusted_proxy_cidrs(self) -> tuple[str, ...]:
+        """Parse and canonicalize the exact reverse-proxy networks allowed to assert client IPs."""
+        try:
+            values = json.loads(self.auth_trusted_proxy_cidrs_json)
+            if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+                raise ValueError
+            networks = tuple(str(ip_network(value, strict=False)) for value in values)
+            if tuple(values) != networks or len(set(networks)) != len(networks):
+                raise ValueError
+            return networks
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise ValueError(
+                "RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON must be an array of CIDRs"
+            ) from exc
+
+    def turnstile_hostnames(self) -> tuple[str, ...]:
+        """Parse distinct lower-case hostnames accepted from Turnstile Siteverify."""
+        try:
+            values = json.loads(self.turnstile_hostnames_json)
+        except json.JSONDecodeError as exc:
+            raise ValueError("TURNSTILE_HOSTNAMES_JSON must be a hostname array") from exc
+        if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+            raise ValueError("TURNSTILE_HOSTNAMES_JSON must be a unique hostname array")
+        normalized = [value.lower() for value in values]
+        if len(set(normalized)) != len(normalized) or any(
+            not self._valid_hostname(value) for value in values
+        ):
+            raise ValueError("TURNSTILE_HOSTNAMES_JSON must be a unique hostname array")
+        return tuple(normalized)
+
+    @staticmethod
+    def _valid_hostname(value: str) -> bool:
+        """Accept DNS hostnames without a scheme, port, wildcard, or path."""
+        if not value or len(value) > 253 or value != value.strip() or value.endswith("."):
+            return False
+        labels = value.split(".")
+        return all(
+            re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
+            for label in labels
+        )
 
     @staticmethod
     def _validate_http_base_url(value: str, name: str) -> None:

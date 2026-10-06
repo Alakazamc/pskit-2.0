@@ -5,7 +5,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from app.contracts.models import UserIdentity
-from app.ports.providers import ProviderUnavailable
+from app.ports.providers import IdentityTransportUnavailable, ProviderUnavailable
 
 
 class SupabaseIdentityAdapter:
@@ -17,21 +17,31 @@ class SupabaseIdentityAdapter:
         self.publishable_key = publishable_key
         self.client = client
 
-    async def sign_in_password(self, email: str, password: str) -> "SupabaseSession":
+    async def sign_in_password(
+        self, email: str, password: str, *, client_ip: str | None = None
+    ) -> "SupabaseSession":
         """Exchange an email and password for a Supabase session."""
         if self.client is None:
             async with httpx.AsyncClient(timeout=10) as client:
-                return await self._exchange(client, "password", {"email": email, "password": password})
-        return await self._exchange(self.client, "password", {"email": email, "password": password})
+                return await self._exchange(
+                    client, "password", {"email": email, "password": password}, client_ip=client_ip
+                )
+        return await self._exchange(
+            self.client, "password", {"email": email, "password": password}, client_ip=client_ip
+        )
 
-    async def sign_up(self, email: str, password: str) -> "SupabaseSession | None":
+    async def sign_up(
+        self, email: str, password: str, *, client_ip: str | None = None
+    ) -> "SupabaseSession | None":
         """Create an email account; return a session when confirmation is not required."""
         if self.client is None:
             async with httpx.AsyncClient(timeout=10) as client:
-                return await self._sign_up(client, email, password)
-        return await self._sign_up(self.client, email, password)
+                return await self._sign_up(client, email, password, client_ip=client_ip)
+        return await self._sign_up(self.client, email, password, client_ip=client_ip)
 
-    async def sign_in_anonymously(self, captcha_token: str | None = None) -> "SupabaseSession":
+    async def sign_in_anonymously(
+        self, captcha_token: str | None = None, *, client_ip: str | None = None
+    ) -> "SupabaseSession":
         """Create an anonymous Supabase identity with an optional CAPTCHA proof."""
         payload = {
             "data": {},
@@ -39,39 +49,58 @@ class SupabaseIdentityAdapter:
         }
         if self.client is None:
             async with httpx.AsyncClient(timeout=10) as client:
-                return self._session_from_payload(await self._post_auth(client, "signup", payload))
-        return self._session_from_payload(await self._post_auth(self.client, "signup", payload))
+                return self._session_from_payload(
+                    await self._post_auth(client, "signup", payload, client_ip=client_ip)
+                )
+        return self._session_from_payload(
+            await self._post_auth(self.client, "signup", payload, client_ip=client_ip)
+        )
 
     async def _sign_up(
-        self, client: httpx.AsyncClient, email: str, password: str
+        self,
+        client: httpx.AsyncClient,
+        email: str,
+        password: str,
+        *,
+        client_ip: str | None = None,
     ) -> "SupabaseSession | None":
         """Submit account creation through the supplied HTTP client."""
-        data = await self._post_auth(client, "signup", {"email": email, "password": password})
+        data = await self._post_auth(
+            client, "signup", {"email": email, "password": password}, client_ip=client_ip
+        )
         return self._session_from_payload(data) if data.get("access_token") else None
 
-    async def recover_password(self, email: str) -> None:
+    async def recover_password(self, email: str, *, client_ip: str | None = None) -> None:
         """Request a password reset email from Supabase Auth."""
         if self.client is None:
             async with httpx.AsyncClient(timeout=10) as client:
-                await self._post_auth(client, "recover", {"email": email})
+                await self._post_auth(client, "recover", {"email": email}, client_ip=client_ip)
         else:
-            await self._post_auth(self.client, "recover", {"email": email})
+            await self._post_auth(self.client, "recover", {"email": email}, client_ip=client_ip)
 
-    async def verify_otp(self, email: str, token: str, kind: str) -> "SupabaseSession":
+    async def verify_otp(
+        self, email: str, token: str, kind: str, *, client_ip: str | None = None
+    ) -> "SupabaseSession":
         """Exchange an email verification or recovery code for a session."""
         payload = {"email": email, "token": token, "type": kind}
         if self.client is None:
             async with httpx.AsyncClient(timeout=10) as client:
-                return self._session_from_payload(await self._post_auth(client, "verify", payload))
-        return self._session_from_payload(await self._post_auth(self.client, "verify", payload))
+                return self._session_from_payload(
+                    await self._post_auth(client, "verify", payload, client_ip=client_ip)
+                )
+        return self._session_from_payload(
+            await self._post_auth(self.client, "verify", payload, client_ip=client_ip)
+        )
 
-    async def update_guest_email(self, access_token: str, email: str) -> None:
+    async def update_guest_email(
+        self, access_token: str, email: str, *, client_ip: str | None = None
+    ) -> None:
         """Attach an email address to the current anonymous identity."""
         if self.client is None:
             async with httpx.AsyncClient(timeout=10) as client:
-                await self._update_guest_email(client, access_token, email)
+                await self._update_guest_email(client, access_token, email, client_ip=client_ip)
         else:
-            await self._update_guest_email(self.client, access_token, email)
+            await self._update_guest_email(self.client, access_token, email, client_ip=client_ip)
 
     async def link_google_identity(
         self, access_token: str, redirect_to: str, code_challenge: str,
@@ -132,18 +161,22 @@ class SupabaseIdentityAdapter:
         return url
 
     async def _update_guest_email(
-        self, client: httpx.AsyncClient, access_token: str, email: str,
+        self,
+        client: httpx.AsyncClient,
+        access_token: str,
+        email: str,
+        *,
+        client_ip: str | None = None,
     ) -> None:
         """Update the current user's email and classify provider errors."""
         try:
             response = await client.put(
                 f"{self.base_url}/auth/v1/user",
-                headers={"apikey": self.publishable_key,
-                         "Authorization": f"Bearer {access_token}"},
+                headers=self._auth_headers(client_ip, access_token=access_token),
                 json={"email": email},
             )
         except httpx.HTTPError as exc:
-            raise ProviderUnavailable("Supabase Auth unavailable") from exc
+            raise self._transport_error(exc) from exc
         if response.status_code == 429:
             raise AuthRateLimited(response.headers.get("Retry-After"))
         if response.status_code in {400, 409, 422}:
@@ -189,16 +222,21 @@ class SupabaseIdentityAdapter:
             raise ProviderUnavailable("Supabase Auth unavailable")
 
     async def _post_auth(
-        self, client: httpx.AsyncClient, path: str, payload: dict[str, object]
+        self,
+        client: httpx.AsyncClient,
+        path: str,
+        payload: dict[str, object],
+        *,
+        client_ip: str | None = None,
     ) -> dict:
         """Post to Supabase Auth and validate its JSON response."""
         try:
             response = await client.post(
                 f"{self.base_url}/auth/v1/{path}",
-                headers={"apikey": self.publishable_key}, json=payload,
+                headers=self._auth_headers(client_ip), json=payload,
             )
         except httpx.HTTPError as exc:
-            raise ProviderUnavailable("Supabase Auth unavailable") from exc
+            raise self._transport_error(exc) from exc
         if response.status_code == 429:
             raise AuthRateLimited(response.headers.get("Retry-After"))
         if response.status_code in {400, 401, 403, 422}:
@@ -263,18 +301,23 @@ class SupabaseIdentityAdapter:
             raise ProviderUnavailable("Supabase Auth unavailable")
 
     async def _exchange(
-        self, client: httpx.AsyncClient, grant_type: str, payload: dict[str, str]
+        self,
+        client: httpx.AsyncClient,
+        grant_type: str,
+        payload: dict[str, str],
+        *,
+        client_ip: str | None = None,
     ) -> "SupabaseSession":
         """Exchange an Auth grant for a validated access and refresh session."""
         try:
             response = await client.post(
                 f"{self.base_url}/auth/v1/token",
                 params={"grant_type": grant_type},
-                headers={"apikey": self.publishable_key},
+                headers=self._auth_headers(client_ip),
                 json=payload,
             )
         except httpx.HTTPError as exc:
-            raise ProviderUnavailable("Supabase Auth unavailable") from exc
+            raise self._transport_error(exc) from exc
         if response.status_code == 429:
             raise AuthRateLimited(response.headers.get("Retry-After"))
         if response.status_code in {400, 401, 403}:
@@ -297,6 +340,27 @@ class SupabaseIdentityAdapter:
             async with httpx.AsyncClient(timeout=10) as client:
                 return await self._verify(client, access_token)
         return await self._verify(self.client, access_token)
+
+    def _auth_headers(
+        self, client_ip: str | None, *, access_token: str | None = None
+    ) -> dict[str, str]:
+        """Build internal Auth headers without accepting caller-supplied header maps."""
+        headers = {"apikey": self.publishable_key}
+        if client_ip:
+            headers["X-PSKit-Client-IP"] = client_ip
+        if access_token:
+            headers["Authorization"] = f"Bearer {access_token}"
+        return headers
+
+    @staticmethod
+    def _transport_error(exc: httpx.HTTPError) -> IdentityTransportUnavailable:
+        """Classify only failures before request transmission as definitely not sent."""
+        delivery = (
+            "not_sent"
+            if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout))
+            else "unknown"
+        )
+        return IdentityTransportUnavailable(delivery)
 
     async def update_profile(
         self, access_token: str, metadata: dict[str, object],
