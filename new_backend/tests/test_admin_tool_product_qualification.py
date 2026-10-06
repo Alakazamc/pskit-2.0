@@ -239,6 +239,7 @@ async def test_qualification_proves_protocol_science_idempotency_and_cancellatio
         "progress_ordered": True,
     }
     assert report.cases[0].scientific_assertions == {"assertion_0": True}
+    assert report.cases[0].usage_source == "service_reported"
     assert len(executor.calls) == 2
     assert executor.calls[0][2] == executor.calls[1][2]
 

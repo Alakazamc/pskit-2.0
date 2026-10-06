@@ -53,8 +53,36 @@
 .admin-detail dd { margin: 0; overflow-wrap: anywhere; }
 .admin-detail ul { margin: 0; padding-left: 20px; }
 .admin-release, .admin-check-result { border-top: 1px solid var(--mono-border); padding-top: 16px; }
+.admin-product-page { display: flex; flex-direction: column; gap: 18px; max-width: 1260px; margin: 0 auto; }
+.admin-product-page h2 { margin: 0 0 12px; font-size: 16px; }
+.admin-product-step { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 14px; padding: 20px; border: 1px solid var(--mono-border); border-radius: 12px; background: var(--mono-bg); }
+.admin-step-number { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: var(--mono-subtle); color: var(--mono-muted); font-size: 12px; }
+.admin-inline-form { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.admin-inline-form label { min-width: 190px; flex: 1; }
+.admin-builder-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.admin-discovered-tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 14px; }
+.admin-discovered-tools article { padding: 14px; border: 1px solid var(--mono-border); border-radius: 10px; background: var(--mono-subtle); }
+.admin-discovered-tools h3, .admin-discovered-tools p { margin: 0 0 9px; }
+.admin-discovered-tools p { color: var(--mono-muted); font-size: 12px; min-height: 34px; }
+.admin-product-builder { display: grid; grid-template-columns: minmax(280px, 4fr) minmax(360px, 6fr); gap: 24px; }
+.admin-product-preview { min-width: 0; padding: 16px; border: 1px solid var(--mono-border); border-radius: 10px; background: var(--mono-subtle); }
+.admin-product-preview .tool-ui-workspace { padding: 0; }
+.admin-product-preview .tool-ui-layout { grid-template-columns: 1fr; gap: 18px; }
+.admin-product-preview .tool-ui-output { border-top: 1px solid var(--mono-border); padding-top: 18px; }
+.admin-product-advanced { border-top: 1px solid var(--mono-border); padding-top: 12px; }
+.admin-product-advanced summary { cursor: pointer; font-size: 13px; }
+.admin-product-primary-actions { margin-top: 16px; justify-content: flex-end; }
+.admin-product-evidence-loader, .admin-product-evidence, .admin-release-diff, .admin-product-release { padding: 18px; border: 1px solid var(--mono-border); border-radius: 12px; background: var(--mono-bg); }
+.admin-product-evidence { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.admin-product-evidence ul { margin: 10px 0 0; padding-left: 20px; font-size: 12px; line-height: 1.8; }
+.admin-product-evidence li[data-passed="false"] { color: #b94a4a; }
+.admin-product-usage { grid-column: 1 / -1; padding-top: 12px; border-top: 1px solid var(--mono-border); }
+.admin-product-usage p { margin: 6px 0 0; color: var(--mono-muted); font-size: 12px; }
+.admin-release-diff dl { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 7px 12px; font-size: 12px; }
+.admin-release-diff dt { color: var(--mono-muted); }.admin-release-diff dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .admin-app pre { max-width: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 .admin-app td details[open] { min-width: 280px; }
 .admin-app a:focus-visible, .admin-app button:focus-visible, .admin-app summary:focus-visible, .admin-table-scroll:focus-visible { outline: 2px solid var(--mono-muted); outline-offset: 3px; }
-@media (max-width: 1050px) { .admin-split { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1050px) { .admin-split, .admin-product-builder { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 720px) { .admin-app { flex-direction: column; } .admin-sidebar { flex: none; padding: 12px 16px; border-right: 0; border-bottom: 1px solid var(--mono-border); gap: 12px; } .admin-sidebar nav { flex-direction: row; overflow: auto; } .admin-sidebar nav a { white-space: nowrap; } .admin-sidebar .admin-brand { font-size: 17px; } .admin-brand span { display: inline; margin-left: 10px; } .admin-sidebar > a:last-child { padding: 0; font-size: 12px; } .admin-header { padding: 16px; flex-wrap: wrap; } .admin-header h1 { font-size: 20px; } .admin-content { padding: 20px 16px; } }
+@media (max-width: 720px) { .admin-builder-grid, .admin-product-evidence { grid-template-columns: 1fr; } .admin-product-step { grid-template-columns: 1fr; } .admin-step-number { display: none; } }

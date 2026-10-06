@@ -346,6 +346,7 @@ class QualificationEvaluator:
                 status="passed" if case_protocol and case_science else "failed",
                 protocol_assertions=protocol,
                 scientific_assertions=science,
+                usage_source=report.usage.source if report else None,
                 message="Qualification case passed" if case_protocol and case_science
                 else "Qualification case failed",
             ))

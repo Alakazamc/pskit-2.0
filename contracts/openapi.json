@@ -10710,6 +10710,23 @@
             "type": "object",
             "title": "Scientific Assertions"
           },
+          "usage_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "service_reported",
+                  "measured",
+                  "estimated",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage Source"
+          },
           "message": {
             "type": "string",
             "maxLength": 2000,

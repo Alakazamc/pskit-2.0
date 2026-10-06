@@ -355,6 +355,7 @@ class QualificationCaseResult(ToolProductContract):
     status: Literal["passed", "failed"]
     protocol_assertions: dict[str, bool] = Field(default_factory=dict)
     scientific_assertions: dict[str, bool] = Field(default_factory=dict)
+    usage_source: Literal["service_reported", "measured", "estimated", "unknown"] | None = None
     message: str = Field(default="", max_length=2000)
 
 

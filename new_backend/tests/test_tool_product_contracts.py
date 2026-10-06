@@ -142,6 +142,16 @@ def test_valid_ui_contract_is_versioned_bilingual_and_has_canonical_digest():
     assert len(first) == 64
 
 
+def test_result_mapping_accepts_the_rfc6901_empty_root_pointer():
+    root_binding = CapabilityBinding.model_validate(binding(
+        remote_output_schema={"type": "object", "properties": {"candidates": {"type": "array"}}},
+        result_schema={"type": "object", "properties": {"candidates": {"type": "array"}}},
+        result_mapping={"kind": "json_pointer", "pointer": ""},
+    ))
+
+    assert validate_tool_ui(ToolUiSchema.model_validate(ui_schema()), [root_binding])
+
+
 @pytest.mark.parametrize(
     ("path", "value"),
     [

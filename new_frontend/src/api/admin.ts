@@ -19,6 +19,18 @@ export type SandboxSummary = Required<Generated.SandboxSummary>;
 export type ReconcileRequest = Generated.ReconcileRequest;
 export type LegacyAf3ReconcileRequest = Required<Generated.LegacyAf3ReconcileRequest>;
 export type AuditEvent = Generated.AuditEvent;
+export type McpProbeRequest = Generated.McpProbeRequest;
+export type ProbeSnapshot = Generated.ProbeSnapshot;
+export type DiscoveryRequest = Generated.DiscoveryRequest;
+export type DiscoverySnapshot = Generated.DiscoverySnapshot;
+export type ToolProductDraft = Generated.ToolProductDraftOutput;
+export type ProductDraftRequest = Generated.ProductDraftRequest;
+export type AcceptanceSuite = Generated.AcceptanceSuite;
+export type QualificationRequest = Generated.QualificationRequest;
+export type QualificationReport = Generated.QualificationReport;
+export type PublishProductRequest = Generated.PublishProductRequest;
+export type PublishedToolProduct = Generated.PublishedToolProduct;
+export type ReleaseActionRequest = Generated.ReleaseActionRequest;
 
 export interface AdminApi {
   getAdminMe(): Promise<AdminMe>;
@@ -42,6 +54,15 @@ export interface AdminApi {
   reconcileAdminJob(id: string, request: ReconcileRequest): Promise<AdminJob>;
   reconcileAdminAf3Job(id: string, request: LegacyAf3ReconcileRequest): Promise<AdminJob>;
   listAuditEvents(cursor?: string): Promise<AdminPage<AuditEvent>>;
+  probeMcp(request: McpProbeRequest): Promise<ProbeSnapshot>;
+  getMcpProbe(id: string): Promise<ProbeSnapshot>;
+  discoverMcp(serviceId: string, request: DiscoveryRequest): Promise<DiscoverySnapshot>;
+  saveToolProductDraft(productId: string, request: ProductDraftRequest): Promise<ToolProductDraft>;
+  qualifyToolProduct(productId: string, request: QualificationRequest): Promise<QualificationReport>;
+  getToolProductQualification(id: string): Promise<QualificationReport>;
+  publishToolProduct(reportId: string, request: PublishProductRequest): Promise<PublishedToolProduct>;
+  suspendToolProduct(releaseId: string, request: ReleaseActionRequest): Promise<PublishedToolProduct>;
+  rollbackToolProduct(releaseId: string, request: ReleaseActionRequest): Promise<PublishedToolProduct>;
 }
 
 export type AdminRequest = <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -70,5 +91,14 @@ export function createAdminApi(request: AdminRequest): AdminApi {
     reconcileAdminJob: (id, payload) => change(`compute/jobs/${encodeURIComponent(id)}/reconcile`, payload),
     reconcileAdminAf3Job: (id, payload) => change(`af3/jobs/${encodeURIComponent(id)}/reconcile`, payload),
     listAuditEvents: (cursor) => list("audit-events", cursor),
+    probeMcp: (payload) => change("mcp-probes", payload),
+    getMcpProbe: (id) => request(`/admin/mcp-probes/${encodeURIComponent(id)}`),
+    discoverMcp: (serviceId, payload) => change(`services/${encodeURIComponent(serviceId)}/discoveries`, payload),
+    saveToolProductDraft: (productId, payload) => change(`tool-products/${encodeURIComponent(productId)}/draft`, payload, "PUT"),
+    qualifyToolProduct: (productId, payload) => change(`tool-products/${encodeURIComponent(productId)}/qualifications`, payload),
+    getToolProductQualification: (id) => request(`/admin/qualifications/${encodeURIComponent(id)}`),
+    publishToolProduct: (reportId, payload) => change(`tool-product-releases/${encodeURIComponent(reportId)}/publish`, payload),
+    suspendToolProduct: (releaseId, payload) => change(`tool-product-releases/${encodeURIComponent(releaseId)}/suspend`, payload),
+    rollbackToolProduct: (releaseId, payload) => change(`tool-product-releases/${encodeURIComponent(releaseId)}/rollback`, payload),
   };
 }

@@ -20,6 +20,8 @@ _UI_POINTER_ROOTS = {"form", "run", "product"}
 
 
 def _validate_pointer(pointer: str, *, roots: set[str] | None = None) -> None:
+    if pointer == "" and roots is None:
+        return
     if not isinstance(pointer, str) or not pointer.startswith("/"):
         raise ValueError(f"invalid JSON Pointer: {pointer!r}")
     if _POINTER_ESCAPE.search(pointer):

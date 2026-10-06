@@ -9,6 +9,7 @@ export const adminMeKey = (userId: string) => [...adminKey(userId), "me"] as con
 export const adminSections = [
   ["models", "models:read", "admin.models"],
   ["services", "services:read", "admin.services"],
+  ["tool-products", "services:read", "admin.toolProducts"],
   ["users", "quotas:read", "admin.users"],
   ["jobs", "jobs:read", "admin.jobs"],
   ["sandboxes", "sandboxes:read", "admin.sandboxes"],

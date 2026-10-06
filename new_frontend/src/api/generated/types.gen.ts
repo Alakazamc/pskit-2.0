@@ -2368,6 +2368,10 @@ export type QualificationCaseResult = {
         [key: string]: boolean;
     };
     /**
+     * Usage Source
+     */
+    usage_source?: 'service_reported' | 'measured' | 'estimated' | 'unknown' | null;
+    /**
      * Message
      */
     message?: string;
