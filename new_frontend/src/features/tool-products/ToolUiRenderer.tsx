@@ -21,9 +21,10 @@ export type ToolUiRendererProps = {
   onChange: (form: ToolForm) => void;
   onAction: (actionId: string, form: ToolForm) => void;
   theme?: "dark" | "light";
+  showHeader?: boolean;
 };
 
-export function ToolUiRenderer({ schema, form, run, events, onChange, onAction, theme = "light" }: ToolUiRendererProps) {
+export function ToolUiRenderer({ schema, form, run, events, onChange, onAction, theme = "light", showHeader = true }: ToolUiRendererProps) {
   const { language } = useLanguage();
   const effectiveForm = formWithDefaults(schema, form);
   const document = { form: effectiveForm, run };
@@ -36,9 +37,10 @@ export function ToolUiRenderer({ schema, form, run, events, onChange, onAction, 
     if (target) onAction(target, effectiveForm);
   };
   const status = run?.status;
-  return <article className="tool-ui-workspace" aria-labelledby="tool-product-title" data-layout={schema.page.layout}>
-    <header className="tool-ui-header"><h1 id="tool-product-title">{localized(schema.product.title, language)}</h1>
-      <p>{localized(schema.product.description, language)}</p></header>
+  const title = localized(schema.product.title, language);
+  return <section className="tool-ui-workspace" aria-label={showHeader ? undefined : title} aria-labelledby={showHeader ? "tool-product-title" : undefined} data-layout={schema.page.layout}>
+    {showHeader && <header className="tool-ui-header"><h1 id="tool-product-title">{title}</h1>
+      <p>{localized(schema.product.description, language)}</p></header>}
     <form className="tool-ui-layout" onSubmit={submit} style={{
       "--tool-ui-input": `${schema.page.input_width ?? 5}fr`,
       "--tool-ui-result": `${schema.page.result_width ?? 7}fr`,
@@ -55,5 +57,5 @@ export function ToolUiRenderer({ schema, form, run, events, onChange, onAction, 
           : <div className="tool-ui-placeholder">{language === "en" ? "Run the tool to see results" : "运行工具后在这里查看结果"}</div>}
       </div>
     </form>
-  </article>;
+  </section>;
 }

@@ -57,6 +57,11 @@ export type ComputeCapability = Api.CapabilityVersion;
 export type ComputeJob = Api.ComputeJob;
 export type ComputeJobRequest = Api.ComputeJobRequest;
 export type ComputeJobSummary = Api.ComputeJobSummary;
+export type ToolProductPage = Api.ToolProductPage;
+export type PublishedToolProduct = Api.PublishedToolProduct;
+export type ToolProductRun = Api.ToolRunSnapshot;
+export type ToolProductRunEvent = Api.ToolRunEvent;
+export type ToolProductHandoff = Api.ToolRunHandoffContext;
 
 export interface ResearchApi extends AdminApi {
   getComputeCapabilities(): Promise<ComputeCapability[]>;
@@ -119,6 +124,14 @@ export interface ResearchApi extends AdminApi {
   invokeMcpTool(name: string, args: Record<string, unknown>, idempotencyKey?: string): Promise<McpResult>;
   getToolRuns(tool?: string): Promise<ToolRun[]>;
   saveToolRunToProject(id: string, projectId: string): Promise<ToolRun>;
+  getToolProducts(cursor?: string): Promise<ToolProductPage>;
+  getToolProduct(slug: string): Promise<PublishedToolProduct>;
+  startToolProductRun(slug: string, actionId: string, args: Record<string, unknown>, idempotencyKey: string): Promise<ToolProductRun>;
+  getToolProductRuns(slug: string): Promise<ToolProductRun[]>;
+  getToolProductRun(id: string): Promise<ToolProductRun>;
+  getToolProductRunEvents(id: string, cursor: number): Promise<ToolProductRunEvent[]>;
+  cancelToolProductRun(id: string): Promise<ToolProductRun>;
+  handoffToolProductRun(id: string, handoffId: string): Promise<ToolProductHandoff>;
   submitAf3(payload: Af3JobRequest, idempotencyKey: string): Promise<Af3Job>;
   getAf3Job(id: string): Promise<Af3Job>;
   cancelAf3Job(id: string): Promise<Af3Job>;

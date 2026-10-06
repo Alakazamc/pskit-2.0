@@ -253,7 +253,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = (
     if (pathname === "/g") return t("project.title");
     if (pathname === "/skills") return t("mono.skills");
     if (pathname === "/resources") return t("workspace.resourcesTitle");
-    if (/^\/tools(?:\/(?:pdb|structure|coral|runs|run\/[^/]+))?$/.test(pathname)) return t("tools.title");
+    if (pathname === "/tools" || pathname.startsWith("/tools/")) return t("tools.title");
     if (currentProject && pathname === projectPath(currentProject.id)) return currentProject.name;
     return t("mono.pageNotFound");
   })();
@@ -270,7 +270,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = (
     if (currentProject && pathname === projectPath(currentProject.id)) return <ProjectDetail api={api} project={currentProject} sessions={projectSessions.data ?? []} skills={skills.data ?? []} userId={user.id} />;
     if (activeProjectId && projects.isLoading) return <div className="mono-loading-page" role="status">{t("mono.openingProject")}</div>;
     if (pathname === "/tools/runs") return <Navigate to="/tools" replace />;
-    if (pathname === "/tools" || pathname === "/tools/pdb" || pathname === "/tools/structure" || pathname === "/tools/coral" || /^\/tools\/run\/[^/]+$/.test(pathname)) return <ToolDirectory api={api} userId={user.id} projects={visibleProjects} theme={theme} viewer={pathname === "/tools/structure"} selectedName={pathname === "/tools/coral" ? "coral.generate_rna" : pathname === "/tools/pdb" ? "search_pdb" : pathname.startsWith("/tools/run/") ? decodeURIComponent(pathname.split("/")[3]) : undefined} />;
+    if (pathname === "/tools" || pathname === "/tools/pdb" || pathname === "/tools/structure" || pathname === "/tools/coral" || /^\/tools\/run\/[^/]+$/.test(pathname) || /^\/tools\/[^/]+$/.test(pathname)) return <ToolDirectory api={api} userId={user.id} projects={visibleProjects} theme={theme} viewer={pathname === "/tools/structure"} selectedName={pathname === "/tools/coral" ? "coral.generate_rna" : pathname === "/tools/pdb" ? "search_pdb" : pathname.startsWith("/tools/run/") ? decodeURIComponent(pathname.split("/")[3]) : undefined} productSlug={/^\/tools\/[^/]+$/.test(pathname) && !["pdb", "structure", "coral", "runs"].includes(pathname.split("/")[2]) ? decodeURIComponent(pathname.split("/")[2]) : undefined} />;
     if (pathname === "/skills" || pathname === "/resources") return <div className="mono-page-scroll"><div className="mono-page-content"><CatalogLibrary key={pathname} kind={pathname === "/skills" ? "skills" : "resources"} items={(pathname === "/skills" ? skills.data : resources.data) ?? []} loading={pathname === "/skills" ? skills.isLoading : resources.isLoading} error={pathname === "/skills" ? skills.isError : resources.isError} /></div></div>;
     if (pathname === "/settings") return <SettingsPage api={api} user={user} theme={theme} onThemeChange={setTheme} onUserChange={onUserChange} onSession={onSession} onLogout={onLogout} />;
     return <div className="mono-page-scroll"><div className="mono-empty-panel"><Link to="/">{t("mono.backNewChat")}</Link></div></div>;

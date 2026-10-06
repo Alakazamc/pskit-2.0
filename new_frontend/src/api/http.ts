@@ -213,6 +213,17 @@ export function createHttpApi({ baseUrl = "/api/v1", token, fetcher = fetch, onU
     ),
     getToolRuns: (tool) => request(`/tool-runs${tool ? `?tool=${encodeURIComponent(tool)}` : ""}`),
     saveToolRunToProject: (id, projectId) => request(`/tool-runs/${encodeURIComponent(id)}/project`, { method: "PATCH", body: JSON.stringify({ project_id: projectId }) }),
+    getToolProducts: (cursor) => request(`/tool-products${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`),
+    getToolProduct: (slug) => request(`/tool-products/${encodeURIComponent(slug)}`),
+    startToolProductRun: (slug, actionId, args, idempotencyKey) => request(
+      `/tool-products/${encodeURIComponent(slug)}/actions/${encodeURIComponent(actionId)}/runs`,
+      { method: "POST", body: JSON.stringify({ arguments: args }), headers: { "Idempotency-Key": idempotencyKey } },
+    ),
+    getToolProductRuns: (slug) => request(`/tool-products/${encodeURIComponent(slug)}/runs`),
+    getToolProductRun: (id) => request(`/tool-runs/${encodeURIComponent(id)}`),
+    getToolProductRunEvents: (id, cursor) => request(`/tool-runs/${encodeURIComponent(id)}/events?cursor=${cursor}&limit=100`),
+    cancelToolProductRun: (id) => post(`/tool-runs/${encodeURIComponent(id)}/cancel`, {}),
+    handoffToolProductRun: (id, handoffId) => post(`/tool-runs/${encodeURIComponent(id)}/agent-handoffs/${encodeURIComponent(handoffId)}`, {}),
     submitAf3: (payload, idempotencyKey) => request("/af3/jobs", {
       method: "POST",
       body: JSON.stringify(payload),
