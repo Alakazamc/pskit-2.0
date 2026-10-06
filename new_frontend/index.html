@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PSKit Research</title>
+    <style>
+      html[data-theme="dark"], html[data-theme="dark"] body, html[data-theme="dark"] #root { background: #212121; }
+      html[data-theme="light"], html[data-theme="light"] body, html[data-theme="light"] #root { background: #fff; }
+    </style>
+    <script>
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem("pskit-theme") === "light" ? "light" : "dark";
+      } catch {
+        document.documentElement.dataset.theme = "dark";
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

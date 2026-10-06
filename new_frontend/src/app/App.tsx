@@ -72,7 +72,7 @@ function AppContent() {
       window.localStorage.removeItem("research_access_token");
     }).finally(() => setRestoring(false));
   }, [api]);
-  if (restoring) return <div role="status">{t("auth.restoring")}</div>;
+  if (restoring) return <div className="auth-restore-screen" role="status" aria-label={t("auth.restoring")}><span className="auth-restore-indicator" aria-hidden="true" /></div>;
   return <QueryClientProvider client={query}><BrowserRouter><Routes>
     <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage api={api} onLogin={(identity, token) => { api.setAccessToken(token); setUser(identity); }} />} />
     <Route path="/auth/callback" element={<AuthCallbackStatus user={user} />} />

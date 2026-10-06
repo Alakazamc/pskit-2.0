@@ -10,6 +10,26 @@
   background:#f7fbf9;
   font-synthesis:none
 }
+.auth-restore-screen {
+  min-height:100dvh;
+  display:grid;
+  place-items:center;
+  background:#fff;
+}
+:root[data-theme="dark"] .auth-restore-screen { background:#212121; }
+.auth-restore-indicator {
+  width:18px;
+  height:18px;
+  border:2px solid #a0a0a0;
+  border-right-color:transparent;
+  border-radius:50%;
+  animation:auth-restore-appear .2s .25s both, auth-restore-spin .85s linear infinite;
+}
+@keyframes auth-restore-appear { from { opacity:0; } to { opacity:.75; } }
+@keyframes auth-restore-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce) {
+  .auth-restore-indicator { animation:auth-restore-appear .2s .25s both; }
+}
 * {
   box-sizing:border-box
 }
