@@ -1,4 +1,5 @@
 import type { CSSProperties, FormEvent } from "react";
+import type { ArtifactRef } from "../../api/types";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { ToolInputRenderer } from "./ToolInputRenderer";
 import { ToolResultRenderer } from "./ToolResultRenderer";
@@ -20,11 +21,12 @@ export type ToolUiRendererProps = {
   events: ToolEvent[];
   onChange: (form: ToolForm) => void;
   onAction: (actionId: string, form: ToolForm) => void;
+  onArtifactDownload?: (artifact: ArtifactRef) => void;
   theme?: "dark" | "light";
   showHeader?: boolean;
 };
 
-export function ToolUiRenderer({ schema, form, run, events, onChange, onAction, theme = "light", showHeader = true }: ToolUiRendererProps) {
+export function ToolUiRenderer({ schema, form, run, events, onChange, onAction, onArtifactDownload, theme = "light", showHeader = true }: ToolUiRendererProps) {
   const { language } = useLanguage();
   const effectiveForm = formWithDefaults(schema, form);
   const document = { form: effectiveForm, run };
@@ -53,7 +55,7 @@ export function ToolUiRenderer({ schema, form, run, events, onChange, onAction, 
       <div className="tool-ui-output">
         {status && ["queued", "running", "cancelling"].includes(status) && <div className="tool-ui-run-status" role="status">{language === "en" ? status[0].toUpperCase() + status.slice(1) : ({ queued: "排队中", running: "运行中", cancelling: "正在取消" } as Record<string, string>)[status]} · {run?.progress ?? 0}%</div>}
         {status && ["failed", "cancelled"].includes(status) && <div className="tool-ui-error" role="alert">{language === "en" ? `Run ${status}` : status === "failed" ? "运行失败" : "运行已取消"}</div>}
-        {run ? <ToolResultRenderer schema={schema} form={effectiveForm} run={run} events={events} theme={theme} />
+        {run ? <ToolResultRenderer schema={schema} form={effectiveForm} run={run} events={events} onArtifactDownload={onArtifactDownload} theme={theme} />
           : <div className="tool-ui-placeholder">{language === "en" ? "Run the tool to see results" : "运行工具后在这里查看结果"}</div>}
       </div>
     </form>

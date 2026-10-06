@@ -21,7 +21,6 @@ import "./styles/catalog.css";
 import "./styles/scrollbars.css";
 import "./styles/admin.css";
 import "./styles/settings.css";
-import "./styles/coral.css";
 import "./styles/mono.css";
 
 createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);

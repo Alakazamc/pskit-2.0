@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import type { ReactNode } from "react";
-import { FileText } from "lucide-react";
+import { Download, FileText } from "lucide-react";
+import type { ArtifactRef } from "../../api/types";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import {
   applyTransforms,
@@ -100,7 +101,8 @@ function JsonPreview({ value, limit }: { value: unknown; limit: number }) {
   return <pre className="tool-ui-json" tabIndex={0}>{serialized.slice(0, bound)}{truncated ? "\n… (truncated)" : ""}</pre>;
 }
 
-function ResultContent({ view, value, run, events, title, theme }: { view: ToolUiResultView; value: unknown; run: ToolRun; events: ToolEvent[]; title: string; theme: "dark" | "light" }): ReactNode {
+function ResultContent({ view, value, run, events, title, theme, onArtifactDownload }: { view: ToolUiResultView; value: unknown; run: ToolRun; events: ToolEvent[]; title: string; theme: "dark" | "light"; onArtifactDownload?: (artifact: ArtifactRef) => void }): ReactNode {
+  const { language, t } = useLanguage();
   const limit = Math.min(view.preview_limit ?? 100, 10_000);
   if (view.component === "metric-grid") return <MetricGrid value={value} />;
   if (view.component === "stage-flow") return <ToolStageFlow events={events} />;
@@ -114,7 +116,14 @@ function ResultContent({ view, value, run, events, title, theme }: { view: ToolU
     if (!artifacts.length) return null;
     return <ul className="tool-artifact-list">{artifacts.map((artifact, index) => {
       const item = typeof artifact === "object" && artifact !== null ? artifact as Record<string, unknown> : {};
-      return <li key={String(item.id ?? index)}><FileText aria-hidden="true" /><span>{String(item.name ?? item.id ?? "Artifact")}</span></li>;
+      const id = String(item.id ?? "");
+      const name = String(item.name ?? item.id ?? "Artifact");
+      const owned = run.artifacts.find((candidate) => candidate.id === id);
+      return <li key={id || index}><FileText aria-hidden="true" /><span>{name}</span>
+        {owned?.available && onArtifactDownload && <button type="button" className="tool-artifact-download"
+          aria-label={t("artifact.downloadName", { name })} title={language === "en" ? `Download ${name}` : `下载 ${name}`}
+          onClick={() => onArtifactDownload(owned)}><Download size={15} aria-hidden="true" /></button>}
+      </li>;
     })}</ul>;
   }
   if (view.component === "json-inspector") return <JsonPreview value={value} limit={limit} />;
@@ -129,7 +138,7 @@ function hasResultData(view: ToolUiResultView, value: unknown, run: ToolRun, eve
   return value !== undefined && value !== null && value !== "";
 }
 
-export function ToolResultRenderer({ schema, form, run, events, theme = "light" }: { schema: ToolUiSchema; form: Record<string, unknown>; run: ToolRun; events: ToolEvent[]; theme?: "dark" | "light" }) {
+export function ToolResultRenderer({ schema, form, run, events, onArtifactDownload, theme = "light" }: { schema: ToolUiSchema; form: Record<string, unknown>; run: ToolRun; events: ToolEvent[]; onArtifactDownload?: (artifact: ArtifactRef) => void; theme?: "dark" | "light" }) {
   const { language } = useLanguage();
   const document = { form, run };
   return <div className="tool-ui-results">{(schema.result_views ?? []).map((view) => {
@@ -138,7 +147,7 @@ export function ToolResultRenderer({ schema, form, run, events, theme = "light" 
     if (!supported.has(view.component)) return <div key={view.id} role="alert" className="tool-ui-error">Unsupported component: {view.component}</div>;
     const source = applyTransforms(resolvePointer(document, view.source), view.transforms);
     const content = hasResultData(view, source, run, events)
-      ? <ResultContent view={view} value={source} run={run} events={events} title={title} theme={theme} />
+      ? <ResultContent view={view} value={source} run={run} events={events} title={title} theme={theme} onArtifactDownload={onArtifactDownload} />
       : null;
     return <section className="tool-ui-result" key={view.id} aria-labelledby={`${view.id}-title`}><h2 id={`${view.id}-title`}>{title}</h2>
       {content || <p className="tool-ui-empty">{localized(view.empty, language) || (language === "en" ? "No data" : "暂无数据")}</p>}

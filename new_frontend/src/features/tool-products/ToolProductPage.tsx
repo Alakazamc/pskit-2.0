@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Clock3, Square, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import type { ResearchApi, ToolProductRun } from "../../api/types";
+import type { ArtifactRef, ResearchApi, ToolProductRun } from "../../api/types";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { personalSessionPath } from "../mono/sessionPaths";
 import { ToolUiRenderer } from "./ToolUiRenderer";
@@ -148,6 +148,26 @@ export function ToolProductPage({ api, slug, userId, theme, onBack }: {
     finally { setBusy(false); }
   };
 
+  const downloadArtifact = async (artifact: ArtifactRef) => {
+    if (!artifact.available || busy) return;
+    setBusy(true); setError("");
+    try {
+      const blob = await api.downloadArtifact(artifact.id);
+      const url = URL.createObjectURL(blob);
+      try {
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = artifact.name;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    } catch { setError(t("artifact.downloadFailed")); }
+    finally { setBusy(false); }
+  };
+
   const currentSchema = product.data?.ui_schema;
   const title = localized(product.data?.title, language) || slug;
   const handoffs = useMemo(() => currentSchema?.handoffs ?? [], [currentSchema]);
@@ -166,7 +186,7 @@ export function ToolProductPage({ api, slug, userId, theme, onBack }: {
           {run && activeStatuses.has(run.status) && <button type="button" className="mono-button" disabled={busy || run.status === "cancelling"} onClick={() => void cancel()}><Square size={13} />{t(run.status === "cancelling" ? "toolProduct.stopping" : "toolProduct.stop")}</button>}
           {run?.status === "completed" && handoffs.map((item) => <button type="button" className="mono-button" disabled={busy} key={item.id} onClick={() => void performHandoff(item.id)}><Sparkles size={14} />{localized(item.label, language)}</button>)}
         </div>
-        <ToolUiRenderer schema={currentSchema} form={form} run={run} events={events} onChange={setForm} onAction={(actionId, values) => void start(actionId, values)} theme={theme} showHeader={false} />
+        <ToolUiRenderer schema={currentSchema} form={form} run={run} events={events} onChange={setForm} onAction={(actionId, values) => void start(actionId, values)} onArtifactDownload={(artifact) => void downloadArtifact(artifact)} theme={theme} showHeader={false} />
       </Tabs.Content>
       <Tabs.Content value="history"><div className="mono-page-content tool-product-history">
         {history.isLoading && <p role="status">{t("tools.loadingRuns")}</p>}

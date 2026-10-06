@@ -1,6 +1,6 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Atom, Boxes, Clock3, Database, Dna, ExternalLink, PenLine, Search } from "lucide-react";
+import { ArrowLeft, ArrowRight, Atom, Boxes, Clock3, Database, ExternalLink, PenLine, Search } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { McpResult, Project, ResearchApi } from "../../api/types";
@@ -11,9 +11,6 @@ import { CatalogCard } from "../../components/catalog/CatalogCard";
 import { CatalogSearch } from "../../components/catalog/CatalogSearch";
 import { GenericToolPage } from "./GenericToolPage";
 import { StructureViewerPage } from "./StructureViewerPage";
-import { CoralWorkspace } from "../coral/CoralWorkspace";
-import { CoralHistory } from "../coral/CoralHistory";
-import { coralCapabilityId } from "../coral/coralResult";
 import { ToolProductPage } from "../tool-products/ToolProductPage";
 import { localized } from "../tool-products/toolUiSchema";
 
@@ -31,8 +28,6 @@ export function ToolDirectory({ api, userId, projects, selectedName, productSlug
   const filtered = (tools.data ?? []).filter((tool) => matches(tool.name, tool.description));
   const filteredProducts = (products.data?.items ?? []).filter((product) => matches(localized(product.title, language), localized(product.description, language)));
   const showViewer = matches(t("tools.viewerTitle"), t("tools.viewerCardDescription"));
-  const showCoral = matches("CORAL", t("coral.description"));
-  const coral = selectedName === coralCapabilityId;
   const selected = tools.data?.find((tool) => tool.name === selectedName);
   const showingDetail = !!(selectedName || productSlug || viewer);
   useLayoutEffect(() => {
@@ -43,24 +38,23 @@ export function ToolDirectory({ api, userId, projects, selectedName, productSlug
     card?.focus();
     focusOnReturn.current = null;
   }, [showingDetail, tools.isLoading, products.isLoading]);
-  const title = coral ? "CORAL" : viewer ? t("tools.viewerTitle") : selectedName ?? "";
+  const title = viewer ? t("tools.viewerTitle") : selectedName ?? "";
   return <div className="mono-page-scroll"><div className={`mono-page-content${showingDetail ? " mono-tool-detail-screen" : ""}`}>
     {productSlug ? <ToolProductPage api={api} slug={productSlug} userId={userId} theme={theme} onBack={() => { focusOnReturn.current = productSlug; navigate("/tools"); }} />
     : showingDetail ? <ToolDetails key={viewer ? "viewer" : selectedName} title={title}
-      description={coral ? t("coral.description") : viewer ? t("tools.viewerCardDescription") : selected?.description} onClose={() => { focusOnReturn.current = title; navigate("/tools"); }}
+      description={viewer ? t("tools.viewerCardDescription") : selected?.description} onClose={() => { focusOnReturn.current = title; navigate("/tools"); }}
       api={api} userId={userId} projects={projects} tool={selectedName}>
-      {coral ? <CoralWorkspace api={api} userId={userId} /> : viewer ? <StructureViewerPage theme={theme} /> : selectedName === "search_pdb" ? <PdbWorkspace api={api} userId={userId} /> : <GenericToolPage api={api} userId={userId} name={selectedName!} />}
+       {viewer ? <StructureViewerPage theme={theme} /> : selectedName === "search_pdb" ? <PdbWorkspace api={api} userId={userId} /> : <GenericToolPage api={api} userId={userId} name={selectedName!} />}
     </ToolDetails> : <>
       <CatalogSearch value={search} onChange={setSearch} label={t("tools.searchDirectory")} />
       {(tools.isLoading || products.isLoading) && <p role="status">{t("workspace.loadingCatalog")}</p>}
       {(tools.isError || products.isError) && <p className="mono-form-error" role="alert">{t("tools.loadFailed")}</p>}
       <div className="catalog-entry-grid catalog-tools-grid">
         {showViewer && <CatalogCard size="large" title={t("tools.viewerTitle")} description={t("tools.viewerCardDescription")} icon={<Atom />} to="/tools/structure" />}
-        {showCoral && <CatalogCard size="large" title="CORAL" description={t("coral.description")} icon={<Dna />} to="/tools/coral" />}
         {filteredProducts.map((product) => <CatalogCard size="large" key={product.release_id} title={localized(product.title, language)} description={localized(product.description, language)} icon={<Boxes />} to={`/tools/${encodeURIComponent(product.slug)}`} />)}
         {filtered.map((tool) => <CatalogCard size="large" key={tool.name} title={tool.name} description={tool.description} icon={<Database />} to={tool.name === "search_pdb" ? "/tools/pdb" : `/tools/run/${encodeURIComponent(tool.name)}`} />)}
       </div>
-      {!tools.isLoading && !products.isLoading && !tools.isError && !products.isError && !showViewer && !showCoral && filtered.length === 0 && filteredProducts.length === 0 && <p className="mono-muted">{t("catalog.noMatches")}</p>}
+       {!tools.isLoading && !products.isLoading && !tools.isError && !products.isError && !showViewer && filtered.length === 0 && filteredProducts.length === 0 && <p className="mono-muted">{t("catalog.noMatches")}</p>}
     </>}
   </div></div>;
 }
@@ -75,9 +69,7 @@ function ToolDetails({ title, description, onClose, api, userId, projects, tool,
   const body = useRef<HTMLDivElement>(null);
   const focusPending = useRef(false);
   const focusArgument = () => {
-    const expand = body.current?.querySelector<HTMLButtonElement>("button[data-coral-expand]");
-    if (expand && expand.getClientRects().length) expand.click();
-    else body.current?.querySelector<HTMLElement>("input:not([disabled]),textarea:not([disabled]),select:not([disabled])")?.focus();
+    body.current?.querySelector<HTMLElement>("input:not([disabled]),textarea:not([disabled]),select:not([disabled])")?.focus();
   };
   useLayoutEffect(() => {
     if (tab === "run" && focusPending.current) {
@@ -104,7 +96,7 @@ function ToolDetails({ title, description, onClose, api, userId, projects, tool,
         <Tabs.Trigger value="run">{t("tools.arguments")}</Tabs.Trigger><Tabs.Trigger value="history">{t("tools.history")}</Tabs.Trigger>
       </Tabs.List>}
       <Tabs.Content value="run" forceMount hidden={tab !== "run"}>{children}</Tabs.Content>
-      {tool && <Tabs.Content value="history">{tool === coralCapabilityId ? <CoralHistory api={api} userId={userId} /> : <ToolRunHistory api={api} projects={projects} userId={userId} tool={tool} />}</Tabs.Content>}
+       {tool && <Tabs.Content value="history"><ToolRunHistory api={api} projects={projects} userId={userId} tool={tool} /></Tabs.Content>}
     </Tabs.Root></div>
   </article>;
 }
