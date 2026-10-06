@@ -442,6 +442,7 @@ def create_app(
             endpoint_policy,
             credential_refs=approved_references["credentials"],
             timeout_seconds=min(settings.mcp_timeout_seconds, 30),
+            execution_timeout_seconds=min(settings.mcp_timeout_seconds, 1800),
         )
         if database is not None
         else None

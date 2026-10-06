@@ -233,6 +233,12 @@ bindings:
       additionalProperties: false
     result_mapping: {kind: json_pointer, pointer: /result}
     required_usage: [wall_ms, cpu_core_ms, gpu_device_ms, gpu_count]
+    gpu_count: 0
+    max_budget: {cpu_core_ms: 120000, gpu_device_ms: 120000}
+    concurrency: 1
+    max_execution_seconds: 600
+    limit_mode: soft
+    exclusive_process: false
     cancellation: none
   - binding_id: binding-coral-iterative
     product_action_id: coral-iterative
@@ -251,6 +257,12 @@ bindings:
       additionalProperties: false
     result_mapping: {kind: json_pointer, pointer: /result}
     required_usage: [wall_ms, cpu_core_ms, gpu_device_ms, gpu_count]
+    gpu_count: 0
+    max_budget: {cpu_core_ms: 300000, gpu_device_ms: 300000}
+    concurrency: 1
+    max_execution_seconds: 900
+    limit_mode: soft
+    exclusive_process: false
     cancellation: none
   - binding_id: binding-coral-pocket
     product_action_id: coral-pocket
@@ -264,6 +276,12 @@ bindings:
     result_schema: *candidate_count_result
     result_mapping: {kind: json_pointer, pointer: /result}
     required_usage: [wall_ms, cpu_core_ms, gpu_device_ms, gpu_count]
+    gpu_count: 0
+    max_budget: {cpu_core_ms: 300000, gpu_device_ms: 600000}
+    concurrency: 1
+    max_execution_seconds: 1200
+    limit_mode: soft
+    exclusive_process: false
     cancellation: none
   - binding_id: binding-coral-two-dimensional
     product_action_id: coral-two-dimensional
@@ -285,6 +303,12 @@ bindings:
       additionalProperties: false
     result_mapping: {kind: json_pointer, pointer: /result}
     required_usage: [wall_ms, cpu_core_ms]
+    gpu_count: 0
+    max_budget: {cpu_core_ms: 300000, gpu_device_ms: 0}
+    concurrency: 1
+    max_execution_seconds: 900
+    limit_mode: soft
+    exclusive_process: false
     cancellation: none
 actions:
   - id: coral-one-shot

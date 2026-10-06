@@ -82,8 +82,16 @@ class ComputeLeases:
             ).fetchall()
             for job_id, user_id in rows:
                 job = self.jobs.get(user_id, job_id, connection=connection)
-                if self.jobs.catalog.get(user_id, job.capability.id, job.capability.version,
-                                         connection=connection) is None:
+                binding = connection.execute(
+                    "SELECT execution_binding_json FROM compute_job_data WHERE job_id=%s",
+                    (job_id,),
+                ).fetchone()[0]
+                if binding is None and self.jobs.catalog.get(
+                    user_id,
+                    job.capability.id,
+                    job.capability.version,
+                    connection=connection,
+                ) is None:
                     # A queued attempt must still have a current execution grant.
                     self.jobs.cancel(user_id, job_id, connection=connection)
                     continue

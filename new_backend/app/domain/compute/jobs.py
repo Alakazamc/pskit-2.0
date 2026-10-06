@@ -27,6 +27,7 @@ class ComputeJobs:
         run_id=None,
         tool_call_id=None,
         execution_binding=None,
+        resolved_capability=None,
         connection=None,
     ):
         if not idempotency_key or len(idempotency_key) > 200:
@@ -37,6 +38,11 @@ class ComputeJobs:
             "tool_call_id": tool_call_id,
             "execution_binding": execution_binding.model_dump(mode="json")
             if execution_binding is not None else None,
+            "resolved_capability": {
+                "service_id": resolved_capability[0],
+                "capability": resolved_capability[1].model_dump(mode="json"),
+            }
+            if resolved_capability is not None else None,
         })
         if connection is None:
             with self.database.transaction() as owned_connection:
@@ -47,6 +53,7 @@ class ComputeJobs:
                     run_id=run_id,
                     tool_call_id=tool_call_id,
                     execution_binding=execution_binding,
+                    resolved_capability=resolved_capability,
                     connection=owned_connection,
                 )
         admission_lock(connection)
@@ -62,11 +69,14 @@ class ComputeJobs:
                                      "FOR UPDATE", (user_id,)).fetchone()
         if cleanup and cleanup[0] == "deleting":
             raise ValueError("ACCOUNT_DELETING")
-        found = self.catalog.get(user_id, request.capability_id, request.version,
-                                 connection=connection)
+        found = resolved_capability or self.catalog.get(
+            user_id, request.capability_id, request.version, connection=connection
+        )
         if found is None:
             raise LookupError("CAPABILITY_NOT_FOUND")
         service_id, capability = found
+        if capability.id != request.capability_id or capability.version != request.version:
+            raise LookupError("CAPABILITY_NOT_FOUND")
         if not Draft202012Validator(capability.input_schema).is_valid(request.arguments):
             raise ValueError("INVALID_ARGUMENTS")
         for metric in ("cpu_core_ms", "gpu_device_ms"):

@@ -68,3 +68,28 @@ def test_coral_real_case_evidence_records_usage_and_artifact_digests():
     assert evidence["coral-iterative"]["usage"]["gpu_device_ms"] > 0
     assert evidence["coral-pocket"]["usage"]["gpu_device_ms"] > 0
     assert evidence["coral-two-dimensional"]["usage"]["gpu_device_ms"] is None
+
+
+def test_coral_staging_suite_is_a_single_low_cost_real_case():
+    raw = _load("coral.staging.acceptance.yaml")
+    suite = AcceptanceSuite.model_validate(raw["suite"])
+
+    assert suite.suite_id == "coral-provider-staging-smoke"
+    assert len(suite.cases) == 1
+    assert suite.cases[0].case_id == "coral-one-shot-6fxb-a"
+    assert suite.cases[0].action_id == "coral-one-shot"
+    assert raw["scope"]["canonical_suite"] == "coral-provider-real-cases"
+    assert raw["scope"]["canonical_real_cases_passed"] == 4
+
+
+def test_coral_staging_product_exposes_only_the_smoke_action():
+    product = ToolProductDraft.model_validate(_load("coral.staging.product.yaml"))
+
+    assert product.product_id == "product-coral-staging-smoke"
+    assert product.slug == "coral-staging-smoke"
+    assert product.acceptance_suite_id == "coral-provider-staging-smoke"
+    assert [action.id for action in product.actions] == ["coral-one-shot"]
+    assert [binding.capability_id for binding in product.bindings] == [
+        "coral.generate.one_shot"
+    ]
+    assert validate_tool_ui(product.ui_schema, product.bindings)

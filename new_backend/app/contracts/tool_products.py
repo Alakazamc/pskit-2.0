@@ -8,7 +8,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.contracts.catalog import ArtifactRef
-from app.contracts.compute import Metric, UsageReport
+from app.contracts.compute import ComputeBudget, Metric, UsageReport
 
 Identifier = Annotated[str, Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$")]
 JsonSchema = dict[str, Any]
@@ -246,12 +246,32 @@ class CapabilityBinding(ToolProductContract):
     result_schema: JsonSchema
     result_mapping: ResultMapping
     required_usage: list[Metric] = Field(default_factory=list)
+    gpu_count: int = Field(default=0, ge=0)
+    max_budget: ComputeBudget = Field(default_factory=ComputeBudget)
+    concurrency: int = Field(default=1, gt=0)
+    max_execution_seconds: int = Field(default=1800, gt=0)
+    limit_mode: Literal["soft", "hard"] = "soft"
+    exclusive_process: bool = False
     cancellation: Literal["none", "cooperative", "confirmed_stop"] = "cooperative"
 
     @model_validator(mode="after")
     def adapter_tools(self):
         if self.adapter == "job_mcp" and not self.status_tool:
             raise ValueError("job_mcp bindings require status_tool")
+        if self.limit_mode == "hard" and (
+            self.cancellation != "confirmed_stop" or not self.exclusive_process
+        ):
+            raise ValueError("Hard limits require an independently stoppable executor")
+        if self.gpu_count and "gpu_device_ms" not in self.required_usage:
+            raise ValueError("GPU bindings must require gpu_device_ms")
+        if self.max_budget.gpu_device_ms and "gpu_device_ms" not in self.required_usage:
+            raise ValueError("GPU budgets must require gpu_device_ms")
+        if self.max_budget.cpu_core_ms and "cpu_core_ms" not in self.required_usage:
+            raise ValueError("CPU budgets must require cpu_core_ms")
+        if "gpu_device_ms" in self.required_usage and self.max_budget.gpu_device_ms == 0:
+            raise ValueError("GPU usage requires a positive reservation budget")
+        if "cpu_core_ms" in self.required_usage and self.max_budget.cpu_core_ms == 0:
+            raise ValueError("CPU usage requires a positive reservation budget")
         return self
 
 

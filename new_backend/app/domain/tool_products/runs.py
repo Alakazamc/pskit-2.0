@@ -10,6 +10,7 @@ from jsonschema import Draft202012Validator
 from psycopg.types.json import Jsonb
 
 from app.contracts.compute import (
+    CapabilityVersion,
     Completed,
     ComputeJobRequest,
     ExecutionBindingSnapshot,
@@ -41,7 +42,7 @@ class ToolRunGateway:
         endpoint = connection.execute(
             "SELECT e.uri,e.credential_ref FROM mcp_service_revisions r "
             "JOIN mcp_service_endpoints e ON e.endpoint_id=r.endpoint_id "
-            "WHERE r.service_id=%s AND r.revision=%s",
+            "WHERE r.service_id=%s AND r.revision=%s AND e.state='approved'",
             (binding["service_id"], binding["service_revision"]),
         ).fetchone()
         if endpoint is None:
@@ -56,6 +57,27 @@ class ToolRunGateway:
             remote_output_schema=binding["remote_output_schema"],
             result_mapping=binding["result_mapping"],
         )
+
+    @staticmethod
+    def _released_capability(
+        binding, input_schema: dict[str, Any]
+    ) -> tuple[str, CapabilityVersion]:
+        capability = CapabilityVersion(
+            id=binding["capability_id"],
+            version=binding["capability_version"],
+            input_schema=input_schema,
+            output_schema=binding["result_schema"],
+            required_usage=binding.get("required_usage", []),
+            visibility="published",
+            gpu_count=binding.get("gpu_count", 0),
+            max_budget=binding.get("max_budget", {}),
+            concurrency=binding.get("concurrency", 1),
+            max_execution_seconds=binding.get("max_execution_seconds", 1800),
+            cancellation=binding.get("cancellation", "cooperative"),
+            limit_mode=binding.get("limit_mode", "soft"),
+            exclusive_process=binding.get("exclusive_process", False),
+        )
+        return binding["service_id"], capability
 
     def _snapshot(self, user_id: str, run_id: str, *, connection) -> ToolRunSnapshot | None:
         row = connection.execute(
@@ -149,16 +171,14 @@ class ToolRunGateway:
             bindings = {item["binding_id"]: item for item in draft["bindings"]}
             capabilities = []
             resolved = []
-            for binding_id in action.binding_ids:
+            for ordinal, binding_id in enumerate(action.binding_ids):
                 binding = bindings[binding_id]
-                found = self.compute_jobs.catalog.get(
-                    user_id,
-                    binding["capability_id"],
-                    binding["capability_version"],
-                    connection=connection,
+                input_schema = (
+                    action.input_schema
+                    if ordinal == 0
+                    else bindings[action.binding_ids[ordinal - 1]]["result_schema"]
                 )
-                if found is None or found[0] != binding["service_id"]:
-                    raise LookupError("CAPABILITY_NOT_FOUND")
+                found = self._released_capability(binding, input_schema)
                 service_id, capability = found
                 resolved.append((binding, service_id, capability))
                 capabilities.append(capability.model_dump(mode="json"))
@@ -202,6 +222,7 @@ class ToolRunGateway:
                 ),
                 f"tool-product:{run_id}:0",
                 execution_binding=execution_binding,
+                resolved_capability=(binding["service_id"], capability),
                 connection=connection,
             )
             connection.execute(
@@ -289,14 +310,11 @@ class ToolRunGateway:
                 item for item in release["draft"]["bindings"]
                 if item["binding_id"] == binding_id
             )
-            found = self.compute_jobs.catalog.get(
-                user_id,
-                binding["capability_id"],
-                binding["capability_version"],
-                connection=connection,
+            previous_binding = next(
+                item for item in release["draft"]["bindings"]
+                if item["binding_id"] == binding_ids[next_ordinal - 1]
             )
-            if found is None or found[0] != binding["service_id"]:
-                raise LookupError("CAPABILITY_NOT_FOUND")
+            found = self._released_capability(binding, previous_binding["result_schema"])
             _service_id, capability = found
             compute = self.compute_jobs.submit(
                 user_id,
@@ -308,6 +326,7 @@ class ToolRunGateway:
                 ),
                 f"tool-product:{run_id}:{next_ordinal}",
                 execution_binding=self._execution_binding(binding, connection),
+                resolved_capability=(binding["service_id"], capability),
                 connection=connection,
             )
             connection.execute(

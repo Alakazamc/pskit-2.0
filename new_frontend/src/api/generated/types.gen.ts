@@ -756,6 +756,27 @@ export type CapabilityBinding = {
      */
     required_usage?: Array<'wall_ms' | 'cpu_core_ms' | 'gpu_device_ms' | 'peak_memory_bytes' | 'peak_gpu_memory_bytes' | 'gpu_count'>;
     /**
+     * Gpu Count
+     */
+    gpu_count?: number;
+    max_budget?: ComputeBudget;
+    /**
+     * Concurrency
+     */
+    concurrency?: number;
+    /**
+     * Max Execution Seconds
+     */
+    max_execution_seconds?: number;
+    /**
+     * Limit Mode
+     */
+    limit_mode?: 'soft' | 'hard';
+    /**
+     * Exclusive Process
+     */
+    exclusive_process?: boolean;
+    /**
      * Cancellation
      */
     cancellation?: 'none' | 'cooperative' | 'confirmed_stop';

@@ -213,6 +213,21 @@ def test_capability_binding_keeps_remote_and_business_result_schemas_separate():
     assert parsed.remote_output_schema is not parsed.result_schema
 
 
+@pytest.mark.parametrize(
+    ("metric", "budget"),
+    [
+        ("cpu_core_ms", {"cpu_core_ms": 0, "gpu_device_ms": 0}),
+        ("gpu_device_ms", {"cpu_core_ms": 0, "gpu_device_ms": 0}),
+    ],
+)
+def test_metered_binding_requires_a_positive_reservation_budget(metric, budget):
+    with pytest.raises(ValidationError, match="positive reservation budget"):
+        CapabilityBinding.model_validate(binding(
+            required_usage=[metric],
+            max_budget=budget,
+        ))
+
+
 @pytest.mark.parametrize("schema_field", ["remote_output_schema", "result_schema"])
 def test_external_json_schema_references_are_rejected(schema_field):
     unsafe = binding(**{schema_field: {"$ref": "https://example.org/schema.json"}})

@@ -7886,6 +7886,41 @@
             "type": "array",
             "title": "Required Usage"
           },
+          "gpu_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Gpu Count",
+            "default": 0
+          },
+          "max_budget": {
+            "$ref": "#/components/schemas/ComputeBudget"
+          },
+          "concurrency": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Concurrency",
+            "default": 1
+          },
+          "max_execution_seconds": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Max Execution Seconds",
+            "default": 1800
+          },
+          "limit_mode": {
+            "type": "string",
+            "enum": [
+              "soft",
+              "hard"
+            ],
+            "title": "Limit Mode",
+            "default": "soft"
+          },
+          "exclusive_process": {
+            "type": "boolean",
+            "title": "Exclusive Process",
+            "default": false
+          },
           "cancellation": {
             "type": "string",
             "enum": [

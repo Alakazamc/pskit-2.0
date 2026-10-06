@@ -11,7 +11,9 @@ from app.api.tool_products import router, tool_run_router
 from app.contracts.compute import (
     CapabilityVersion,
     ComputeBudget,
+    ComputeClaimRequest,
     ComputeServiceManifest,
+    WorkerResources,
 )
 from app.contracts.models import UserIdentity
 from app.contracts.tool_products import ToolProductDraft
@@ -19,6 +21,7 @@ from app.db.postgres import PostgresDatabase
 from app.db.postgres_migrations import migrate_postgres
 from app.domain.compute.catalog import ComputeCatalog
 from app.domain.compute.jobs import ComputeJobs
+from app.domain.compute.leases import ComputeLeases
 from app.domain.compute.ledger import ComputeLedger
 from app.domain.tool_products.registry import ToolProductRegistry
 from app.domain.tool_products.repository import ToolProductRepository
@@ -51,6 +54,8 @@ def product_payload(*, two_actions=False):
         "artifact_pointers": ["/run/artifacts"],
     }]
     payload["bindings"][0]["capability_version"] = "1.0.0"
+    payload["bindings"][0]["required_usage"] = ["cpu_core_ms"]
+    payload["bindings"][0]["max_budget"] = {"cpu_core_ms": 40, "gpu_device_ms": 0}
     payload["actions"][0]["input_schema"] = capability("coral.generate.one-shot").input_schema
     if two_actions:
         payload["bindings"].append({
@@ -89,6 +94,25 @@ def seed_coral_endpoint(database):
             "(service_id,revision,endpoint_id,manifest_json,manifest_digest,created_by) "
             "VALUES ('coral',4,'endpoint-coral','{}'::jsonb,%s,'admin')",
             ("a" * 64,),
+        )
+        tools = [
+            {
+                "name": name,
+                "description": name,
+                "input_schema": capability(capability_id).input_schema,
+                "output_schema": {"type": "object"},
+            }
+            for name, capability_id in (
+                ("generate_rna_for_protein", "coral.generate.one-shot"),
+                ("analyze_protein_pockets", "coral.analyze.pocket"),
+            )
+        ]
+        connection.execute(
+            "INSERT INTO mcp_discovery_snapshots "
+            "(discovery_id,service_id,service_revision,protocol_json,tools_json,"
+            "discovery_digest,discovered_at) "
+            "VALUES ('discovery-coral','coral',4,'{}'::jsonb,%s,%s,now())",
+            (psycopg.types.json.Jsonb(tools), "b" * 64),
         )
 
 
@@ -192,6 +216,94 @@ def test_start_pins_release_action_capability_and_is_idempotent(tool_run_system)
     assert steps[0][2]["credential_ref"] == "coral-key"
     assert steps[0][2]["adapter"] == "immediate_mcp"
     assert count == 1
+
+
+def test_start_uses_qualified_release_when_legacy_catalog_has_no_entry(tool_run_system):
+    database, _repository, jobs, _release, _actor, client = tool_run_system
+    with database.transaction() as connection:
+        connection.execute("DELETE FROM compute_capability_versions")
+
+    response = start(client, key="released-capability")
+
+    assert response.status_code == 200
+    with database.connection() as connection:
+        capability_json, budget_json = connection.execute(
+            "SELECT d.capability_json,d.budget_json FROM tool_product_run_steps s "
+            "JOIN compute_job_data d ON d.job_id=s.compute_job_id "
+            "WHERE s.run_id=%s",
+            (response.json()["run_id"],),
+        ).fetchone()
+    assert capability_json["id"] == "coral.generate.one-shot"
+    assert capability_json["input_schema"]["required"] == ["protein"]
+    assert budget_json == {"cpu_core_ms": 40, "gpu_device_ms": 0}
+    grant = ComputeLeases(
+        database,
+        jobs.ledger,
+    ).claim(ComputeClaimRequest(
+        service_id="coral",
+        worker_id="released-worker",
+        resources=WorkerResources(),
+    ))
+    assert grant is not None
+    assert grant.job.id.startswith("compute-")
+    assert grant.execution_binding.submit_tool == "generate_rna_for_protein"
+
+
+def test_released_capability_schema_does_not_drift_with_later_discovery(tool_run_system):
+    database, _repository, _jobs, _release, _actor, client = tool_run_system
+    with database.transaction() as connection:
+        connection.execute("DELETE FROM compute_capability_versions")
+        connection.execute(
+            "INSERT INTO mcp_discovery_snapshots "
+            "(discovery_id,service_id,service_revision,protocol_json,tools_json,"
+            "discovery_digest,discovered_at) VALUES "
+            "('discovery-coral-later','coral',4,'{}'::jsonb,%s,%s,now() + interval '1 second')",
+            (
+                psycopg.types.json.Jsonb([{
+                    "name": "generate_rna_for_protein",
+                    "description": "changed after the qualified release",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"replacement": {"type": "string"}},
+                        "required": ["replacement"],
+                        "additionalProperties": False,
+                    },
+                    "output_schema": {"type": "object"},
+                }]),
+                "c" * 64,
+            ),
+        )
+
+    response = start(client, key="pinned-release-schema")
+
+    assert response.status_code == 200
+    with database.connection() as connection:
+        capability_json = connection.execute(
+            "SELECT d.capability_json FROM tool_product_run_steps s "
+            "JOIN compute_job_data d ON d.job_id=s.compute_job_id "
+            "WHERE s.run_id=%s",
+            (response.json()["run_id"],),
+        ).fetchone()[0]
+    assert capability_json["input_schema"]["required"] == ["protein"]
+
+
+def test_suspended_mcp_endpoint_blocks_new_release_runs(tool_run_system):
+    database, _repository, _jobs, _release, _actor, client = tool_run_system
+    with database.transaction() as connection:
+        connection.execute(
+            "UPDATE mcp_service_endpoints SET state='suspended' "
+            "WHERE endpoint_id='endpoint-coral'"
+        )
+
+    response = start(client, key="suspended-endpoint")
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "MCP_SERVICE_REVISION_NOT_FOUND"
+    with database.connection() as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM tool_product_runs "
+            "WHERE idempotency_key='suspended-endpoint'"
+        ).fetchone()[0] == 0
 
 
 def test_start_revalidates_input_visibility_quota_and_idempotency(tool_run_system):

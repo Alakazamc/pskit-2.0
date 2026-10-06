@@ -6,7 +6,11 @@ from test_tool_product_contracts import draft as draft_payload
 
 from app.config import Settings
 from app.contracts.tool_products import AcceptanceSuite, ToolProductDraft
-from app.domain.admin.qualification import DiscoveryCollector, QualificationEvaluator
+from app.domain.admin.qualification import (
+    DirectMcpQualificationExecutor,
+    DiscoveryCollector,
+    QualificationEvaluator,
+)
 from app.domain.admin.service_endpoints import ApprovedEndpointPolicy
 from app.main import create_app
 
@@ -89,6 +93,49 @@ class DiscoveryTransport:
         return self.pages[cursor]
 
 
+class QualificationTransport:
+    def __init__(self):
+        self.calls = []
+
+    async def initialize(self, endpoint, credential):
+        self.calls.append(("initialize", endpoint.uri, credential))
+        return {"protocol_version": "2025-11-25", "final_url": endpoint.uri}
+
+    async def call_tool(self, name, arguments):
+        self.calls.append(("call", name, arguments))
+        return completed_execution()["report"]
+
+    async def close(self):
+        self.calls.append(("close",))
+
+
+@pytest.mark.asyncio
+async def test_direct_qualification_executor_calls_approved_binding_once_per_key():
+    endpoint = ApprovedEndpointPolicy(
+        {}, resolver=resolver({"public.example": ["93.184.216.34"]})
+    ).resolve("https://public.example/mcp", "public")
+    transport = QualificationTransport()
+    executor = DirectMcpQualificationExecutor(
+        lambda binding: (endpoint, "streamable_http", "credential"),
+        transport_factory=lambda _transport: transport,
+        timeout_seconds=1,
+    )
+    binding = qualification_draft().bindings[0]
+
+    first = await executor.execute(binding, {"protein": "MKT"}, "same-key")
+    repeated = await executor.execute(binding, {"protein": "MKT"}, "same-key")
+
+    assert first == repeated
+    assert first["report"]["status"] == "completed"
+    assert first["remote_execution_id"]
+    assert [call[0] for call in transport.calls].count("call") == 1
+
+
+def test_direct_qualification_executor_rejects_non_object_reports_with_stable_error():
+    with pytest.raises(ValueError, match="MCP_REPORT_REQUIRED"):
+        DirectMcpQualificationExecutor._report(["unexpected"])
+
+
 def tool(name, output=None):
     value = {
         "name": name,
@@ -158,6 +205,10 @@ def qualification_draft():
         "additionalProperties": False,
     }
     payload["bindings"][0]["required_usage"] = ["wall_ms", "gpu_device_ms"]
+    payload["bindings"][0]["max_budget"] = {
+        "cpu_core_ms": 0,
+        "gpu_device_ms": 60_000,
+    }
     payload["bindings"][0]["cancellation"] = "confirmed_stop"
     return ToolProductDraft.model_validate(payload)
 

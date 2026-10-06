@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import os
 import uuid
 from contextlib import AsyncExitStack, asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -128,11 +129,85 @@ class StreamableHttpDiscoveryTransport:
             })
         return {"tools": tools, "next_cursor": response.nextCursor}
 
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        if self.session is None:
+            raise RuntimeError("MCP session is not initialized")
+        return await self.session.call_tool(
+            name,
+            arguments,
+            read_timeout_seconds=timedelta(seconds=self.timeout_seconds),
+        )
+
     async def close(self) -> None:
         if self.stack is not None:
             await self.stack.aclose()
             self.stack = None
             self.session = None
+
+
+class DirectMcpQualificationExecutor:
+    """Invoke one approved binding directly and cache its idempotent evidence."""
+
+    def __init__(self, binding_resolver, *, transport_factory, timeout_seconds: float) -> None:
+        self.binding_resolver = binding_resolver
+        self.transport_factory = transport_factory
+        self.timeout_seconds = timeout_seconds
+        self._cache: dict[str, dict[str, Any]] = {}
+
+    @staticmethod
+    def _report(response: Any) -> dict[str, Any]:
+        if isinstance(response, dict):
+            report = response
+        else:
+            report = getattr(response, "structuredContent", None)
+            if not isinstance(report, dict):
+                blocks = [
+                    item.text
+                    for item in getattr(response, "content", [])
+                    if getattr(item, "type", None) == "text"
+                ]
+                if len(blocks) != 1:
+                    raise ValueError("MCP_REPORT_REQUIRED")
+                try:
+                    report = json.loads(blocks[0])
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("MCP_REPORT_REQUIRED") from exc
+        if not isinstance(report, dict):
+            raise ValueError(  # noqa: TRY004 — stable admin error contract
+                "MCP_REPORT_REQUIRED"
+            )
+        if len(json.dumps(report, ensure_ascii=False).encode()) > 1024 * 1024:
+            raise ValueError("MCP_REPORT_TOO_LARGE")
+        return report
+
+    async def execute(self, binding, arguments: dict[str, Any], idempotency_key: str):
+        cached = self._cache.get(idempotency_key)
+        if cached is not None:
+            return copy.deepcopy(cached)
+        endpoint, transport_name, credential = self.binding_resolver(binding)
+        transport = self.transport_factory(transport_name)
+        try:
+            async with asyncio.timeout(self.timeout_seconds):
+                protocol = await transport.initialize(endpoint, credential)
+                if protocol.get("final_url", endpoint.uri) != endpoint.uri:
+                    raise ValueError("REDIRECT_FORBIDDEN")
+                response = await transport.call_tool(binding.submit_tool, arguments)
+        except TimeoutError as exc:
+            raise ValueError("QUALIFICATION_EXECUTION_TIMEOUT") from exc
+        finally:
+            close = getattr(transport, "close", None)
+            if close is not None:
+                await close()
+        report = self._report(response)
+        evidence = {
+            "report": report,
+            "events": [],
+            "cancellation": {"requested": False, "confirmed": False},
+            "remote_execution_id": report.get("job_id")
+            or f"qualification-{payload_hash({'key': idempotency_key})[:32]}",
+        }
+        self._cache[idempotency_key] = copy.deepcopy(evidence)
+        return evidence
 
 
 class DiscoveryCollector:
@@ -384,6 +459,7 @@ class McpQualification:
         transport_factory=None,
         executor=None,
         timeout_seconds: float = 5,
+        execution_timeout_seconds: float = 30,
     ) -> None:
         self.database = database
         self.repository = repository
@@ -392,8 +468,12 @@ class McpQualification:
         self.transport_factory = transport_factory or (
             lambda transport: StreamableHttpDiscoveryTransport(timeout_seconds, transport)
         )
-        self.executor = executor
         self.collector = DiscoveryCollector(timeout_seconds=timeout_seconds)
+        self.executor = executor or DirectMcpQualificationExecutor(
+            self._resolve_binding,
+            transport_factory=self.transport_factory,
+            timeout_seconds=execution_timeout_seconds,
+        )
 
     def _credential(self, reference: str | None) -> str:
         if reference is None:
@@ -405,6 +485,21 @@ class McpQualification:
         if not secret:
             raise ValueError("SERVICE_CREDENTIAL_UNAVAILABLE")
         return secret
+
+    def _resolve_binding(self, binding):
+        with self.database.connection() as connection:
+            row = connection.execute(
+                "SELECT e.uri,e.transport,e.credential_ref,e.network_zone "
+                "FROM mcp_service_revisions r JOIN mcp_service_endpoints e "
+                "ON e.endpoint_id=r.endpoint_id WHERE r.service_id=%s AND r.revision=%s "
+                "AND EXISTS (SELECT 1 FROM mcp_discovery_snapshots d "
+                "WHERE d.service_id=r.service_id AND d.service_revision=r.revision)",
+                (binding.service_id, binding.service_revision),
+            ).fetchone()
+        if row is None:
+            raise LookupError("MCP_SERVICE_REVISION_NOT_DISCOVERED")
+        endpoint = self.endpoint_policy.resolve(row[0], row[3])
+        return endpoint, row[1], self._credential(row[2])
 
     async def probe(
         self,
