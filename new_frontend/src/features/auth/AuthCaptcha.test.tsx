@@ -19,6 +19,7 @@ it("binds a Turnstile widget to the server-defined action and resets tokens", ()
     action: "signup",
     theme: "auto",
     size: "flexible",
+    appearance: "always",
   });
   (options.callback as (token: string) => void)("proof");
   expect(onToken).toHaveBeenCalledWith("proof");
