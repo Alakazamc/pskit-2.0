@@ -9,6 +9,7 @@ from jsonschema import Draft202012Validator
 from psycopg.types.json import Jsonb
 
 from app.contracts.tool_products import (
+    AcceptanceSuite,
     PublishedToolProduct,
     QualificationReport,
     ToolProductDraft,
@@ -64,6 +65,13 @@ class ToolProductRepository:
         ui_digest, binding_digest, suite_digest, service_revisions = self._digests(draft)
         snapshot = draft.model_dump(mode="json", by_alias=True)
         with self.database.transaction() as connection:
+            suite_row = connection.execute(
+                "SELECT suite_digest FROM acceptance_suites "
+                "WHERE suite_id=%s AND revision=%s",
+                (draft.acceptance_suite_id, draft.acceptance_suite_revision),
+            ).fetchone()
+            if suite_row is not None:
+                suite_digest = suite_row[0]
             current = connection.execute(
                 "SELECT revision,slug,owner_user_id FROM tool_products "
                 "WHERE product_id=%s FOR UPDATE",
@@ -144,6 +152,77 @@ class ToolProductRepository:
             )
         return draft
 
+    def save_acceptance_suite(self, suite: AcceptanceSuite) -> AcceptanceSuite:
+        """Persist one immutable, content-addressed scientific acceptance suite."""
+        suite_json = suite.model_dump(mode="json", by_alias=True)
+        suite_digest = payload_hash(suite_json)
+        with self.database.transaction() as connection:
+            existing = connection.execute(
+                "SELECT suite_json,suite_digest FROM acceptance_suites "
+                "WHERE suite_id=%s AND revision=%s",
+                (suite.suite_id, suite.revision),
+            ).fetchone()
+            if existing is not None:
+                placeholder = existing[0] == {
+                    "suite_id": suite.suite_id,
+                    "revision": suite.revision,
+                }
+                if placeholder:
+                    connection.execute(
+                        "UPDATE acceptance_suites SET suite_json=%s,suite_digest=%s "
+                        "WHERE suite_id=%s AND revision=%s",
+                        (Jsonb(suite_json), suite_digest, suite.suite_id, suite.revision),
+                    )
+                elif existing[0] != suite_json or existing[1] != suite_digest:
+                    raise ValueError("IMMUTABLE_ACCEPTANCE_SUITE")
+                else:
+                    return suite
+            else:
+                connection.execute(
+                    "INSERT INTO acceptance_suites "
+                    "(suite_id,revision,suite_json,suite_digest) VALUES (%s,%s,%s,%s)",
+                    (suite.suite_id, suite.revision, Jsonb(suite_json), suite_digest),
+                )
+            for case in suite.cases:
+                case_json = case.model_dump(mode="json", by_alias=True)
+                connection.execute(
+                    "INSERT INTO acceptance_cases "
+                    "(suite_id,suite_revision,case_id,case_json,case_digest) "
+                    "VALUES (%s,%s,%s,%s,%s)",
+                    (
+                        suite.suite_id,
+                        suite.revision,
+                        case.case_id,
+                        Jsonb(case_json),
+                        payload_hash(case_json),
+                    ),
+                )
+        return suite
+
+    def get_acceptance_suite(
+        self, suite_id: str, revision: int
+    ) -> AcceptanceSuite | None:
+        with self.database.connection() as connection:
+            row = connection.execute(
+                "SELECT suite_json FROM acceptance_suites "
+                "WHERE suite_id=%s AND revision=%s",
+                (suite_id, revision),
+            ).fetchone()
+        if row is None or "cases" not in row[0]:
+            return None
+        return AcceptanceSuite.model_validate(row[0])
+
+    def get_draft_revision(self, product_id: str, revision: int) -> ToolProductDraft:
+        with self.database.connection() as connection:
+            row = connection.execute(
+                "SELECT snapshot_json FROM tool_product_revisions "
+                "WHERE product_id=%s AND revision=%s",
+                (product_id, revision),
+            ).fetchone()
+        if row is None:
+            raise LookupError("TOOL_PRODUCT_REVISION_NOT_FOUND")
+        return ToolProductDraft.model_validate(row[0])
+
     def record_qualification(self, report: QualificationReport) -> QualificationReport:
         with self.database.transaction() as connection:
             revision = connection.execute(
@@ -183,6 +262,17 @@ class ToolProductRepository:
                     report.qualified_at,
                 ),
             )
+            for case in report.cases:
+                connection.execute(
+                    "INSERT INTO qualification_case_results "
+                    "(report_id,case_id,result_json,status) VALUES (%s,%s,%s,%s)",
+                    (
+                        report.report_id,
+                        case.case_id,
+                        Jsonb(case.model_dump(mode="json", by_alias=True)),
+                        case.status,
+                    ),
+                )
         return report
 
     def publish(
@@ -191,6 +281,7 @@ class ToolProductRepository:
         revision: int,
         report_id: str,
         actor_id: str,
+        reason: str = "Approved exact qualification evidence",
     ) -> PublishedToolProduct:
         with self.database.transaction() as connection:
             product = connection.execute(
@@ -253,6 +344,12 @@ class ToolProductRepository:
                     actor_id,
                     published_at,
                 ),
+            )
+            connection.execute(
+                "INSERT INTO review_decisions "
+                "(decision_id,release_id,report_id,actor_user_id,decision,reason) "
+                "VALUES (%s,%s,%s,%s,'approved',%s)",
+                (f"decision-{uuid.uuid4()}", release_id, report_id, actor_id, reason),
             )
             rows = connection.execute(
                 "SELECT binding_id,product_action_id,capability_id,capability_version," 

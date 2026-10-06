@@ -5424,6 +5424,488 @@
         }
       }
     },
+    "/api/v1/admin/mcp-probes": {
+      "post": {
+        "tags": [
+          "admin-tool-products"
+        ],
+        "summary": "Probe Mcp",
+        "operationId": "probe_mcp_api_v1_admin_mcp_probes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpProbeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeSnapshot"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/mcp-probes/{probe_id}": {
+      "get": {
+        "tags": [
+          "admin-tool-products"
+        ],
+        "summary": "Get Mcp Probe",
+        "operationId": "get_mcp_probe_api_v1_admin_mcp_probes__probe_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "probe_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Probe Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeSnapshot"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/services/{service_id}/discoveries": {
+      "post": {
+        "tags": [
+          "admin-tool-products"
+        ],
+        "summary": "Discover Mcp",
+        "operationId": "discover_mcp_api_v1_admin_services__service_id__discoveries_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "service_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Service Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoveryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoverySnapshot"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/tool-products/{product_id}/draft": {
+      "put": {
+        "tags": [
+          "admin-tool-products"
+        ],
+        "summary": "Save Product Draft",
+        "operationId": "save_product_draft_api_v1_admin_tool_products__product_id__draft_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolProductDraft-Output"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/tool-products/{product_id}/qualifications": {
+      "post": {
+        "tags": [
+          "admin-tool-products"
+        ],
+        "summary": "Qualify Product",
+        "operationId": "qualify_product_api_v1_admin_tool_products__product_id__qualifications_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QualificationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualificationReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/qualifications/{report_id}": {
+      "get": {
+        "tags": [
+          "admin-tool-products"
+        ],
+        "summary": "Get Qualification",
+        "operationId": "get_qualification_api_v1_admin_qualifications__report_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualificationReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/tool-product-releases/{report_id}/publish": {
+      "post": {
+        "tags": [
+          "admin-tool-products"
+        ],
+        "summary": "Publish Product",
+        "operationId": "publish_product_api_v1_admin_tool_product_releases__report_id__publish_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishProductRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedToolProduct"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/tool-product-releases/{release_id}/suspend": {
+      "post": {
+        "tags": [
+          "admin-tool-products"
+        ],
+        "summary": "Suspend Product",
+        "operationId": "suspend_product_api_v1_admin_tool_product_releases__release_id__suspend_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Release Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedToolProduct"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/tool-product-releases/{release_id}/rollback": {
+      "post": {
+        "tags": [
+          "admin-tool-products"
+        ],
+        "summary": "Rollback Product",
+        "operationId": "rollback_product_api_v1_admin_tool_product_releases__release_id__rollback_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Release Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedToolProduct"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sandbox/sessions/{session_id}/files": {
       "post": {
         "tags": [
@@ -5725,6 +6207,99 @@
   },
   "components": {
     "schemas": {
+      "AcceptanceCase": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Case Id"
+          },
+          "action_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Action Id"
+          },
+          "arguments": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Arguments"
+          },
+          "invalid_arguments": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Invalid Arguments"
+          },
+          "result_assertions": {
+            "items": {
+              "$ref": "#/components/schemas/ResultAssertion"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Result Assertions"
+          },
+          "required_progress_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Required Progress Types"
+          },
+          "check_idempotency": {
+            "type": "boolean",
+            "title": "Check Idempotency",
+            "default": true
+          },
+          "check_cancellation": {
+            "type": "boolean",
+            "title": "Check Cancellation",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "case_id",
+          "action_id",
+          "arguments"
+        ],
+        "title": "AcceptanceCase"
+      },
+      "AcceptanceSuite": {
+        "properties": {
+          "suite_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Suite Id"
+          },
+          "revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Revision"
+          },
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/AcceptanceCase"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Cases"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "suite_id",
+          "revision",
+          "cases"
+        ],
+        "title": "AcceptanceSuite"
+      },
       "AdminJob": {
         "properties": {
           "job_id": {
@@ -6540,6 +7115,44 @@
         "type": "object",
         "title": "Af3JobRequest"
       },
+      "AgentHandoff": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Id"
+          },
+          "label": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "prompt_template_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Prompt Template Id"
+          },
+          "summary_pointer": {
+            "type": "string",
+            "title": "Summary Pointer"
+          },
+          "artifact_pointers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Artifact Pointers"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "prompt_template_id",
+          "summary_pointer"
+        ],
+        "title": "AgentHandoff"
+      },
       "AnonymousLoginRequest": {
         "properties": {
           "captcha_token": {
@@ -6792,6 +7405,134 @@
           "user"
         ],
         "title": "AuthSessionResponse"
+      },
+      "CapabilityBinding": {
+        "properties": {
+          "binding_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Binding Id"
+          },
+          "product_action_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Product Action Id"
+          },
+          "service_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Service Id"
+          },
+          "service_revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Service Revision"
+          },
+          "capability_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Capability Id"
+          },
+          "capability_version": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Capability Version"
+          },
+          "adapter": {
+            "type": "string",
+            "enum": [
+              "immediate_mcp",
+              "job_mcp",
+              "mcp_tasks"
+            ],
+            "title": "Adapter"
+          },
+          "submit_tool": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Submit Tool"
+          },
+          "status_tool": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Tool"
+          },
+          "cancel_tool": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancel Tool"
+          },
+          "remote_output_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Remote Output Schema"
+          },
+          "result_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Result Schema"
+          },
+          "result_mapping": {
+            "$ref": "#/components/schemas/ResultMapping"
+          },
+          "required_usage": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "wall_ms",
+                "cpu_core_ms",
+                "gpu_device_ms",
+                "peak_memory_bytes",
+                "peak_gpu_memory_bytes",
+                "gpu_count"
+              ]
+            },
+            "type": "array",
+            "title": "Required Usage"
+          },
+          "cancellation": {
+            "type": "string",
+            "enum": [
+              "none",
+              "cooperative",
+              "confirmed_stop"
+            ],
+            "title": "Cancellation",
+            "default": "cooperative"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "binding_id",
+          "product_action_id",
+          "service_id",
+          "service_revision",
+          "capability_id",
+          "capability_version",
+          "adapter",
+          "submit_tool",
+          "remote_output_schema",
+          "result_schema",
+          "result_mapping"
+        ],
+        "title": "CapabilityBinding"
       },
       "CapabilityVersion": {
         "properties": {
@@ -7743,6 +8484,115 @@
         ],
         "title": "DirectActionTarget"
       },
+      "DiscoveredTool": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 5000,
+            "title": "Description",
+            "default": ""
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Schema"
+          },
+          "remote_output_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Remote Output Schema"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "input_schema",
+          "remote_output_schema"
+        ],
+        "title": "DiscoveredTool"
+      },
+      "DiscoveryRequest": {
+        "properties": {
+          "service_revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Service Revision"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 5,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "service_revision",
+          "reason"
+        ],
+        "title": "DiscoveryRequest"
+      },
+      "DiscoverySnapshot": {
+        "properties": {
+          "discovery_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Discovery Id"
+          },
+          "service_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Service Id"
+          },
+          "service_revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Service Revision"
+          },
+          "protocol": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Protocol"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/DiscoveredTool"
+            },
+            "type": "array",
+            "title": "Tools"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Digest"
+          },
+          "discovered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Discovered At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "discovery_id",
+          "service_id",
+          "service_revision",
+          "protocol",
+          "tools",
+          "digest",
+          "discovered_at"
+        ],
+        "title": "DiscoverySnapshot"
+      },
       "EmailLoginRequest": {
         "properties": {
           "email": {
@@ -8387,6 +9237,57 @@
         ],
         "title": "McpInvokeResult"
       },
+      "McpProbeRequest": {
+        "properties": {
+          "service_id": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Service Id"
+          },
+          "uri": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Uri"
+          },
+          "transport": {
+            "type": "string",
+            "enum": [
+              "streamable_http",
+              "sse"
+            ],
+            "title": "Transport",
+            "default": "streamable_http"
+          },
+          "credential_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Ref"
+          },
+          "network_zone": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Network Zone",
+            "default": "public"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "service_id",
+          "uri"
+        ],
+        "title": "McpProbeRequest"
+      },
       "McpTool": {
         "properties": {
           "name": {
@@ -8756,6 +9657,89 @@
         ],
         "title": "PrepareFiles"
       },
+      "ProbeSnapshot": {
+        "properties": {
+          "probe_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Probe Id"
+          },
+          "endpoint_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Endpoint Id"
+          },
+          "service_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Service Id"
+          },
+          "service_revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Service Revision"
+          },
+          "uri": {
+            "type": "string",
+            "title": "Uri"
+          },
+          "transport": {
+            "type": "string",
+            "enum": [
+              "streamable_http",
+              "sse"
+            ],
+            "title": "Transport"
+          },
+          "credential_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Ref"
+          },
+          "network_zone": {
+            "type": "string",
+            "title": "Network Zone"
+          },
+          "protocol": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Protocol"
+          },
+          "addresses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Addresses"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Checked At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "probe_id",
+          "endpoint_id",
+          "service_id",
+          "service_revision",
+          "uri",
+          "transport",
+          "network_zone",
+          "protocol",
+          "addresses",
+          "checked_at"
+        ],
+        "title": "ProbeSnapshot"
+      },
       "ProductAction": {
         "properties": {
           "id": {
@@ -8809,6 +9793,67 @@
           "binding_ids"
         ],
         "title": "ProductAction"
+      },
+      "ProductDraftRequest": {
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Revision"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 5,
+            "title": "Reason"
+          },
+          "draft": {
+            "$ref": "#/components/schemas/ToolProductDraft-Input"
+          },
+          "acceptance_suite": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AcceptanceSuite"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "reason",
+          "draft"
+        ],
+        "title": "ProductDraftRequest"
+      },
+      "ProductVisibility": {
+        "properties": {
+          "audience": {
+            "type": "string",
+            "enum": [
+              "public",
+              "members",
+              "restricted"
+            ],
+            "title": "Audience",
+            "default": "members"
+          },
+          "allowed_user_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 10000,
+            "title": "Allowed User Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ProductVisibility"
       },
       "ProfileUpdateRequest": {
         "properties": {
@@ -9032,6 +10077,35 @@
         "type": "object",
         "title": "ProjectSkillSettings"
       },
+      "PublishProductRequest": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Product Id"
+          },
+          "revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Revision"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 5,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "revision",
+          "reason"
+        ],
+        "title": "PublishProductRequest"
+      },
       "PublishedToolProduct": {
         "properties": {
           "release_id": {
@@ -9061,7 +10135,7 @@
             "$ref": "#/components/schemas/LocalizedText"
           },
           "ui_schema": {
-            "$ref": "#/components/schemas/ToolUiSchema"
+            "$ref": "#/components/schemas/ToolUiSchema-Output"
           },
           "actions": {
             "items": {
@@ -9099,6 +10173,162 @@
           "published_at"
         ],
         "title": "PublishedToolProduct"
+      },
+      "QualificationCaseResult": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Case Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "protocol_assertions": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Protocol Assertions"
+          },
+          "scientific_assertions": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Scientific Assertions"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Message",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "case_id",
+          "status"
+        ],
+        "title": "QualificationCaseResult"
+      },
+      "QualificationReport": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Report Id"
+          },
+          "product_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Product Id"
+          },
+          "product_revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Product Revision"
+          },
+          "service_revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Service Revision"
+          },
+          "binding_digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Binding Digest"
+          },
+          "ui_digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Ui Digest"
+          },
+          "suite_digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Suite Digest"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "protocol_passed": {
+            "type": "boolean",
+            "title": "Protocol Passed"
+          },
+          "scientific_passed": {
+            "type": "boolean",
+            "title": "Scientific Passed"
+          },
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/QualificationCaseResult"
+            },
+            "type": "array",
+            "title": "Cases"
+          },
+          "qualified_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Qualified At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "report_id",
+          "product_id",
+          "product_revision",
+          "service_revision",
+          "binding_digest",
+          "ui_digest",
+          "suite_digest",
+          "status",
+          "protocol_passed",
+          "scientific_passed",
+          "cases",
+          "qualified_at"
+        ],
+        "title": "QualificationReport"
+      },
+      "QualificationRequest": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Revision"
+          },
+          "suite_revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Suite Revision"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 5,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision",
+          "suite_revision",
+          "reason"
+        ],
+        "title": "QualificationRequest"
       },
       "QuotaCounter": {
         "properties": {
@@ -9274,6 +10504,22 @@
         ],
         "title": "RegisterSkillRequest"
       },
+      "ReleaseActionRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 5,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "ReleaseActionRequest"
+      },
       "ReleaseServiceVersion": {
         "properties": {
           "service_id": {
@@ -9326,6 +10572,71 @@
           "remaining"
         ],
         "title": "ResourceCounter"
+      },
+      "ResultAssertion": {
+        "properties": {
+          "pointer": {
+            "type": "string",
+            "title": "Pointer"
+          },
+          "predicate": {
+            "type": "string",
+            "enum": [
+              "equals",
+              "exists",
+              "min_items",
+              "maximum",
+              "minimum"
+            ],
+            "title": "Predicate"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pointer",
+          "predicate"
+        ],
+        "title": "ResultAssertion"
+      },
+      "ResultMapping": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "json_pointer",
+            "title": "Kind",
+            "default": "json_pointer"
+          },
+          "pointer": {
+            "type": "string",
+            "title": "Pointer"
+          },
+          "renames": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "maxProperties": 100,
+            "title": "Renames"
+          },
+          "transforms": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiTransform"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Transforms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pointer"
+        ],
+        "title": "ResultMapping"
       },
       "RevisionRequest": {
         "properties": {
@@ -9939,6 +11250,184 @@
         ],
         "title": "ToolCallPart"
       },
+      "ToolProductDraft-Input": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Product Id"
+          },
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,79}$",
+            "title": "Slug"
+          },
+          "revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Revision"
+          },
+          "owner_user_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Owner User Id"
+          },
+          "title": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "description": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "ui_schema": {
+            "$ref": "#/components/schemas/ToolUiSchema-Input"
+          },
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityBinding"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Bindings"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/ProductAction"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Actions"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/ProductVisibility"
+          },
+          "acceptance_suite_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Acceptance Suite Id"
+          },
+          "acceptance_suite_revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Acceptance Suite Revision"
+          },
+          "handoffs": {
+            "items": {
+              "$ref": "#/components/schemas/AgentHandoff"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Handoffs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "slug",
+          "revision",
+          "owner_user_id",
+          "title",
+          "description",
+          "ui_schema",
+          "bindings",
+          "actions",
+          "acceptance_suite_id",
+          "acceptance_suite_revision"
+        ],
+        "title": "ToolProductDraft"
+      },
+      "ToolProductDraft-Output": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Product Id"
+          },
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,79}$",
+            "title": "Slug"
+          },
+          "revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Revision"
+          },
+          "owner_user_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Owner User Id"
+          },
+          "title": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "description": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "ui_schema": {
+            "$ref": "#/components/schemas/ToolUiSchema-Output"
+          },
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityBinding"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Bindings"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/ProductAction"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Actions"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/ProductVisibility"
+          },
+          "acceptance_suite_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Acceptance Suite Id"
+          },
+          "acceptance_suite_revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Acceptance Suite Revision"
+          },
+          "handoffs": {
+            "items": {
+              "$ref": "#/components/schemas/AgentHandoff"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Handoffs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "slug",
+          "revision",
+          "owner_user_id",
+          "title",
+          "description",
+          "ui_schema",
+          "bindings",
+          "actions",
+          "acceptance_suite_id",
+          "acceptance_suite_revision"
+        ],
+        "title": "ToolProductDraft"
+      },
       "ToolProductPage": {
         "properties": {
           "items": {
@@ -10068,7 +11557,7 @@
         ],
         "title": "ToolRunMove"
       },
-      "ToolUiAction": {
+      "ToolUiAction-Input": {
         "properties": {
           "id": {
             "type": "string",
@@ -10098,7 +11587,7 @@
           "visible_when": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ToolUiCondition"
+                "$ref": "#/components/schemas/ToolUiCondition-Input"
               },
               {
                 "type": "null"
@@ -10115,7 +11604,54 @@
         ],
         "title": "ToolUiAction"
       },
-      "ToolUiCondition": {
+      "ToolUiAction-Output": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Id"
+          },
+          "label": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "kind": {
+            "type": "string",
+            "const": "start_run",
+            "title": "Kind",
+            "default": "start_run"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DirectActionTarget"
+              },
+              {
+                "$ref": "#/components/schemas/StateActionTarget"
+              }
+            ],
+            "title": "Target"
+          },
+          "visible_when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolUiCondition-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "target"
+        ],
+        "title": "ToolUiAction"
+      },
+      "ToolUiCondition-Input": {
         "properties": {
           "source": {
             "anyOf": [
@@ -10159,7 +11695,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/ToolUiCondition"
+                  "$ref": "#/components/schemas/ToolUiCondition-Input"
                 },
                 "type": "array",
                 "minItems": 1
@@ -10174,7 +11710,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/ToolUiCondition"
+                  "$ref": "#/components/schemas/ToolUiCondition-Input"
                 },
                 "type": "array",
                 "minItems": 1
@@ -10188,7 +11724,7 @@
           "not": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ToolUiCondition"
+                "$ref": "#/components/schemas/ToolUiCondition-Input"
               },
               {
                 "type": "null"
@@ -10200,7 +11736,92 @@
         "type": "object",
         "title": "ToolUiCondition"
       },
-      "ToolUiField": {
+      "ToolUiCondition-Output": {
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "equals": {
+            "title": "Equals"
+          },
+          "in": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array",
+                "maxItems": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In"
+          },
+          "exists": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exists"
+          },
+          "and": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ToolUiCondition-Output"
+                },
+                "type": "array",
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "And"
+          },
+          "or": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ToolUiCondition-Output"
+                },
+                "type": "array",
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Or"
+          },
+          "not": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolUiCondition-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ToolUiCondition"
+      },
+      "ToolUiField-Input": {
         "properties": {
           "id": {
             "type": "string",
@@ -10323,7 +11944,7 @@
           "visible_when": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ToolUiCondition"
+                "$ref": "#/components/schemas/ToolUiCondition-Input"
               },
               {
                 "type": "null"
@@ -10332,7 +11953,155 @@
           },
           "fields": {
             "items": {
-              "$ref": "#/components/schemas/ToolUiField"
+              "$ref": "#/components/schemas/ToolUiField-Input"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Fields"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "component",
+          "label"
+        ],
+        "title": "ToolUiField"
+      },
+      "ToolUiField-Output": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Id"
+          },
+          "component": {
+            "type": "string",
+            "enum": [
+              "text-input",
+              "number-input",
+              "textarea",
+              "select",
+              "segmented-control",
+              "checkbox",
+              "switch",
+              "file-upload",
+              "protein-input",
+              "sequence-input",
+              "parameter-group",
+              "advanced-section"
+            ],
+            "title": "Component"
+          },
+          "label": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "input_pointer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Pointer"
+          },
+          "help": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": false
+          },
+          "default": {
+            "title": "Default"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiOption"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "title": "Options"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "accepted_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Accepted Types"
+          },
+          "max_files": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Files"
+          },
+          "visible_when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolUiCondition-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiField-Output"
             },
             "type": "array",
             "maxItems": 100,
@@ -10463,7 +12232,7 @@
         ],
         "title": "ToolUiProduct"
       },
-      "ToolUiResultView": {
+      "ToolUiResultView-Input": {
         "properties": {
           "id": {
             "type": "string",
@@ -10531,7 +12300,7 @@
           "visible_when": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ToolUiCondition"
+                "$ref": "#/components/schemas/ToolUiCondition-Input"
               },
               {
                 "type": "null"
@@ -10556,7 +12325,100 @@
         ],
         "title": "ToolUiResultView"
       },
-      "ToolUiSchema": {
+      "ToolUiResultView-Output": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Id"
+          },
+          "component": {
+            "type": "string",
+            "enum": [
+              "metric-grid",
+              "stage-flow",
+              "sequence-table",
+              "data-table",
+              "line-chart",
+              "scatter-plot",
+              "heatmap",
+              "structure-viewer",
+              "artifact-list",
+              "json-inspector"
+            ],
+            "title": "Component"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "empty": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preview_limit": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Preview Limit",
+            "default": 100
+          },
+          "full_data_artifact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Data Artifact"
+          },
+          "visible_when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolUiCondition-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transforms": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiTransform"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Transforms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "component",
+          "source"
+        ],
+        "title": "ToolUiResultView"
+      },
+      "ToolUiSchema-Input": {
         "properties": {
           "schema_version": {
             "type": "string",
@@ -10581,7 +12443,7 @@
           },
           "sections": {
             "items": {
-              "$ref": "#/components/schemas/ToolUiSection"
+              "$ref": "#/components/schemas/ToolUiSection-Input"
             },
             "type": "array",
             "maxItems": 100,
@@ -10589,7 +12451,7 @@
           },
           "actions": {
             "items": {
-              "$ref": "#/components/schemas/ToolUiAction"
+              "$ref": "#/components/schemas/ToolUiAction-Input"
             },
             "type": "array",
             "maxItems": 100,
@@ -10598,7 +12460,7 @@
           },
           "result_views": {
             "items": {
-              "$ref": "#/components/schemas/ToolUiResultView"
+              "$ref": "#/components/schemas/ToolUiResultView-Input"
             },
             "type": "array",
             "maxItems": 100,
@@ -10622,7 +12484,73 @@
         ],
         "title": "ToolUiSchema"
       },
-      "ToolUiSection": {
+      "ToolUiSchema-Output": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "pskit.tool-ui.v1",
+            "title": "Schema Version",
+            "default": "pskit.tool-ui.v1"
+          },
+          "product": {
+            "$ref": "#/components/schemas/ToolUiProduct"
+          },
+          "page": {
+            "$ref": "#/components/schemas/ToolUiPageLayout"
+          },
+          "state": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "maxProperties": 100,
+            "title": "State"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiSection-Output"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Sections"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiAction-Output"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Actions"
+          },
+          "result_views": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiResultView-Output"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Result Views"
+          },
+          "handoffs": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiHandoff"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Handoffs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product",
+          "page",
+          "actions"
+        ],
+        "title": "ToolUiSchema"
+      },
+      "ToolUiSection-Input": {
         "properties": {
           "id": {
             "type": "string",
@@ -10645,7 +12573,7 @@
           "visible_when": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ToolUiCondition"
+                "$ref": "#/components/schemas/ToolUiCondition-Input"
               },
               {
                 "type": "null"
@@ -10654,7 +12582,56 @@
           },
           "fields": {
             "items": {
-              "$ref": "#/components/schemas/ToolUiField"
+              "$ref": "#/components/schemas/ToolUiField-Input"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Fields"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "fields"
+        ],
+        "title": "ToolUiSection"
+      },
+      "ToolUiSection-Output": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Id"
+          },
+          "title": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "visible_when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolUiCondition-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiField-Output"
             },
             "type": "array",
             "maxItems": 100,

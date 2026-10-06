@@ -80,6 +80,7 @@ class Settings:
     model_policy_mode: Literal["legacy", "managed"] = "legacy"
     admin_service_endpoints_json: str = "{}"
     admin_service_credentials_json: str = "{}"
+    admin_mcp_network_zones_json: str = "{}"
     anonymous_enabled: bool | None = None
     anonymous_captcha_required: bool = False
     anonymous_rate_secret: str = ""
@@ -176,6 +177,9 @@ class Settings:
             model_policy_mode=os.getenv("RESEARCH_AGENT_MODEL_POLICY_MODE", "legacy"),
             admin_service_endpoints_json=os.getenv("RESEARCH_AGENT_ADMIN_SERVICE_ENDPOINTS_JSON", "{}"),
             admin_service_credentials_json=os.getenv("RESEARCH_AGENT_ADMIN_SERVICE_CREDENTIALS_JSON", "{}"),
+            admin_mcp_network_zones_json=os.getenv(
+                "RESEARCH_AGENT_ADMIN_MCP_NETWORK_ZONES_JSON", "{}"
+            ),
             anonymous_enabled=(None if "RESEARCH_AGENT_ANONYMOUS_ENABLED" not in os.environ
                                else os.getenv("RESEARCH_AGENT_ANONYMOUS_ENABLED", "").lower()
                                in {"1", "true", "yes"}),

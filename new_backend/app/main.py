@@ -33,6 +33,7 @@ from app.api import (
     admin_models,
     admin_operations,
     admin_services,
+    admin_tool_products,
     auth,
     capabilities,
     catalog,
@@ -54,8 +55,10 @@ from app.config import Settings
 from app.db.postgres import PostgresDatabase
 from app.domain.admin.audit import AdminOperations
 from app.domain.admin.model_policy import ModelPolicy
+from app.domain.admin.qualification import McpQualification
 from app.domain.admin.releases import ConfigReleaseService
 from app.domain.admin.roles import AdminStore
+from app.domain.admin.service_endpoints import ApprovedEndpointPolicy
 from app.domain.auth_abuse import AuthAbuseGuard
 from app.domain.catalog import CatalogStore
 from app.domain.conversation import ConversationStore
@@ -136,6 +139,17 @@ def create_app(
             ):
                 raise ValueError(f"{name} contains an invalid approved reference")
         approved_references[kind] = references
+    try:
+        admin_mcp_network_zones = json.loads(settings.admin_mcp_network_zones_json)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(
+            "RESEARCH_AGENT_ADMIN_MCP_NETWORK_ZONES_JSON must contain a JSON object"
+        ) from exc
+    if not isinstance(admin_mcp_network_zones, dict):
+        raise ValueError(  # noqa: TRY004 — invalid environment configuration
+            "RESEARCH_AGENT_ADMIN_MCP_NETWORK_ZONES_JSON must contain a JSON object"
+        )
+    endpoint_policy = ApprovedEndpointPolicy(admin_mcp_network_zones)
     af3_executor = settings.effective_af3_executor()
     mcp_executor = settings.effective_mcp_executor()
     if af3_executor not in {"mock", "callback", "disabled"}:
@@ -420,6 +434,17 @@ def create_app(
         if app.state.tool_product_repository is not None
         else None
     )
+    app.state.mcp_qualification = (
+        McpQualification(
+            database,
+            app.state.tool_product_repository,
+            endpoint_policy,
+            credential_refs=approved_references["credentials"],
+            timeout_seconds=min(settings.mcp_timeout_seconds, 30),
+        )
+        if database is not None
+        else None
+    )
     app.state.auth_guard = configured_auth_guard
     app.state.auth_protection = AuthProtection(
         guard=configured_auth_guard,
@@ -683,6 +708,7 @@ def create_app(
     app.include_router(admin_models.router)
     app.include_router(admin_services.router)
     app.include_router(admin_operations.router)
+    app.include_router(admin_tool_products.router)
     app.include_router(sandbox_files.router)
     app.include_router(tool_products.router)
     app.include_router(health.router)

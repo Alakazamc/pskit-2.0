@@ -21,6 +21,17 @@ CREATE TABLE mcp_service_revisions (
     PRIMARY KEY (service_id, revision)
 );
 
+CREATE TABLE mcp_probe_snapshots (
+    probe_id text PRIMARY KEY,
+    endpoint_id text NOT NULL REFERENCES mcp_service_endpoints(endpoint_id),
+    service_id text NOT NULL,
+    service_revision integer NOT NULL,
+    snapshot_json jsonb NOT NULL,
+    checked_at timestamptz NOT NULL,
+    FOREIGN KEY (service_id, service_revision)
+        REFERENCES mcp_service_revisions(service_id, revision)
+);
+
 CREATE TABLE mcp_discovery_snapshots (
     discovery_id text PRIMARY KEY,
     service_id text NOT NULL,

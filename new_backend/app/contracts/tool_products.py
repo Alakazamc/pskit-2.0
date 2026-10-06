@@ -8,7 +8,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.contracts.catalog import ArtifactRef
-from app.contracts.compute import UsageReport
+from app.contracts.compute import Metric, UsageReport
 
 Identifier = Annotated[str, Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$")]
 JsonSchema = dict[str, Any]
@@ -245,6 +245,8 @@ class CapabilityBinding(ToolProductContract):
     remote_output_schema: JsonSchema
     result_schema: JsonSchema
     result_mapping: ResultMapping
+    required_usage: list[Metric] = Field(default_factory=list)
+    cancellation: Literal["none", "cooperative", "confirmed_stop"] = "cooperative"
 
     @model_validator(mode="after")
     def adapter_tools(self):
@@ -354,6 +356,76 @@ class QualificationCaseResult(ToolProductContract):
     protocol_assertions: dict[str, bool] = Field(default_factory=dict)
     scientific_assertions: dict[str, bool] = Field(default_factory=dict)
     message: str = Field(default="", max_length=2000)
+
+
+class ResultAssertion(ToolProductContract):
+    pointer: str
+    predicate: Literal["equals", "exists", "min_items", "maximum", "minimum"]
+    value: Any = None
+
+
+class AcceptanceCase(ToolProductContract):
+    case_id: Identifier
+    action_id: Identifier
+    arguments: dict[str, Any]
+    invalid_arguments: list[dict[str, Any]] = Field(default_factory=list, max_length=50)
+    result_assertions: list[ResultAssertion] = Field(default_factory=list, max_length=100)
+    required_progress_types: list[str] = Field(default_factory=list, max_length=50)
+    check_idempotency: bool = True
+    check_cancellation: bool = False
+
+
+class AcceptanceSuite(ToolProductContract):
+    suite_id: Identifier
+    revision: int = Field(gt=0)
+    cases: list[AcceptanceCase] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def unique_case_ids(self):
+        ids = [case.case_id for case in self.cases]
+        if len(ids) != len(set(ids)):
+            raise ValueError("acceptance case IDs must be unique")
+        return self
+
+
+class DiscoveredTool(ToolProductContract):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=5000)
+    input_schema: JsonSchema
+    remote_output_schema: JsonSchema
+
+
+class EndpointSnapshot(ToolProductContract):
+    uri: str
+    hostname: str
+    port: int = Field(ge=1, le=65535)
+    scheme: Literal["http", "https"]
+    network_zone: str
+    addresses: list[str] = Field(min_length=1, max_length=32)
+
+
+class ProbeSnapshot(ToolProductContract):
+    probe_id: Identifier
+    endpoint_id: Identifier
+    service_id: Identifier
+    service_revision: int = Field(gt=0)
+    uri: str
+    transport: Literal["streamable_http", "sse"]
+    credential_ref: str | None = None
+    network_zone: str
+    protocol: dict[str, Any]
+    addresses: list[str]
+    checked_at: datetime
+
+
+class DiscoverySnapshot(ToolProductContract):
+    discovery_id: Identifier
+    service_id: Identifier
+    service_revision: int = Field(gt=0)
+    protocol: dict[str, Any]
+    tools: list[DiscoveredTool]
+    digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    discovered_at: datetime
 
 
 class QualificationReport(ToolProductContract):
