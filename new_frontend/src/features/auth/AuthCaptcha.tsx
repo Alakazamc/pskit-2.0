@@ -13,6 +13,7 @@ type TurnstileApi = {
     sitekey: string;
     action: AuthCaptchaAction;
     theme: "auto";
+    size: "flexible";
     callback: (token: string) => void;
     "expired-callback": () => void;
     "error-callback": () => void;
@@ -48,6 +49,7 @@ export function AuthCaptcha({ siteKey, action, resetSignal, onToken, onUnavailab
         sitekey: siteKey,
         action,
         theme: "auto",
+        size: "flexible",
         callback: (token) => onTokenRef.current(token),
         "expired-callback": () => onTokenRef.current(null),
         "error-callback": () => {

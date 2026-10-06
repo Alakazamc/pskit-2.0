@@ -14,7 +14,12 @@ it("binds a Turnstile widget to the server-defined action and resets tokens", ()
 
   const view = render(<AuthCaptcha siteKey="site" action="signup" resetSignal={0}
     onToken={onToken} />);
-  expect(options).toMatchObject({ sitekey: "site", action: "signup", theme: "auto" });
+  expect(options).toMatchObject({
+    sitekey: "site",
+    action: "signup",
+    theme: "auto",
+    size: "flexible",
+  });
   (options.callback as (token: string) => void)("proof");
   expect(onToken).toHaveBeenCalledWith("proof");
   (options["expired-callback"] as () => void)();

@@ -6,7 +6,6 @@ import type { AuthSessionResponse, ResearchApi, UserIdentity } from "../../api/t
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { errorTranslationKey } from "../../i18n/errors";
 import type { TranslationKey } from "../../i18n/translations";
-import moleculeArtwork from "../../assets/login-molecules.png";
 import { AuthCaptcha, type AuthCaptchaAction } from "./AuthCaptcha";
 import { readAuthCooldown, writeAuthCooldown, type AuthMailAction } from "./authCooldown";
 
@@ -149,14 +148,9 @@ export function LoginPage({ api, onLogin }: {
   ));
 
   return <main className={`login-page ${theme}`}>
-    <section className="login-hero" aria-label="PSKit Research">
-      <div className="login-brand"><div className="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M16 4c1.5 7.1 4.9 10.5 12 12-7.1 1.5-10.5 4.9-12 12C14.5 20.9 11.1 17.5 4 16 11.1 14.5 14.5 11.1 16 4Z" /></svg></div><span>PSKit Research</span></div>
-      <img className="login-artwork" src={moleculeArtwork} alt="" aria-hidden="true" />
-      <div className="login-story"><span className="login-eyebrow">{t("auth.companion")}</span><h1>{t("auth.heroFirst")}<br />{t("auth.heroBridge")}<em>{t("auth.heroHighlight")}</em></h1><p>{t("auth.heroDescription")}</p></div>
-      <div className="login-mantra" aria-hidden="true">{language === "en" ? <>FASTER IDEAS.<br />DEEPER INSIGHTS.<br />REAL PROGRESS.</> : <>更快的想法。<br />更深的洞见。<br />真实的进展。</>}</div>
-    </section>
+    <div className="login-header-controls"><button type="button" className="login-theme-toggle" aria-label={t(theme === "dark" ? "theme.switchToLight" : "theme.switchToDark")} title={t(theme === "dark" ? "theme.switchToLight" : "theme.switchToDark")} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? <Sun size={19} aria-hidden="true" /> : <Moon size={19} aria-hidden="true" />}</button><div className="login-language-switch" role="group" aria-label={t("language.label")}><Globe2 size={18} aria-hidden="true" /><button type="button" aria-label="English" aria-pressed={language === "en"} onClick={() => setLanguage("en")}>EN</button><button type="button" aria-label="简体中文" aria-pressed={language === "zh"} onClick={() => setLanguage("zh")}>中文</button></div></div>
     <section className="login-auth" aria-label={t("auth.welcome")}>
-      <div className="login-header-controls"><button type="button" className="login-theme-toggle" aria-label={t(theme === "dark" ? "theme.switchToLight" : "theme.switchToDark")} title={t(theme === "dark" ? "theme.switchToLight" : "theme.switchToDark")} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? <Sun size={19} aria-hidden="true" /> : <Moon size={19} aria-hidden="true" />}</button><div className="login-language-switch" role="group" aria-label={t("language.label")}><Globe2 size={18} aria-hidden="true" /><button type="button" aria-label="English" aria-pressed={language === "en"} onClick={() => setLanguage("en")}>EN</button><button type="button" aria-label="简体中文" aria-pressed={language === "zh"} onClick={() => setLanguage("zh")}>中文</button></div></div>
+      <div className="login-brand"><div className="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M16 4c1.5 7.1 4.9 10.5 12 12-7.1 1.5-10.5 4.9-12 12C14.5 20.9 11.1 17.5 4 16 11.1 14.5 14.5 11.1 16 4Z" /></svg></div><span>PSKit Research</span></div>
       <div className="login-card"><h2>{t(mode === "login" ? "auth.welcome" : mode === "signup" ? "auth.signupTitle" : mode === "recover" ? "auth.recoveryTitle" : mode === "verify" ? "auth.verifyTitle" : "auth.newPasswordTitle")}</h2><p className="login-subtitle">{t(mode === "verify" ? "auth.checkEmail" : "auth.subtitle")}</p>
         <form onSubmit={submit}>
           {mode !== "newPassword" && <div className="login-field"><label htmlFor="login-email">{t("auth.email")}</label><input id="login-email" type="email" autoComplete="email" placeholder="you@example.org" value={email} onChange={(event) => setEmail(event.target.value)} required /></div>}
