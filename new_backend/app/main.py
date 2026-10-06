@@ -457,15 +457,19 @@ def create_app(
     )
     app.state.compute_jobs = None
     app.state.compute_leases = None
+    app.state.compute_events = None
     if settings.compute_enabled:
         if database is None or settings.agent_runtime != "pi":
             raise ValueError(
                 "Generic compute requires live PostgreSQL and the persistent Pi runtime"
             )
         from app.contracts.compute import ComputeServiceManifest
+        from app.domain.compute.events import ComputeEvents
         from app.domain.compute.jobs import ComputeJobs
 
         app.state.compute_jobs = ComputeJobs(database)
+        app.state.compute_events = ComputeEvents(database)
+        app.state.compute_jobs.events = app.state.compute_events
         for manifest in json.loads(settings.compute_services_json):
             app.state.compute_jobs.catalog.register(ComputeServiceManifest.model_validate(manifest))
     app.state.tool_run_gateway = (
@@ -474,6 +478,7 @@ def create_app(
             app.state.tool_product_repository,
             app.state.tool_product_registry,
             app.state.compute_jobs,
+            compute_events=app.state.compute_events,
         )
         if app.state.compute_jobs is not None
         else None
@@ -682,7 +687,12 @@ def create_app(
     if app.state.compute_jobs is not None:
         from app.domain.compute.leases import ComputeLeases
 
-        app.state.compute_leases = ComputeLeases(database, app.state.compute_jobs.ledger)
+        app.state.compute_leases = ComputeLeases(
+            database,
+            app.state.compute_jobs.ledger,
+            events=app.state.compute_events,
+            tool_runs=app.state.tool_run_gateway,
+        )
         app.state.compute_jobs.admin_concurrency_limit_for = (
             app.state.admin_store.concurrency_limit_for
         )

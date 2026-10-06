@@ -13,9 +13,20 @@ from app.domain.compute.metering import validate_report
 
 
 class ComputeLeases:
-    def __init__(self, database, ledger, *, lease_seconds=60):
+    def __init__(
+        self,
+        database,
+        ledger,
+        *,
+        lease_seconds=60,
+        events=None,
+        tool_runs=None,
+    ):
         self.database, self.ledger = database, ledger
         self.jobs = ComputeJobs(database, ledger)
+        self.events = events
+        self.jobs.events = events
+        self.tool_runs = tool_runs
         self.lease_seconds = lease_seconds
 
     def _grant(self, connection, job_id):
@@ -108,6 +119,21 @@ class ComputeLeases:
                                    (now+timedelta(seconds=job.capability.max_execution_seconds), job_id))
                 for gpu in free[:job.capability.gpu_count]:
                     connection.execute("INSERT INTO compute_device_leases VALUES (%s,%s)", (gpu, job_id))
+                if self.events is not None:
+                    self.events.append(
+                        job_id,
+                        "run.started",
+                        {"job_id": job_id, "worker_id": payload.worker_id},
+                        connection=connection,
+                        key="run:started",
+                    )
+                    self.events.append(
+                        job_id,
+                        "stage.started",
+                        {"job_id": job_id, "worker_id": payload.worker_id},
+                        connection=connection,
+                        key="stage:started",
+                    )
                 return self._grant(connection, job_id)
         return None
 
@@ -142,6 +168,22 @@ class ComputeLeases:
                                (expiry.isoformat(), payload.progress,
                                 "cancelling" if overdue else job.status,
                                 "pending_reconciliation" if overdue else job.accounting_status, job_id))
+            if self.events is not None:
+                self.events.append(
+                    job_id,
+                    "stage.progress",
+                    {"job_id": job_id, "progress": payload.progress},
+                    connection=connection,
+                    key=f"heartbeat:{payload.seq}:progress",
+                )
+                if payload.usage is not None:
+                    self.events.append(
+                        job_id,
+                        "usage.updated",
+                        {"job_id": job_id, "usage": payload.usage.model_dump(mode="json")},
+                        connection=connection,
+                        key=f"heartbeat:{payload.seq}:usage",
+                    )
             return GrantUpdate(stop_at=grant.stop_at, lease_expires_at=expiry,
                                cancel_requested=overdue or job.status == "cancelling")
 
@@ -189,6 +231,36 @@ class ComputeLeases:
                 connection.execute("DELETE FROM compute_device_leases WHERE job_id=%s", (job_id,))
                 connection.execute("INSERT INTO compute_outbox (job_id,run_id) VALUES (%s,%s) "
                                    "ON CONFLICT(job_id) DO NOTHING", (job_id, job.run_id))
+                if self.events is not None:
+                    for artifact in payload.report.artifacts:
+                        self.events.append(
+                            job_id,
+                            "artifact.created",
+                            {"job_id": job_id, "artifact": artifact.model_dump(mode="json")},
+                            connection=connection,
+                            key=f"result:{payload.seq}:artifact:{artifact.id}",
+                        )
+                    self.events.append(
+                        job_id,
+                        "usage.updated",
+                        {"job_id": job_id, "usage": payload.report.usage.model_dump(mode="json")},
+                        connection=connection,
+                        key=f"result:{payload.seq}:usage",
+                    )
+                    self.events.append(
+                        job_id,
+                        "stage.completed",
+                        {"job_id": job_id, "status": status},
+                        connection=connection,
+                        key=f"result:{payload.seq}:terminal",
+                    )
+                if self.tool_runs is not None:
+                    self.tool_runs.advance_completed_steps(
+                        job_id,
+                        payload.report,
+                        status,
+                        connection=connection,
+                    )
             else:
                 status = "pending"
             connection.execute("UPDATE compute_job_data SET report_json=%s,latest_seq=%s WHERE job_id=%s",

@@ -1,14 +1,17 @@
 """Secret-free public Tool Product discovery endpoints."""
 
+import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.auth import CurrentUserDep
 from app.contracts.tool_products import (
     PublishedToolProduct,
     ToolProductPage,
+    ToolRunEvent,
     ToolRunHandoffContext,
     ToolRunSnapshot,
 )
@@ -126,6 +129,37 @@ def get_tool_run(
     if run is None:
         raise HTTPException(404, detail={"code": "TOOL_RUN_NOT_FOUND"})
     return run
+
+
+@tool_run_router.get("/{run_id}/events", response_model=list[ToolRunEvent])
+def get_tool_run_events(
+    run_id: str,
+    user: CurrentUserDep,
+    request: Request,
+    cursor: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    accept: Annotated[str | None, Header()] = None,
+) -> object:
+    gateway = get_run_gateway(request)
+    if gateway.compute_events is None:
+        raise HTTPException(503, detail={"code": "TOOL_RUN_EVENTS_UNAVAILABLE"})
+    events = gateway.compute_events.after(run_id, user.id, cursor, limit)
+    if accept and "text/event-stream" in accept.lower():
+        def encoded_events():
+            for event in events:
+                data = json.dumps(
+                    event.model_dump(mode="json"),
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                yield f"id: {event.sequence}\nevent: {event.type}\ndata: {data}\n\n"
+
+        return StreamingResponse(
+            encoded_events(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
+    return events
 
 
 @tool_run_router.post("/{run_id}/cancel")

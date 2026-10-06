@@ -16,6 +16,7 @@ class ComputeJobs:
         self.database = database
         self.catalog = ComputeCatalog(database)
         self.ledger = ledger
+        self.events = None
 
     def submit(
         self,
@@ -123,8 +124,31 @@ class ComputeJobs:
                 self.ledger.release(connection, job_id)
             connection.execute("INSERT INTO compute_outbox (job_id,run_id) VALUES (%s,%s) "
                                "ON CONFLICT(job_id) DO NOTHING", (job_id, job.run_id))
+            if self.events is not None:
+                self.events.append(
+                    job_id,
+                    "stage.completed",
+                    {"job_id": job_id, "status": "cancelled"},
+                    connection=connection,
+                    key="cancelled-before-start",
+                )
+                self.events.append(
+                    job_id,
+                    "run.cancelled",
+                    {"job_id": job_id},
+                    connection=connection,
+                    key="run:cancelled",
+                )
         elif job.status == "running":
             connection.execute("UPDATE agent_jobs SET status='cancelling' WHERE id=%s", (job_id,))
+            if self.events is not None:
+                self.events.append(
+                    job_id,
+                    "run.cancelling",
+                    {"job_id": job_id},
+                    connection=connection,
+                    key="run:cancelling",
+                )
         return self.get(user_id, job_id, connection=connection)
 
     def history(self, user_id, capability_id=None, limit=30):

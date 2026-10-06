@@ -16,11 +16,20 @@ from app.domain.tool_products.registry import ToolProductNotAvailable
 
 
 class ToolRunGateway:
-    def __init__(self, database, repository, registry, compute_jobs) -> None:
+    def __init__(
+        self,
+        database,
+        repository,
+        registry,
+        compute_jobs,
+        *,
+        compute_events=None,
+    ) -> None:
         self.database = database
         self.repository = repository
         self.registry = registry
         self.compute_jobs = compute_jobs
+        self.compute_events = compute_events
 
     def _snapshot(self, user_id: str, run_id: str, *, connection) -> ToolRunSnapshot | None:
         row = connection.execute(
@@ -180,7 +189,141 @@ class ToolRunGateway:
                     Jsonb(arguments),
                 ),
             )
+            if self.compute_events is not None:
+                self.compute_events.append(
+                    compute.id,
+                    "run.queued",
+                    {"job_id": compute.id, "step": 0, "binding_id": binding["binding_id"]},
+                    connection=connection,
+                    key="run:queued",
+                )
             return self._snapshot(user_id, run_id, connection=connection)
+
+    def advance_completed_steps(self, job_id, report, status: str, *, connection) -> None:
+        """Project a terminal compute result and submit the next immutable step once."""
+        row = connection.execute(
+            "SELECT r.run_id,r.user_id,r.release_id,r.action_id,s.step_id,s.ordinal "
+            "FROM tool_product_run_steps s JOIN tool_product_runs r ON r.run_id=s.run_id "
+            "WHERE s.compute_job_id=%s FOR UPDATE OF r,s",
+            (job_id,),
+        ).fetchone()
+        if row is None:
+            return
+        run_id, user_id, release_id, action_id, step_id, ordinal = row
+        artifacts = [item.model_dump(mode="json") for item in getattr(report, "artifacts", [])]
+        usage = report.usage.model_dump(mode="json")
+        result = report.result if isinstance(report, Completed) else {
+            "error": report.error.model_dump(mode="json")
+        }
+        connection.execute(
+            "UPDATE tool_product_run_steps SET status=%s,result_json=%s "
+            "WHERE run_id=%s AND step_id=%s",
+            (status, Jsonb(result), run_id, step_id),
+        )
+        for artifact in artifacts:
+            connection.execute(
+                "INSERT INTO tool_product_run_artifacts "
+                "(run_id,artifact_id,step_id,metadata_json) VALUES (%s,%s,%s,%s) "
+                "ON CONFLICT(run_id,artifact_id) DO UPDATE SET "
+                "step_id=excluded.step_id,metadata_json=excluded.metadata_json",
+                (run_id, artifact["id"], step_id, Jsonb(artifact)),
+            )
+        connection.execute(
+            "INSERT INTO tool_product_run_usage (run_id,step_id,usage_json,source) "
+            "VALUES (%s,%s,%s,%s) ON CONFLICT(run_id,step_id) DO UPDATE SET "
+            "usage_json=excluded.usage_json,source=excluded.source,recorded_at=now()",
+            (run_id, step_id, Jsonb(usage), usage["source"]),
+        )
+        if status in {"failed", "cancelled"}:
+            connection.execute(
+                "UPDATE tool_product_runs SET status=%s,progress=100,result_json=%s,"
+                "artifacts_json=%s,usage_json=%s,updated_at=%s WHERE run_id=%s",
+                (status, Jsonb(result), Jsonb(artifacts), Jsonb(usage), utcnow(), run_id),
+            )
+            if self.compute_events is not None:
+                event_type = "run.cancelled" if status == "cancelled" else "run.failed"
+                self.compute_events.append(
+                    job_id,
+                    event_type,
+                    {"job_id": job_id, "error": result.get("error")},
+                    connection=connection,
+                    key=f"run:{status}",
+                )
+            return
+
+        release = self.repository.release_snapshot(release_id, connection=connection)
+        action = next(item for item in release["draft"]["actions"] if item["id"] == action_id)
+        next_ordinal = ordinal + 1
+        binding_ids = action["binding_ids"]
+        if next_ordinal < len(binding_ids):
+            binding_id = binding_ids[next_ordinal]
+            binding = next(
+                item for item in release["draft"]["bindings"]
+                if item["binding_id"] == binding_id
+            )
+            found = self.compute_jobs.catalog.get(
+                user_id,
+                binding["capability_id"],
+                binding["capability_version"],
+                connection=connection,
+            )
+            if found is None or found[0] != binding["service_id"]:
+                raise LookupError("CAPABILITY_NOT_FOUND")
+            _service_id, capability = found
+            compute = self.compute_jobs.submit(
+                user_id,
+                ComputeJobRequest(
+                    capability_id=capability.id,
+                    version=capability.version,
+                    arguments=report.result,
+                    budget=capability.max_budget,
+                ),
+                f"tool-product:{run_id}:{next_ordinal}",
+                connection=connection,
+            )
+            connection.execute(
+                "INSERT INTO tool_product_run_steps "
+                "(run_id,step_id,ordinal,binding_id,compute_job_id,status,input_json) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(run_id,ordinal) DO NOTHING",
+                (
+                    run_id,
+                    f"step-{uuid.uuid4()}",
+                    next_ordinal,
+                    binding_id,
+                    compute.id,
+                    compute.status,
+                    Jsonb(report.result),
+                ),
+            )
+            progress = int(next_ordinal * 100 / len(binding_ids))
+            connection.execute(
+                "UPDATE tool_product_runs SET status='queued',progress=%s,updated_at=%s "
+                "WHERE run_id=%s",
+                (progress, utcnow(), run_id),
+            )
+            if self.compute_events is not None:
+                self.compute_events.append(
+                    compute.id,
+                    "run.queued",
+                    {"job_id": compute.id, "step": next_ordinal, "binding_id": binding_id},
+                    connection=connection,
+                    key=f"stage:{next_ordinal}:queued",
+                )
+            return
+
+        connection.execute(
+            "UPDATE tool_product_runs SET status='completed',progress=100,result_json=%s,"
+            "artifacts_json=%s,usage_json=%s,updated_at=%s WHERE run_id=%s",
+            (Jsonb(result), Jsonb(artifacts), Jsonb(usage), utcnow(), run_id),
+        )
+        if self.compute_events is not None:
+            self.compute_events.append(
+                job_id,
+                "run.completed",
+                {"job_id": job_id},
+                connection=connection,
+                key="run:completed",
+            )
 
     def start_by_slug(
         self,

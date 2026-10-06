@@ -6345,6 +6345,96 @@
         }
       }
     },
+    "/api/v1/tool-runs/{run_id}/events": {
+      "get": {
+        "tags": [
+          "tool-product-runs"
+        ],
+        "summary": "Get Tool Run Events",
+        "operationId": "get_tool_run_events_api_v1_tool_runs__run_id__events_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "accept",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Accept"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ToolRunEvent"
+                  },
+                  "title": "Response Get Tool Run Events Api V1 Tool Runs  Run Id  Events Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tool-runs/{run_id}/cancel": {
       "post": {
         "tags": [
@@ -11833,6 +11923,63 @@
           "created_at"
         ],
         "title": "ToolRun"
+      },
+      "ToolRunEvent": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Event Id"
+          },
+          "run_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Run Id"
+          },
+          "sequence": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Sequence"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "run.queued",
+              "run.started",
+              "stage.started",
+              "stage.progress",
+              "artifact.created",
+              "usage.updated",
+              "stage.completed",
+              "run.cancelling",
+              "run.completed",
+              "run.failed",
+              "run.cancelled"
+            ],
+            "title": "Type"
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event_id",
+          "run_id",
+          "sequence",
+          "type",
+          "data",
+          "created_at"
+        ],
+        "title": "ToolRunEvent"
       },
       "ToolRunHandoffContext": {
         "properties": {
