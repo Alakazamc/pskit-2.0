@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Viewer } from "molstar/lib/apps/viewer/app";
+import type { PluginUIContext } from "molstar/lib/mol-plugin-ui/context";
+import { Asset } from "molstar/lib/mol-util/assets";
 import darkThemeUrl from "molstar/build/viewer/theme/dark.css?url";
 import lightThemeUrl from "molstar/build/viewer/theme/light.css?url";
 import { useLanguage } from "../../i18n/LanguageProvider";
+import { createStructureViewer } from "./createStructureViewer";
 
 export type StructureSource =
   | { type: "pdb"; id: string }
@@ -18,7 +20,7 @@ export default function MolstarCanvas({ source, theme }: {
 
   useEffect(() => {
     let cancelled = false;
-    let viewer: Viewer | null = null;
+    let viewer: PluginUIContext | null = null;
     const stylesheet = document.createElement("link");
     stylesheet.rel = "stylesheet";
     stylesheet.href = theme === "dark" ? darkThemeUrl : lightThemeUrl;
@@ -38,26 +40,20 @@ export default function MolstarCanvas({ source, theme }: {
         return;
       }
       context.getExtension("WEBGL_lose_context")?.loseContext();
-      viewer = await Viewer.create(host.current, {
-        layoutIsExpanded: false,
-        layoutShowControls: false,
-        layoutShowRemoteState: false,
-        layoutShowSequence: false,
-        layoutShowLog: false,
-        layoutShowLeftPanel: false,
-        viewportShowExpand: false,
-        viewportShowToggleFullscreen: false,
-        viewportShowSelectionMode: false,
-        viewportShowAnimation: false,
-        viewportBackgroundColor: theme === "dark" ? "#202020" : "#f8f8f8",
-        pdbProvider: "rcsb",
-      });
+      viewer = await createStructureViewer(host.current, theme);
       if (cancelled) {
         viewer.dispose();
         return;
       }
-      if (source.type === "pdb") await viewer.loadPdb(source.id);
-      else await viewer.loadStructureFromData(content!, source.format, { dataLabel: source.file.name });
+      const data = source.type === "pdb"
+        ? await viewer.builders.data.download({
+          url: Asset.Url(`https://models.rcsb.org/${source.id.toUpperCase()}.bcif`),
+          isBinary: true,
+          label: `RCSB PDB: ${source.id.toUpperCase()} (bcif)`,
+        }, { state: { isGhost: true } })
+        : await viewer.builders.data.rawData({ data: content!, label: source.file.name });
+      const trajectory = await viewer.builders.structure.parseTrajectory(data, source.type === "pdb" ? "mmcif" : source.format);
+      await viewer.builders.structure.hierarchy.applyPreset(trajectory, "default");
       if (!cancelled) setStatus("ready");
     };
     void load().catch(() => { if (!cancelled) setStatus("error"); });

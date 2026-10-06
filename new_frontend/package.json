@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "build": "tsc --noEmit && vite build"
+    "build": "tsc --noEmit && vite build && node scripts/verify-molstar-bundle.mjs"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.15.22",
