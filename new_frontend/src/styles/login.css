@@ -23,18 +23,18 @@
   font-family: Inter, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 .login-page.dark {
-  --login-accent: #63c5ae;
-  --login-accent-hover: #4aab96;
-  --login-text: #f3f7f5;
-  --login-muted: #afbcba;
-  --login-subtle: #839391;
-  --login-border: rgb(182 220 211 / 17%);
-  --login-input: rgb(12 28 30 / 75%);
-  --login-panel: rgb(8 24 27 / 82%);
-  --login-controls: rgb(8 24 27 / 68%);
-  --login-shadow: 0 30px 90px rgb(0 6 8 / 46%);
+  --login-accent: #8b9098;
+  --login-accent-hover: #9ca1a8;
+  --login-text: #f4f4f5;
+  --login-muted: #b1b3b8;
+  --login-subtle: #878a90;
+  --login-border: rgb(255 255 255 / 14%);
+  --login-input: rgb(34 35 38 / 78%);
+  --login-panel: rgb(24 25 27 / 86%);
+  --login-controls: rgb(24 25 27 / 74%);
+  --login-shadow: 0 30px 90px rgb(0 0 0 / 48%);
   --login-scene: url("../assets/login-biology-night.webp");
-  background: #082227;
+  background: #18191b;
 }
 @supports (background-image: image-set(url("") type("image/avif"))) {
   .login-page {
@@ -61,12 +61,15 @@
   z-index: -2;
   background: var(--login-scene) center / cover no-repeat;
 }
+.login-page.dark::before {
+  filter: grayscale(1) saturate(0) brightness(.7) contrast(1.04);
+}
 .login-page::after {
   z-index: -1;
   background: linear-gradient(90deg, rgb(248 250 246 / 42%) 0%, rgb(248 250 246 / 20%) 32%, transparent 56%);
 }
 .login-page.dark::after {
-  background: linear-gradient(90deg, rgb(1 17 20 / 42%) 0%, rgb(1 17 20 / 18%) 32%, transparent 56%);
+  background: linear-gradient(90deg, rgb(16 17 19 / 48%) 0%, rgb(16 17 19 / 20%) 32%, transparent 56%);
 }
 .login-page *,
 .login-page *::before,
@@ -245,6 +248,8 @@
   font-weight: 680;
 }
 .login-submit:hover { background: var(--login-accent-hover); }
+.login-page.dark .login-submit { background: #62676f; }
+.login-page.dark .login-submit:hover { background: #737982; }
 .login-submit:disabled { opacity: .6; cursor: wait; }
 .login-divider {
   display: flex;
@@ -343,7 +348,7 @@
     background: linear-gradient(180deg, rgb(248 250 246 / 18%) 0%, rgb(248 250 246 / 38%) 100%);
   }
   .login-page.dark::after {
-    background: linear-gradient(180deg, rgb(1 17 20 / 16%) 0%, rgb(1 17 20 / 38%) 100%);
+    background: linear-gradient(180deg, rgb(16 17 19 / 18%) 0%, rgb(16 17 19 / 44%) 100%);
   }
   .login-auth {
     width: min(420px, 100%);
@@ -378,5 +383,5 @@
   .login-page.light .login-auth,
   .login-page.light .login-header-controls { background: #fff; }
   .login-page.dark .login-auth,
-  .login-page.dark .login-header-controls { background: #0b2023; }
+  .login-page.dark .login-header-controls { background: #1b1c1f; }
 }

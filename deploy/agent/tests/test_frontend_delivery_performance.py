@@ -29,3 +29,14 @@ def test_public_nginx_compresses_text_and_caches_hashed_assets():
         assert "gzip_types text/css application/javascript application/json image/svg+xml;" in config
         assert 'add_header Cache-Control "public, max-age=31536000, immutable" always;' in config
 
+
+def test_dark_login_theme_uses_a_neutral_charcoal_palette():
+    css = (FRONTEND / "src/styles/login.css").read_text()
+
+    assert "--login-accent: #8b9098;" in css
+    assert "--login-panel: rgb(24 25 27 / 86%);" in css
+    assert "background: #18191b;" in css
+    assert "filter: grayscale(1) saturate(0) brightness(.7) contrast(1.04);" in css
+    assert "#63c5ae" not in css
+    assert "#4aab96" not in css
+
