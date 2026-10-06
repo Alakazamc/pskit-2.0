@@ -23,3 +23,12 @@ it("matches the Python approval response shape", () => {
   expectTypeOf<Awaited<ReturnType<import("./types").ResearchApi["decideApproval"]>>>()
     .toEqualTypeOf<Api.ApprovalDecisionResponse>();
 });
+
+it("keeps CAPTCHA scoped to protected mail actions", () => {
+  type HasCaptcha<T> = T extends { captcha_token?: string | null } ? true : false;
+
+  expectTypeOf<HasCaptcha<Api.SignupRequest>>().toEqualTypeOf<true>();
+  expectTypeOf<HasCaptcha<Api.EmailRequest>>().toEqualTypeOf<true>();
+  expectTypeOf<HasCaptcha<Api.EmailUpgradeRequest>>().toEqualTypeOf<true>();
+  expectTypeOf<HasCaptcha<Api.EmailUpgradeVerifyRequest>>().toEqualTypeOf<false>();
+});

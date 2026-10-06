@@ -1148,6 +1148,10 @@ export type EmailRequest = {
      * Email
      */
     email: string;
+    /**
+     * Captcha Token
+     */
+    captcha_token?: string | null;
 };
 
 /**
@@ -1158,6 +1162,10 @@ export type EmailUpgradeRequest = {
      * Email
      */
     email: string;
+    /**
+     * Captcha Token
+     */
+    captcha_token?: string | null;
 };
 
 /**
@@ -2213,6 +2221,10 @@ export type SignupRequest = {
      * Password
      */
     password: string;
+    /**
+     * Captcha Token
+     */
+    captcha_token?: string | null;
 };
 
 /**
@@ -3801,6 +3813,38 @@ export type ListArtifactsApiV1ArtifactsGetResponses = {
 };
 
 export type ListArtifactsApiV1ArtifactsGetResponse = ListArtifactsApiV1ArtifactsGetResponses[keyof ListArtifactsApiV1ArtifactsGetResponses];
+
+export type ListSessionArtifactsApiV1SessionsSessionIdArtifactsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: string;
+    };
+    query?: never;
+    url: '/api/v1/sessions/{session_id}/artifacts';
+};
+
+export type ListSessionArtifactsApiV1SessionsSessionIdArtifactsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSessionArtifactsApiV1SessionsSessionIdArtifactsGetError = ListSessionArtifactsApiV1SessionsSessionIdArtifactsGetErrors[keyof ListSessionArtifactsApiV1SessionsSessionIdArtifactsGetErrors];
+
+export type ListSessionArtifactsApiV1SessionsSessionIdArtifactsGetResponses = {
+    /**
+     * Response List Session Artifacts Api V1 Sessions  Session Id  Artifacts Get
+     *
+     * Successful Response
+     */
+    200: Array<ArtifactRef>;
+};
+
+export type ListSessionArtifactsApiV1SessionsSessionIdArtifactsGetResponse = ListSessionArtifactsApiV1SessionsSessionIdArtifactsGetResponses[keyof ListSessionArtifactsApiV1SessionsSessionIdArtifactsGetResponses];
 
 export type PreviewArtifactApiV1ArtifactsArtifactIdPreviewGetData = {
     body?: never;

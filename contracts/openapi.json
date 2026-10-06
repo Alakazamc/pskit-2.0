@@ -2024,6 +2024,58 @@
         ]
       }
     },
+    "/api/v1/sessions/{session_id}/artifacts": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "List Session Artifacts",
+        "description": "List only artifacts from an active conversation owned by the caller.",
+        "operationId": "list_session_artifacts_api_v1_sessions__session_id__artifacts_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArtifactRef"
+                  },
+                  "title": "Response List Session Artifacts Api V1 Sessions  Session Id  Artifacts Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/artifacts/{artifact_id}/preview": {
       "get": {
         "tags": [
@@ -7548,6 +7600,17 @@
             "type": "string",
             "minLength": 3,
             "title": "Email"
+          },
+          "captcha_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
           }
         },
         "type": "object",
@@ -7563,6 +7626,17 @@
             "maxLength": 320,
             "minLength": 3,
             "title": "Email"
+          },
+          "captcha_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
           }
         },
         "type": "object",
@@ -9364,6 +9438,17 @@
             "type": "string",
             "minLength": 8,
             "title": "Password"
+          },
+          "captcha_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
           }
         },
         "type": "object",

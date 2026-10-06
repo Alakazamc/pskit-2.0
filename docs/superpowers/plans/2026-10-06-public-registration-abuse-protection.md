@@ -325,17 +325,17 @@ git commit -m "feat: add auth captcha and retry countdowns"
 - Consumes: `X-PSKit-Client-IP`, backend/Turnstile settings, and GoTrue environment variables.
 - Produces: dry-run Nginx auth zones with JSON 429, loopback-safe proxy headers, explicit GoTrue limits, and operational enable/disable procedures.
 
-- [ ] **Step 1: Write failing Compose and Nginx render tests**
+- [x] **Step 1: Write failing Compose and Nginx render tests**
 
 Assert exact GoTrue values, secret placeholders without printed secret values, backend Turnstile/HMAC/trusted-proxy settings, production startup failure before `up -d` when required values are absent/placeholders, staging generation/preflight isolation, per-route auth zones in active/legacy/staging templates, global mail zone, `limit_req_dry_run on`, `$remote_addr` overwrite, JSON 429 and `Retry-After: 60`, direct verify header, and no auth limits on SSE/uploads/normal APIs/private admin/old site. Assert installer still executes `nginx -t` and restores the previous config on failure. The Docker-backed Nginx test must show forged client headers are overwritten, the signup burst eventually receives JSON 429, and an ordinary API path remains unaffected.
 
-- [ ] **Step 2: Run focused tests and confirm RED**
+- [x] **Step 2: Run focused tests and confirm RED**
 
 Run: `python -m pytest deploy/agent/tests/test_cloud_config.py deploy/agent/tests/test_aliyun_return_ingress.py deploy/agent/tests/test_split_cloud_ingress.py deploy/agent/tests/test_staging_compose.py deploy/agent/tests/test_prepare_staging.py deploy/agent/tests/test_staging_stack.py deploy/agent/tests/test_staging_nginx.py deploy/agent/tests/test_single_postgres_stack.py deploy/agent/tests/test_auth_ingress_limits.py deploy/agent/tests/test_host_nginx_auth_limits.py -q`
 
 Expected: FAIL because explicit GoTrue variables and route zones are absent.
 
-- [ ] **Step 3: Add explicit inner limits and dry-run edge controls**
+- [x] **Step 3: Add explicit inner limits and dry-run edge controls**
 
 Set:
 
@@ -350,13 +350,13 @@ GOTRUE_RATE_LIMIT_HEADER=X-PSKit-Client-IP
 
 Define Nginx keys only for mail, login, and verify paths; configure 6r/m burst 3, 10r/m burst 5, and 30r/m burst 10 respectively, plus a 2r/s burst 10 site mail budget and an auth-only per-IP connection ceiling of 10. Keep dry-run enabled and translate native rejects to `{"detail":{"code":"AUTH_RATE_LIMITED"}}` with `Retry-After: 60`. Inline zones/maps in each independently installed vhost and use distinct staging zone names so production and staging can coexist. Add PII-free `$limit_req_status` logging, production/staging preflight checks, and deployment notes for reviewing 24–48 hours before enforcement. Keep GoTrue global CAPTCHA disabled because Python validates only the three protected mail endpoints. Keep `CLOUD_DISABLE_SIGNUP=true` in examples until real SMTP, frontend site key, Python secret, and canary checks are installed; document the later controlled switch to `false`.
 
-- [ ] **Step 4: Run focused tests and confirm GREEN**
+- [x] **Step 4: Run focused tests and confirm GREEN**
 
 Run the Step 2 command.
 
 Expected: PASS without changing public admin isolation or loopback bindings.
 
-- [ ] **Step 5: Commit the deploy configuration slice**
+- [x] **Step 5: Commit the deploy configuration slice**
 
 ```bash
 git add infra/supabase deploy/agent new_backend/.env.example
@@ -375,17 +375,17 @@ git commit -m "feat: configure layered public auth limits"
 - Consumes: completed backend DTOs and all previous slices.
 - Produces: synchronized OpenAPI/TypeScript contracts and verification evidence.
 
-- [ ] **Step 1: Add a failing generated-contract assertion**
+- [x] **Step 1: Add a failing generated-contract assertion**
 
 Assert `captcha_token` exists on signup, recovery, and guest email upgrade start, and does not exist on guest email verification.
 
-- [ ] **Step 2: Run contract tests and confirm RED before generation**
+- [x] **Step 2: Run contract tests and confirm RED before generation**
 
 Run: `cd new_frontend && npm test -- src/api/types.contract.test.ts`
 
 Expected: FAIL against the old generated schema.
 
-- [ ] **Step 3: Export OpenAPI and regenerate TypeScript**
+- [x] **Step 3: Export OpenAPI and regenerate TypeScript**
 
 Run:
 
