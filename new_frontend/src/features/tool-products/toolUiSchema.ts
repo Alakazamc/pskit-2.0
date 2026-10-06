@@ -101,7 +101,7 @@ export function resolveActionTarget(action: ToolUiAction, document: unknown): st
 }
 
 export function projectActionArguments(
-  actions: Array<{ id: string; input_schema: Record<string, unknown> }>,
+  actions: Array<{ id: string; input_schema?: Record<string, unknown> }>,
   actionId: string,
   form: ToolForm,
 ): ToolForm {

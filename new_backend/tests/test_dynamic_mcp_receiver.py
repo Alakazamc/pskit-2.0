@@ -90,6 +90,12 @@ def test_receiver_resolvers_use_exact_endpoint_overrides_and_local_secret_names(
         credential("unknown")
 
 
+def test_dynamic_adapter_uses_the_grants_remaining_execution_window():
+    adapter = adapter_for(dynamic_grant())
+
+    assert 30 < adapter.remote.timeout_seconds <= 60
+
+
 @pytest.mark.asyncio
 async def test_immediate_adapter_accepts_envelope_and_maps_bare_result():
     calls = []

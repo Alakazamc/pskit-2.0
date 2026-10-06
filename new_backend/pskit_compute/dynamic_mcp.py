@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import UTC, datetime
 from typing import Any
 
 from jsonschema import Draft202012Validator
@@ -57,7 +58,14 @@ def _apply_mapping(value: Any, mapping) -> Any:
 class DynamicMcpAdapter:
     """One resolved binding with no authority to alter its transport policy."""
 
-    def __init__(self, binding, *, endpoint_url: str, credential: str) -> None:
+    def __init__(
+        self,
+        binding,
+        *,
+        endpoint_url: str,
+        credential: str,
+        timeout_seconds: float = 30,
+    ) -> None:
         self.binding = binding
         self.remote = RemoteMcp(
             endpoint_url,
@@ -69,6 +77,7 @@ class DynamicMcpAdapter:
                 ) if tool
             },
             bearer_token=credential,
+            timeout_seconds=timeout_seconds,
         )
 
     def _report(self, result, grant):
@@ -220,7 +229,16 @@ class DynamicMcpExecutor:
             credential_resolver(binding.credential_ref)
             if binding.credential_ref else ""
         )
-        return DynamicMcpAdapter(binding, endpoint_url=endpoint, credential=credential)
+        remaining_seconds = max(
+            1.0,
+            (grant.stop_at - datetime.now(UTC)).total_seconds(),
+        )
+        return DynamicMcpAdapter(
+            binding,
+            endpoint_url=endpoint,
+            credential=credential,
+            timeout_seconds=remaining_seconds,
+        )
 
     def _adapter(self, grant) -> DynamicMcpAdapter:
         return self.from_grant(

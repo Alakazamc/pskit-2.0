@@ -53,6 +53,50 @@ services:
     cap_drop: !override [ALL]
     security_opt: !override [no-new-privileges:true]
 
+  # Disabled in production until the isolated Staging smoke passes. Enable
+  # explicitly with --profile mcp-receiver after reviewing its durable journal.
+  mcp-receiver:
+    image: ${AGENT_BACKEND_IMAGE:?set AGENT_BACKEND_IMAGE}
+    build: !reset null
+    profiles: [mcp-receiver]
+    command:
+      - python
+      - -u
+      - /app/scripts/mcp_compute_receiver.py
+      - --backend-url
+      - http://backend:8000
+      - --service-id
+      - ${AGENT_MCP_SERVICE_ID:-coral-mcp}
+      - --worker-id
+      - ${AGENT_MCP_WORKER_ID:-coral-mcp-cloud-1}
+      - --journal
+      - /var/lib/pskit-mcp/journal.sqlite3
+    env_file: !override
+      - ${AGENT_MCP_RECEIVER_ENV_FILE:-./mcp.receiver.env}
+    environment:
+      PSKIT_MCP_BACKEND_URL: http://backend:8000
+      PSKIT_MCP_SERVICE_ID: ${AGENT_MCP_SERVICE_ID:-coral-mcp}
+    volumes:
+      - mcp_receiver_data:/var/lib/pskit-mcp
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app
+      - mcp_egress
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: !override [ALL]
+    security_opt: !override [no-new-privileges:true]
+    restart: unless-stopped
+
 networks:
   supabase:
     name: pskit-agent-supabase_default
+  mcp_egress:
+    internal: false
+
+volumes:
+  mcp_receiver_data:
+    name: ${AGENT_MCP_RECEIVER_DATA_VOLUME:-pskit-agent-cloud_mcp_receiver_data}

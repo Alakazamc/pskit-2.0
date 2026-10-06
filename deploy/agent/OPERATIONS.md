@@ -1,5 +1,41 @@
 # 阿里云独立部署
 
+## 配置驱动 MCP Tool Product 接收器
+
+通用 MCP receiver 使用现有 Compute Job、租约、配额和回执协议。它不开放端口，也不增加 Nginx 路由；浏览器仍只访问 `/tools/{slug}` 与 `/api/v1/*`。服务地址和凭据只来自已发布 Release 的私有 binding snapshot，以及 receiver 本机的引用映射。
+
+生产 Compose 中 `mcp-receiver` 默认处于 `mcp-receiver` profile，普通 `up -d` 不会启动。Staging overlay 会清除该 profile，让 receiver 默认参与隔离验收。先复制专用配置并限制权限：
+
+```bash
+cd deploy/agent
+install -m 0600 mcp.receiver.env.example mcp.receiver.env
+# 分别填写 worker key、endpoint override、credential ref 和真实 provider token。
+docker compose \
+  -f compose.yaml -f compose.cloud.yaml -f compose.postgres.yaml -f compose.staging.yaml \
+  config --quiet
+```
+
+`cloud.backend.env` 中的 `RESEARCH_AGENT_COMPUTE_SERVICE_KEYS_JSON` 必须与 receiver 的 `PSKIT_COMPUTE_SERVICE_KEY` 一致。`PSKIT_MCP_CREDENTIAL_REFS_JSON` 的值是环境变量名，不能直接写 token；endpoint override 只允许把 Release 中的已批准 URI映射到 receiver 可达的固定内网地址。
+
+receiver journal 位于命名卷的 `/var/lib/pskit-mcp/journal.sqlite3`。重启会重发已落盘 outbox；若发现 `executing` 记录则进入 `unknown`，必须人工对账，禁止清空 journal 或盲目重跑。切换生产前必须同时满足：Staging smoke 通过、journal 无 active/unknown、没有尚未 ACK 的任务。
+
+完整 smoke 通过管理员 API执行 probe、discover、保存 draft、qualification、publish，然后以普通用户启动任务、从 cursor 恢复事件、核对 Artifact/usage，最后 suspend 测试 Release。token 建议只通过临时环境变量提供：
+
+```bash
+export PSKIT_SMOKE_ADMIN_TOKEN='replace-in-shell-only'
+export PSKIT_SMOKE_USER_TOKEN='replace-in-shell-only'
+python scripts/tool_product_smoke.py \
+  --base-url http://10.9.8.1:18132 \
+  --service-id synthetic-mcp \
+  --probe-uri https://provider.example/mcp \
+  --product-id product-synthetic --slug synthetic --action-id generate \
+  --draft /secure/path/synthetic.product.yaml \
+  --acceptance /secure/path/synthetic.acceptance.yaml \
+  --arguments '{"target":"6FXB"}'
+```
+
+当前 CORAL 的一次生成、迭代生成和二维序列分析已有真实证据；口袋分析尚无消费 `af3_ipocket_dis_task_queue` 的 AF3 worker。因此 `coral.acceptance.yaml` 明确设置 `publication.eligible=false`，生产不得导入并发布该 Release，旧 CORAL 页面也暂不删除。
+
 **当前 A6000 迁移目标修订：** 前端改由阿里云宿主机 Nginx 直接服务固定版镜像中提取的 `dist`，新版后端和计算在 A6000，Supabase 仍在阿里云。本文件下面的云端 Web Compose 操作属于原先私网阶段；最终切换及验收以 [A6000_MIGRATION.md](A6000_MIGRATION.md) 为准。
 
 新版使用 `pskit-agent-supabase` 和 `pskit-agent-cloud` 两个 Compose 项目，配置与数据不能复用旧 PSKit 或 WSL 测试环境。云端 Docker 数据目录是 `/data/docker`；数据库、Storage 和 Agent 数据使用独立 Docker 命名卷。不要执行 `docker compose down -v`。

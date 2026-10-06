@@ -85,13 +85,19 @@ def test_agent_is_private_and_af3_is_mock():
     ], {
         "AGENT_BACKEND_ENV_FILE": str(DEPLOY / "cloud.backend.env.example"),
         "AGENT_AF3_PROXY_KEY_FILE": str(DEPLOY / "cloud.backend.env.example"),
+        "AGENT_MCP_RECEIVER_ENV_FILE": str(DEPLOY / "mcp.receiver.env.example"),
         "AGENT_BACKEND_IMAGE": "pskit-agent-backend:test-fixed",
         "AGENT_PG_DATA_VOLUME": "pskit-agent-staging_agent_data",
+        "AGENT_MCP_RECEIVER_DATA_VOLUME": "pskit-agent-staging_mcp_receiver_data",
         "SUPABASE_DOCKER_NETWORK": STAGING_NETWORK,
     })
     assert rendered["name"] == "pskit-agent-staging"
     assert rendered["networks"]["supabase"]["name"] == STAGING_NETWORK
     assert rendered["volumes"]["agent_data"]["name"] == "pskit-agent-staging_agent_data"
+    assert (
+        rendered["volumes"]["mcp_receiver_data"]["name"]
+        == "pskit-agent-staging_mcp_receiver_data"
+    )
     backend = rendered["services"]["backend"]
     assert backend["ports"][0]["host_ip"] == "127.0.0.1"
     assert backend["ports"][0]["published"] == "18090"
@@ -101,3 +107,6 @@ def test_agent_is_private_and_af3_is_mock():
     assert "10.9.8.2" not in json.dumps(rendered)
     assert "web" not in rendered["services"]
     assert "af3-callback-proxy" not in rendered["services"]
+    receiver = rendered["services"]["mcp-receiver"]
+    assert not receiver.get("ports")
+    assert receiver["read_only"] is True

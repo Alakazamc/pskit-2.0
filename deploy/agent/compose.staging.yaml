@@ -28,6 +28,12 @@ services:
     profiles: [staging-disabled]
     ports: !override []
 
+  mcp-receiver:
+    profiles: !reset []
+    environment:
+      PSKIT_MCP_BACKEND_URL: http://backend:8000
+      PSKIT_MCP_SERVICE_ID: ${AGENT_MCP_SERVICE_ID:-coral-mcp}
+
 networks:
   supabase:
     name: ${SUPABASE_DOCKER_NETWORK:?Set staging Supabase network}
@@ -35,3 +41,5 @@ networks:
 volumes:
   agent_data:
     name: ${AGENT_PG_DATA_VOLUME:?Set staging Agent data volume}
+  mcp_receiver_data:
+    name: ${AGENT_MCP_RECEIVER_DATA_VOLUME:?Set staging MCP receiver data volume}

@@ -5,7 +5,6 @@ import yaml
 from app.contracts.tool_products import AcceptanceSuite, ToolProductDraft
 from app.domain.tool_products.ui_schema import validate_tool_ui
 
-
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "tool_products"
 
 
