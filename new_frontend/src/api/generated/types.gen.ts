@@ -1060,6 +1060,16 @@ export type ContextRef = {
 };
 
 /**
+ * CsrfTokenResponse
+ */
+export type CsrfTokenResponse = {
+    /**
+     * Csrf Token
+     */
+    csrf_token: string;
+};
+
+/**
  * DailyUsage
  */
 export type DailyUsage = {
@@ -2810,6 +2820,26 @@ export type RefreshLoginApiV1AuthRefreshPostResponses = {
 };
 
 export type RefreshLoginApiV1AuthRefreshPostResponse = RefreshLoginApiV1AuthRefreshPostResponses[keyof RefreshLoginApiV1AuthRefreshPostResponses];
+
+export type CsrfTokenApiV1AuthCsrfGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/auth/csrf';
+};
+
+export type CsrfTokenApiV1AuthCsrfGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CsrfTokenResponse;
+    /**
+     * No refresh-cookie session
+     */
+    204: void;
+};
+
+export type CsrfTokenApiV1AuthCsrfGetResponse = CsrfTokenApiV1AuthCsrfGetResponses[keyof CsrfTokenApiV1AuthCsrfGetResponses];
 
 export type GoogleStartApiV1AuthGoogleStartGetData = {
     body?: never;

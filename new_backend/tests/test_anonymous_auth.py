@@ -11,6 +11,12 @@ from app.main import create_app
 pytestmark = pytest.mark.usefixtures("live_database")
 
 
+async def _csrf_headers(client: httpx.AsyncClient) -> dict[str, str]:
+    response = await client.get("/api/v1/auth/csrf")
+    assert response.status_code == 200
+    return {"Origin": "http://localhost:5174", "X-CSRF-Token": response.json()["csrf_token"]}
+
+
 @pytest.mark.asyncio
 async def test_mock_guest_is_created_only_after_request_and_reuses_refresh_cookie():
     app = create_app()
@@ -18,7 +24,9 @@ async def test_mock_guest_is_created_only_after_request_and_reuses_refresh_cooki
                                  base_url="http://test") as client:
         before = await client.get("/api/v1/me")
         created = await client.post("/api/v1/auth/anonymous", json={})
-        repeated = await client.post("/api/v1/auth/anonymous", json={})
+        repeated = await client.post(
+            "/api/v1/auth/anonymous", json={}, headers=await _csrf_headers(client)
+        )
         me = await client.get("/api/v1/me", headers={
             "Authorization": f"Bearer {created.json().get('access_token', '')}",
         }) if created.status_code == 200 else None
@@ -40,6 +48,7 @@ async def test_member_bearer_cannot_be_replaced_by_guest_login():
         member = await client.post("/api/v1/auth/demo", json={"email": "member@example.org"})
         anonymous = await client.post("/api/v1/auth/anonymous", json={}, headers={
             "Authorization": f"Bearer {member.json()['access_token']}",
+            **await _csrf_headers(client),
         })
 
     assert member.status_code == 200
@@ -54,7 +63,9 @@ async def test_mock_guest_refresh_keeps_same_identity():
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                  base_url="http://test") as client:
         guest = await client.post("/api/v1/auth/anonymous", json={})
-        refreshed = await client.post("/api/v1/auth/refresh")
+        refreshed = await client.post(
+            "/api/v1/auth/refresh", headers=await _csrf_headers(client)
+        )
 
     assert guest.status_code == refreshed.status_code == 200
     assert refreshed.json()["user"]["id"] == guest.json()["user"]["id"]
@@ -138,7 +149,9 @@ async def test_live_guest_cookie_restores_same_user_without_another_signup(tmp_p
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                      base_url="http://test") as client:
             first = await client.post("/api/v1/auth/anonymous", json={"captcha_token": "proof"})
-            second = await client.post("/api/v1/auth/anonymous", json={})
+            second = await client.post(
+                "/api/v1/auth/anonymous", json={}, headers=await _csrf_headers(client)
+            )
 
     assert first.status_code == second.status_code == 200
     assert first.json()["user"]["id"] == second.json()["user"]["id"] == "same-guest"
@@ -238,7 +251,7 @@ async def test_member_bearer_takes_precedence_over_stale_guest_cookie(tmp_path):
                                  base_url="http://test") as client:
         client.cookies.set("research_refresh_token", "old-guest-refresh", path="/api/v1/auth")
         response = await client.post("/api/v1/auth/anonymous", json={}, headers={
-            "Authorization": "Bearer member-access",
+            "Authorization": "Bearer member-access", **await _csrf_headers(client),
         })
 
     assert response.status_code == 409

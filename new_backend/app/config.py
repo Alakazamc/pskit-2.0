@@ -86,6 +86,7 @@ class Settings:
     anonymous_rate_limit_per_hour: int = 10
     auth_abuse_mode: Literal["off", "observe", "enforce"] = "off"
     auth_rate_limit_secret: str = field(default="", repr=False)
+    auth_csrf_secret: str = field(default="", repr=False)
     auth_trusted_proxy_cidrs_json: str = "[]"
     auth_captcha_required: bool = False
     turnstile_secret_key: str = field(default="", repr=False)
@@ -184,6 +185,7 @@ class Settings:
             anonymous_rate_limit_per_hour=int(os.getenv("RESEARCH_AGENT_ANON_RATE_LIMIT_PER_HOUR", "10")),
             auth_abuse_mode=os.getenv("RESEARCH_AGENT_AUTH_ABUSE_MODE", "off"),
             auth_rate_limit_secret=os.getenv("RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET", ""),
+            auth_csrf_secret=os.getenv("RESEARCH_AGENT_AUTH_CSRF_SECRET", ""),
             auth_trusted_proxy_cidrs_json=os.getenv(
                 "RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON", "[]"
             ),
@@ -240,6 +242,7 @@ class Settings:
             if not value:
                 raise ValueError(f"{name} is required in live mode")
         self._validate_http_base_url(self.supabase_url, "SUPABASE_URL")
+        self._validate_http_base_url(self.frontend_url, "RESEARCH_AGENT_FRONTEND_URL")
         if self.supabase_public_url:
             self._validate_http_base_url(self.supabase_public_url, "SUPABASE_PUBLIC_URL")
         if self.agent_runtime == "pi":
@@ -258,6 +261,8 @@ class Settings:
             raise ValueError("NEW_API_USER_TOKENS_JSON is no longer supported; use MODEL_GATEWAY_API_KEY")
         if self.auth_abuse_mode not in {"off", "observe", "enforce"}:
             raise ValueError("RESEARCH_AGENT_AUTH_ABUSE_MODE must be off, observe, or enforce")
+        if len(self.effective_auth_csrf_secret()) < 32:
+            raise ValueError("RESEARCH_AGENT_AUTH_CSRF_SECRET must contain at least 32 characters")
         if self.auth_abuse_mode == "off":
             if self.auth_captcha_required:
                 raise ValueError("Auth CAPTCHA cannot be required while auth abuse protection is off")
@@ -271,6 +276,10 @@ class Settings:
                 raise ValueError("TURNSTILE_SECRET_KEY is required when auth CAPTCHA is enabled")
             if not self.turnstile_hostnames():
                 raise ValueError("TURNSTILE_HOSTNAMES_JSON cannot be empty when auth CAPTCHA is enabled")
+
+    def effective_auth_csrf_secret(self) -> str:
+        """Use a dedicated CSRF key, with the existing HMAC key as a rollout fallback."""
+        return self.auth_csrf_secret or self.auth_rate_limit_secret
 
     def auth_trusted_proxy_cidrs(self) -> tuple[str, ...]:
         """Parse and canonicalize the exact reverse-proxy networks allowed to assert client IPs."""

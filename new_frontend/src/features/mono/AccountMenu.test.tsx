@@ -13,6 +13,7 @@ function setup(language = "zh") {
   const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
   const fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.endsWith("/auth/csrf")) return json({ csrf_token: "signed-csrf" });
     if (path.endsWith("/auth/logout")) return new Response(null, { status: 204 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org", is_anonymous: false });
     if (path.endsWith("/g")) return json([{ id: "project-alice", name: "Personal", description: "" }]);

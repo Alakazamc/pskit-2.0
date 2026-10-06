@@ -14,6 +14,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.adapters.live.supabase_auth import AuthRateLimited, InvalidCredentials
 from app.contracts.models import (
     AuthSessionResponse,
+    CsrfTokenResponse,
     DemoLoginRequest,
     DemoLoginResponse,
     EmailLoginRequest,
@@ -31,6 +32,7 @@ from app.domain.auth_abuse import AuthAbuseLimited
 from app.domain.store import DemoStore
 from app.ports.captcha import CaptchaInvalid, CaptchaRequired, CaptchaUnavailable
 from app.ports.providers import IdentityTransportUnavailable, ProviderUnavailable
+from app.services.csrf import CsrfRejected
 
 router = APIRouter(prefix="/api/v1", tags=["auth"])
 bearer = HTTPBearer(auto_error=False)
@@ -350,6 +352,7 @@ async def update_password(
 @router.post("/auth/refresh", response_model=AuthSessionResponse)
 async def refresh_login(request: Request, response: Response) -> AuthSessionResponse | Response:
     """Refresh the access token from the HttpOnly refresh cookie."""
+    _require_cookie_csrf(request)
     if request.app.state.settings.mode == "mock":
         token = request.cookies.get("research_refresh_token", "")
         user = request.app.state.demo_store.user_for_token(token)
@@ -396,6 +399,38 @@ def _clear_refresh_cookie() -> JSONResponse:
     failure = JSONResponse({"detail": "Authentication required"}, status_code=401)
     failure.delete_cookie("research_refresh_token", path="/api/v1/auth")
     return failure
+
+
+def _require_cookie_csrf(request: Request) -> None:
+    """Validate browser provenance whenever an ambient refresh cookie is present."""
+    refresh_token = request.cookies.get("research_refresh_token")
+    if not refresh_token:
+        return
+    try:
+        request.app.state.csrf.verify(
+            refresh_token,
+            request.headers.get("X-CSRF-Token", ""),
+            request.headers.get("Origin", ""),
+        )
+    except CsrfRejected as exc:
+        raise HTTPException(status_code=403, detail={"code": "CSRF_FAILED"}) from exc
+
+
+@router.get(
+    "/auth/csrf",
+    response_model=CsrfTokenResponse,
+    responses={204: {"description": "No refresh-cookie session"}},
+)
+async def csrf_token(request: Request) -> Response:
+    """Bootstrap a no-store CSRF token for the current HttpOnly refresh cookie."""
+    headers = {"Cache-Control": "no-store"}
+    refresh_token = request.cookies.get("research_refresh_token")
+    if not refresh_token:
+        return Response(status_code=204, headers=headers)
+    return JSONResponse(
+        {"csrf_token": request.app.state.csrf.issue(refresh_token)},
+        headers=headers,
+    )
 
 
 class OAuthFlowStore:
@@ -575,6 +610,7 @@ async def google_callback(
 @router.post("/auth/logout", status_code=204)
 async def logout(request: Request, response: Response) -> None:
     """Revoke the available session token and clear its refresh cookie."""
+    _require_cookie_csrf(request)
     authorization = request.headers.get("authorization", "")
     if request.app.state.settings.mode == "mock":
         if authorization.startswith("Bearer "):

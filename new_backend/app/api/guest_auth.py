@@ -19,6 +19,7 @@ from app.api.auth import (
     _network,
     _rate_limited,
     _record_provider,
+    _require_cookie_csrf,
     _set_refresh_cookie,
 )
 from app.contracts.models import (
@@ -47,6 +48,7 @@ async def anonymous_login(
 ) -> AuthSessionResponse:
     """Resume or create a limited anonymous session after abuse checks."""
     settings = request.app.state.settings
+    _require_cookie_csrf(request)
     if not settings.effective_anonymous_enabled():
         raise HTTPException(status_code=404, detail="Anonymous login is unavailable")
     if settings.mode == "mock":

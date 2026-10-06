@@ -277,6 +277,31 @@
         }
       }
     },
+    "/api/v1/auth/csrf": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Csrf Token",
+        "description": "Bootstrap a no-store CSRF token for the current HttpOnly refresh cookie.",
+        "operationId": "csrf_token_api_v1_auth_csrf_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsrfTokenResponse"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No refresh-cookie session"
+          }
+        }
+      }
+    },
     "/api/v1/auth/google/start": {
       "get": {
         "tags": [
@@ -7425,6 +7450,19 @@
           "name"
         ],
         "title": "ContextRef"
+      },
+      "CsrfTokenResponse": {
+        "properties": {
+          "csrf_token": {
+            "type": "string",
+            "title": "Csrf Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "csrf_token"
+        ],
+        "title": "CsrfTokenResponse"
       },
       "DailyUsage": {
         "properties": {

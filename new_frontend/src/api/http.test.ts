@@ -30,7 +30,9 @@ describe("HTTP Research API", () => {
   it("starts an anonymous Python session only when requested", async () => {
     const session = { access_token: "guest-jwt", expires_in: 3600,
       user: { id: "guest-1", email: "", name: "Guest", is_anonymous: true } };
-    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(session), { status: 200 }));
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => String(input).endsWith("/auth/csrf")
+      ? new Response(null, { status: 204 })
+      : new Response(JSON.stringify(session), { status: 200 }));
     const api = createHttpApi({ token: () => null, fetcher });
 
     expect(fetcher).not.toHaveBeenCalled();
@@ -249,6 +251,7 @@ describe("HTTP Research API", () => {
         expect(JSON.parse(String(init?.body))).toEqual({ email: "alice@example.org", password: "secret" });
         return json({ access_token: "first-jwt", expires_in: 3600, user: { id: "alice", email: "alice@example.org", name: "Alice" } });
       }
+      if (path.endsWith("/auth/csrf")) return json({ csrf_token: "signed-csrf" });
       if (path.endsWith("/auth/refresh")) return json({ access_token: "fresh-jwt", expires_in: 3600, user: { id: "alice", email: "alice@example.org", name: "Alice" } });
       if (path.endsWith("/usage") && init?.headers && "Authorization" in init.headers) {
         if (init.headers.Authorization === "Bearer first-jwt") return json({ detail: "expired" }, 401);
@@ -265,7 +268,10 @@ describe("HTTP Research API", () => {
     token = (await api.loginEmail("alice@example.org", "secret")).access_token;
     const usage = await api.getUsage();
     expect(usage.tokens.remaining).toBe(90);
-    expect(paths).toEqual(["/api/v1/auth/login", "/api/v1/usage", "/api/v1/auth/refresh", "/api/v1/usage"]);
+    expect(paths).toEqual([
+      "/api/v1/auth/login", "/api/v1/usage", "/api/v1/auth/csrf",
+      "/api/v1/auth/refresh", "/api/v1/usage",
+    ]);
   });
 
   it("uses only Python routes for signup, recovery, OTP, and password update", async () => {
@@ -287,13 +293,52 @@ describe("HTTP Research API", () => {
   });
 
   it("accepts an empty 204 response when Python logs out", async () => {
-    const fetcher = vi.fn(async () => new Response(null, { status: 204 }));
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => String(input).endsWith("/auth/csrf")
+      ? new Response(JSON.stringify({ csrf_token: "signed-csrf" }), { status: 200 })
+      : new Response(null, { status: 204 }));
     const api = createHttpApi({ token: () => "signed-jwt", fetcher: fetcher as typeof fetch });
     await expect(api.logoutAuth()).resolves.toBeUndefined();
     expect(fetcher).toHaveBeenCalledWith(
       "/api/v1/auth/logout",
-      expect.objectContaining({ method: "POST", credentials: "same-origin" }),
+      expect.objectContaining({
+        method: "POST",
+        credentials: "same-origin",
+        headers: expect.objectContaining({ "X-CSRF-Token": "signed-csrf" }),
+      }),
     );
+  });
+
+  it("bootstraps a fresh CSRF token before every refresh-cookie mutation", async () => {
+    const paths: string[] = [];
+    const fetcher = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      void _init;
+      const path = String(input);
+      paths.push(path);
+      if (path.endsWith("/auth/csrf")) {
+        return new Response(JSON.stringify({ csrf_token: `csrf-${paths.length}` }), { status: 200 });
+      }
+      if (path.endsWith("/auth/anonymous")) {
+        return new Response(JSON.stringify({ access_token: "guest", expires_in: 3600,
+          user: { id: "guest", email: "", name: "Guest", is_anonymous: true } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ access_token: "fresh", expires_in: 3600,
+        user: { id: "guest", email: "", name: "Guest", is_anonymous: true } }), { status: 200 });
+    });
+    const api = createHttpApi({ token: () => null, fetcher: fetcher as typeof fetch });
+
+    await api.startAnonymous();
+    await api.refreshAuth();
+
+    expect(paths).toEqual([
+      "/api/v1/auth/csrf", "/api/v1/auth/anonymous",
+      "/api/v1/auth/csrf", "/api/v1/auth/refresh",
+    ]);
+    expect(fetcher.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+      headers: expect.objectContaining({ "X-CSRF-Token": "csrf-1" }),
+    }));
+    expect(fetcher.mock.calls[3]?.[1]).toEqual(expect.objectContaining({
+      headers: expect.objectContaining({ "X-CSRF-Token": "csrf-3" }),
+    }));
   });
 
   it("keeps stable API error codes for localized UI messages", async () => {

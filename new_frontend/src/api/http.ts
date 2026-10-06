@@ -24,10 +24,29 @@ export function createHttpApi({ baseUrl = "/api/v1", token, fetcher = fetch, onU
   const projectPath = (id: string) => `/g/${encodeURIComponent(projectRouteKey(id))}`;
   const chatPath = (id: string, projectId?: string | null) => `${projectId ? projectPath(projectId) : ""}/c/${encodeURIComponent(id)}`;
   const send = async (path: string, init: RequestInit = {}): Promise<Response> => {
+    const cookieAuthMutation = init.method === "POST" && [
+      "/auth/anonymous", "/auth/refresh", "/auth/logout",
+    ].includes(path);
+    let csrfToken: string | null = null;
+    if (cookieAuthMutation) {
+      const csrf = await fetcher(`${baseUrl}/auth/csrf`, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { "Cache-Control": "no-store" },
+      });
+      if (!csrf.ok) throw new ApiError(csrf.status, csrf.statusText);
+      if (csrf.status !== 204) {
+        const payload = await csrf.json() as { csrf_token?: unknown };
+        if (typeof payload.csrf_token !== "string" || !payload.csrf_token) {
+          throw new ApiError(502, "Invalid CSRF bootstrap response");
+        }
+        csrfToken = payload.csrf_token;
+      }
+    }
     const withToken = (accessToken: string | null) => ({
       ...init,
       credentials: "same-origin" as const,
-      headers: { ...(typeof init.body === "string" ? { "Content-Type": "application/json" } : {}), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...init.headers },
+      headers: { ...(typeof init.body === "string" ? { "Content-Type": "application/json" } : {}), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}), ...init.headers },
     });
     let response = await fetcher(`${baseUrl}${path}`, withToken(token()));
     if (response.status === 401 && onUnauthorized && !path.startsWith("/auth/")) {

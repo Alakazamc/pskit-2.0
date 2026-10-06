@@ -34,7 +34,7 @@ Pi 持久库用 SQLite `PRAGMA user_version` 标记当前核心 schema 版本为
 ## 运行模式
 
 - `RESEARCH_AGENT_MODE=mock`（默认）：`POST /api/v1/auth/demo` 按邮箱颁发进程内演示令牌，其他 mock 路由按用户隔离。
-- `RESEARCH_AGENT_MODE=live`：关闭演示登录。浏览器只调用 Python 的 `/api/v1/auth/login`、`/refresh`、`/logout`、`/google/start`、`/signup`、`/verify` 和密码找回/更新接口；Python 向 Supabase Auth 交换 JWT 并验证用户。Refresh Token 放在 HttpOnly Cookie，JWT 保存在浏览器内存。只启用认证时仅需服务端的 `SUPABASE_URL` 和 `SUPABASE_PUBLISHABLE_KEY`。live 启动时验证 Supabase URL；Pi 模式还验证模型网关 URL，拒绝非 HTTP(S)、嵌入凭据或查询参数，允许本机自托管 HTTP 地址。未部署的 MCP 与 AF3 默认关闭。Google OAuth state 存在 `RESEARCH_AGENT_DB_PATH` 的 SQLite 文件中；多个实例必须共享这一数据库。
+- `RESEARCH_AGENT_MODE=live`：关闭演示登录。浏览器只调用 Python 的 `/api/v1/auth/login`、`/refresh`、`/logout`、`/google/start`、`/signup`、`/verify` 和密码找回/更新接口；Python 向 Supabase Auth 交换 JWT 并验证用户。Refresh Token 放在 HttpOnly Cookie，JWT 保存在浏览器内存。依赖 Refresh Cookie 的写请求会先读取 `GET /api/v1/auth/csrf`，再携带 `X-CSRF-Token`；Python 将短期签名令牌绑定到当前 Refresh Token，并严格校验请求 `Origin` 是否等于 `RESEARCH_AGENT_FRONTEND_URL`。令牌只保存在前端内存且响应禁止缓存。生产环境应单独配置至少 32 字符的 `RESEARCH_AGENT_AUTH_CSRF_SECRET`；兼容升级期间未配置时暂时复用 `RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET`。只启用认证时仅需服务端的 `SUPABASE_URL` 和 `SUPABASE_PUBLISHABLE_KEY`。live 启动时验证 Supabase URL；Pi 模式还验证模型网关 URL，拒绝非 HTTP(S)、嵌入凭据或查询参数，允许本机自托管 HTTP 地址。未部署的 MCP 与 AF3 默认关闭。Google OAuth state 存在 `RESEARCH_AGENT_DB_PATH` 的 SQLite 文件中；多个实例必须共享这一数据库。
 
 本机固定版本 Supabase Docker 配置、验证码邮件服务及启动命令见 [`../infra/supabase/PSKIT.md`](../infra/supabase/PSKIT.md)。本地 `new_backend/.env` 当前配置 Supabase 认证、Pi Agent 和 AF3 callback；服务由 `deploy/systemd/pskit-new-backend.service` 加载该文件。手动运行时需使用 `uvicorn --env-file .env`。`new_frontend/.env.local` 对应 `VITE_AUTH_MODE=supabase`。两份文件均被 Git 忽略，真实凭据不会进入仓库。
 

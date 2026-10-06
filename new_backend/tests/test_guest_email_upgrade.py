@@ -14,6 +14,12 @@ from app.main import create_app
 pytestmark = pytest.mark.usefixtures("live_database")
 
 
+async def _csrf_headers(client: httpx.AsyncClient) -> dict[str, str]:
+    response = await client.get("/api/v1/auth/csrf")
+    assert response.status_code == 200
+    return {"Origin": "http://localhost:5174", "X-CSRF-Token": response.json()["csrf_token"]}
+
+
 @pytest.mark.asyncio
 async def test_mock_guest_upgrades_same_identity_without_losing_data_or_usage(tmp_path):
     app = create_app(Settings(agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3")),
@@ -41,7 +47,9 @@ async def test_mock_guest_upgrades_same_identity_without_losing_data_or_usage(tm
         projects = await client.get("/api/v1/g", headers=new_headers)
         files = await client.get("/api/v1/files", headers=new_headers)
         usage = await client.get("/api/v1/usage", headers=new_headers)
-        refresh = await client.post("/api/v1/auth/refresh")
+        refresh = await client.post(
+            "/api/v1/auth/refresh", headers=await _csrf_headers(client)
+        )
         old_token = await client.get("/api/v1/usage", headers=old_headers)
 
     assert started.status_code == 200 and started.json()["status"] == "check_email"

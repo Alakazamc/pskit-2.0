@@ -1,10 +1,12 @@
 import asyncio
 import json
 import os
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 from shutil import which
 from time import monotonic
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import request_validation_exception_handler
@@ -73,6 +75,7 @@ from app.ports.providers import ProviderUnavailable
 from app.services.agent import AgentService
 from app.services.auth_protection import AuthProtection
 from app.services.client_ip import TrustedClientIpResolver
+from app.services.csrf import CsrfProtector
 from app.services.model_catalog import ModelCatalog
 from app.services.observability import ObservabilityMiddleware, RequestMetrics
 from app.services.pdf_processing import PdfProcessingPool
@@ -399,6 +402,12 @@ def create_app(
     app.state.metrics = request_metrics
     app.add_middleware(ObservabilityMiddleware, metrics=app.state.metrics)
     app.state.settings = settings
+    csrf_secret = settings.effective_auth_csrf_secret() or secrets.token_urlsafe(32)
+    frontend = urlparse(settings.frontend_url)
+    app.state.csrf = CsrfProtector(
+        csrf_secret,
+        f"{frontend.scheme}://{frontend.netloc}",
+    )
     app.state.database = database
     app.state.auth_guard = configured_auth_guard
     app.state.auth_protection = AuthProtection(

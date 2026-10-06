@@ -11,6 +11,12 @@ from app.main import create_app
 pytestmark = pytest.mark.usefixtures("live_database")
 
 
+async def _csrf_headers(client: httpx.AsyncClient) -> dict[str, str]:
+    response = await client.get("/api/v1/auth/csrf")
+    assert response.status_code == 200
+    return {"Origin": "http://localhost:5174", "X-CSRF-Token": response.json()["csrf_token"]}
+
+
 def _settings(tmp_path):
     return Settings(
         mode="live", agent_runtime="pi", agent_db_path=str(tmp_path / "auth.sqlite3"),
@@ -189,7 +195,9 @@ async def test_mock_guest_google_link_rotates_session_and_preserves_guest_data(t
         started = await client.post("/api/v1/auth/upgrade/google/start", headers=headers)
         callback_url = urlparse(started.json()["url"])
         callback = await client.get(f"{callback_url.path}?{callback_url.query}")
-        refreshed = await client.post("/api/v1/auth/refresh")
+        refreshed = await client.post(
+            "/api/v1/auth/refresh", headers=await _csrf_headers(client)
+        )
         old_access = await client.get("/api/v1/me", headers=headers)
         new_access = {"Authorization": f"Bearer {refreshed.json()['access_token']}"}
         projects = await client.get("/api/v1/g", headers=new_access)

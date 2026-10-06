@@ -97,6 +97,10 @@ class AuthSessionResponse(BaseModel):
     user: UserIdentity
 
 
+class CsrfTokenResponse(BaseModel):
+    csrf_token: str
+
+
 class SignupResponse(BaseModel):
     status: Literal["check_email", "signed_in"]
     session: AuthSessionResponse | None = None

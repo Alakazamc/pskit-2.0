@@ -176,6 +176,7 @@ def prepare_staging(target_dir: Path, *, backend_image: str, frontend_dist: Path
             "RESEARCH_AGENT_AUTH_COOKIE_SECURE=false",
             "RESEARCH_AGENT_AUTH_ABUSE_MODE=observe",
             f"RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET={_secret(32)}",
+            f"RESEARCH_AGENT_AUTH_CSRF_SECRET={_secret(32)}",
             'RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON=["127.0.0.1/32"]',
             "RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED=true",
             "TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA",

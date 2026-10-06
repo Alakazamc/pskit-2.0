@@ -11,6 +11,12 @@ from app.main import create_app
 pytestmark = pytest.mark.usefixtures("live_database")
 
 
+async def _csrf_headers(client: httpx.AsyncClient) -> dict[str, str]:
+    response = await client.get("/api/v1/auth/csrf")
+    assert response.status_code == 200
+    return {"Origin": "http://localhost:5174", "X-CSRF-Token": response.json()["csrf_token"]}
+
+
 @pytest.mark.asyncio
 async def test_verified_guest_tier_survives_backend_restart(tmp_path):
     settings = Settings(agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3"))
@@ -116,7 +122,9 @@ async def test_refresh_observes_anonymous_user_without_me_request(tmp_path):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                  base_url="http://test") as client:
         client.cookies.set("research_refresh_token", "old-refresh", path="/api/v1/auth")
-        response = await client.post("/api/v1/auth/refresh")
+        response = await client.post(
+            "/api/v1/auth/refresh", headers=await _csrf_headers(client)
+        )
 
     assert response.status_code == 200
     assert response.json()["user"]["is_anonymous"] is True

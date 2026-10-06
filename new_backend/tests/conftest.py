@@ -23,6 +23,7 @@ def live_database(monkeypatch: pytest.MonkeyPatch):
     migrate_postgres(dsn, schema=schema)
     monkeypatch.setenv("RESEARCH_AGENT_DATABASE_URL", dsn)
     monkeypatch.setenv("RESEARCH_AGENT_DATABASE_SCHEMA", schema)
+    monkeypatch.setenv("RESEARCH_AGENT_AUTH_CSRF_SECRET", "test-csrf-secret-with-at-least-32-bytes")
     opened: list[PostgresDatabase] = []
 
     def tracked_database(*args, **kwargs) -> PostgresDatabase:

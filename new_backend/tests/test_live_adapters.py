@@ -15,6 +15,12 @@ from app.ports.providers import IdentityTransportUnavailable
 pytestmark = pytest.mark.usefixtures("live_database")
 
 
+async def _csrf_headers(client: httpx.AsyncClient) -> dict[str, str]:
+    response = await client.get("/api/v1/auth/csrf")
+    assert response.status_code == 200
+    return {"Origin": "http://localhost:5174", "X-CSRF-Token": response.json()["csrf_token"]}
+
+
 @pytest.mark.asyncio
 async def test_supabase_auth_calls_receive_only_the_server_client_ip_header():
     requests: list[httpx.Request] = []
@@ -190,7 +196,9 @@ async def test_supabase_token_rate_limit_is_forwarded_without_retry(route: str):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             if route == "refresh":
                 client.cookies.set("research_refresh_token", "old", path="/api/v1/auth")
-                response = await client.post("/api/v1/auth/refresh")
+                response = await client.post(
+                    "/api/v1/auth/refresh", headers=await _csrf_headers(client)
+                )
             else:
                 response = await client.post("/api/v1/auth/login", json={
                     "email": "alice@example.org", "password": "secret",
@@ -339,7 +347,9 @@ async def test_python_refresh_rotates_supabase_token_without_exposing_refresh_se
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             missing = await client.post("/api/v1/auth/refresh")
             client.cookies.set("research_refresh_token", "old-refresh", path="/api/v1/auth")
-            refreshed = await client.post("/api/v1/auth/refresh")
+            refreshed = await client.post(
+                "/api/v1/auth/refresh", headers=await _csrf_headers(client)
+            )
 
     assert missing.status_code == 401
     assert refreshed.status_code == 200
@@ -363,7 +373,9 @@ async def test_invalid_refresh_clears_browser_cookie():
         )
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             client.cookies.set("research_refresh_token", "expired", path="/api/v1/auth")
-            response = await client.post("/api/v1/auth/refresh")
+            response = await client.post(
+                "/api/v1/auth/refresh", headers=await _csrf_headers(client)
+            )
     assert response.status_code == 401
     assert 'research_refresh_token=""' in response.headers["set-cookie"]
 
@@ -388,7 +400,9 @@ async def test_refresh_clears_cookie_when_supabase_cannot_verify_new_access_toke
         )
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             client.cookies.set("research_refresh_token", "old", path="/api/v1/auth")
-            response = await client.post("/api/v1/auth/refresh")
+            response = await client.post(
+                "/api/v1/auth/refresh", headers=await _csrf_headers(client)
+            )
     assert response.status_code == 401
     assert 'research_refresh_token=""' in response.headers["set-cookie"]
 
@@ -504,7 +518,9 @@ async def test_python_logout_revokes_supabase_session_and_clears_refresh_cookie(
         )
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             client.cookies.set("research_refresh_token", "old-refresh", path="/api/v1/auth")
-            logged_out = await client.post("/api/v1/auth/logout", headers={"Authorization": "Bearer signed-jwt"})
+            logged_out = await client.post("/api/v1/auth/logout", headers={
+                "Authorization": "Bearer signed-jwt", **await _csrf_headers(client),
+            })
 
     assert logged_out.status_code == 204
     assert "research_refresh_token=" in logged_out.headers["set-cookie"]

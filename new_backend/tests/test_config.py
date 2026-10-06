@@ -11,6 +11,7 @@ def live_settings(**overrides):
         "supabase_publishable_key": "publishable-test",
         "auth_abuse_mode": "enforce",
         "auth_rate_limit_secret": "s" * 32,
+        "auth_csrf_secret": "c" * 32,
         "auth_trusted_proxy_cidrs_json": '["127.0.0.1/32", "::1/128"]',
         "auth_captcha_required": True,
         "turnstile_secret_key": "server-only-turnstile-secret",
@@ -32,6 +33,7 @@ def test_live_auth_protection_configuration_is_strict():
     ("overrides", "message"),
     [
         ({"auth_rate_limit_secret": "short"}, "AUTH_RATE_LIMIT_SECRET"),
+        ({"auth_csrf_secret": "short"}, "AUTH_CSRF_SECRET"),
         ({"auth_trusted_proxy_cidrs_json": "[]"}, "AUTH_TRUSTED_PROXY_CIDRS_JSON"),
         ({"auth_trusted_proxy_cidrs_json": '["127.0.0.1/999"]'}, "AUTH_TRUSTED_PROXY_CIDRS_JSON"),
         ({"auth_trusted_proxy_cidrs_json": '["127.0.0.1/8"]'}, "AUTH_TRUSTED_PROXY_CIDRS_JSON"),
@@ -53,6 +55,7 @@ def test_auth_protection_can_be_disabled_during_coordinated_rollout():
     live_settings(
         auth_abuse_mode="off",
         auth_rate_limit_secret="",
+        auth_csrf_secret="c" * 32,
         auth_trusted_proxy_cidrs_json="[]",
         auth_captcha_required=False,
         turnstile_secret_key="",
@@ -63,6 +66,7 @@ def test_auth_protection_can_be_disabled_during_coordinated_rollout():
 def test_settings_from_env_reads_auth_protection(monkeypatch):
     monkeypatch.setenv("RESEARCH_AGENT_AUTH_ABUSE_MODE", "observe")
     monkeypatch.setenv("RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET", "x" * 32)
+    monkeypatch.setenv("RESEARCH_AGENT_AUTH_CSRF_SECRET", "c" * 32)
     monkeypatch.setenv("RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON", '["127.0.0.1/32"]')
     monkeypatch.setenv("RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED", "true")
     monkeypatch.setenv("TURNSTILE_SECRET_KEY", "secret")
@@ -72,6 +76,7 @@ def test_settings_from_env_reads_auth_protection(monkeypatch):
 
     assert settings.auth_abuse_mode == "observe"
     assert settings.auth_rate_limit_secret == "x" * 32
+    assert settings.auth_csrf_secret == "c" * 32
     assert settings.auth_trusted_proxy_cidrs() == ("127.0.0.1/32",)
     assert settings.auth_captcha_required is True
     assert settings.turnstile_secret_key == "secret"

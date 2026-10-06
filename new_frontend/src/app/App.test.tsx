@@ -67,6 +67,7 @@ it("upgrades a mock guest without changing ownership or losing its session", asy
   const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.endsWith("/auth/csrf")) return new Response(null, { status: 204 });
     if (path.endsWith("/auth/anonymous")) return json({ access_token: "guest-jwt", expires_in: 3600,
       user: { id: "guest-1", email: "", name: "Guest", is_anonymous: true } });
     if (path.endsWith("/auth/upgrade/email")) return json({ status: "check_email" });
@@ -98,6 +99,7 @@ it("restores the rotated mock session after a Google upgrade callback", async ()
   const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.endsWith("/auth/csrf")) return json({ csrf_token: "signed-csrf" });
     if (path.endsWith("/auth/refresh")) return json({ access_token: "linked-jwt", expires_in: 3600,
       user: { id: "guest-1", email: "linked@example.org", name: "Linked", is_anonymous: false } });
     if (path.endsWith("/me")) return json({ id: "guest-1", email: "", name: "Guest", is_anonymous: true });
@@ -117,6 +119,7 @@ it("keeps a guest signed in and explains a Google identity conflict", async () =
   const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.endsWith("/auth/csrf")) return json({ csrf_token: "signed-csrf" });
     if (path.endsWith("/auth/refresh")) return json({ access_token: "guest-jwt", expires_in: 3600,
       user: { id: "guest-1", email: "", name: "Guest", is_anonymous: true } });
     if (path.endsWith("/g")) return json([{ id: "project-guest-1", name: "Personal", description: "" }]);
@@ -135,6 +138,7 @@ it("warns before discarding a mock guest and revokes its server session", async 
   const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
   const fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.endsWith("/auth/csrf")) return new Response(JSON.stringify({ csrf_token: "signed-csrf" }), { status: 200 });
     if (path.endsWith("/me")) return new Response(JSON.stringify({ id: "guest-1", email: "", name: "Guest", is_anonymous: true }), { status: 200 });
     if (path.endsWith("/auth/logout")) return new Response(null, { status: 204 });
     if (path.endsWith("/g")) return new Response(JSON.stringify([{ id: "project-guest-1", name: "Personal", description: "" }]), { status: 200 });
