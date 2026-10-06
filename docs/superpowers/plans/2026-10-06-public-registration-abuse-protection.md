@@ -109,11 +109,11 @@ git commit -m "feat: add atomic auth abuse guard"
 **Files:**
 - Create: `new_backend/app/services/client_ip.py`
 - Modify: `new_backend/app/adapters/live/supabase_auth.py`
-- Modify: `new_backend/app/domain/errors.py`
+- Modify: `new_backend/app/ports/providers.py`
 - Modify: `new_backend/app/config.py`
 - Create: `new_backend/tests/test_client_ip.py`
 - Modify: `new_backend/tests/test_live_adapters.py`
-- Modify: `new_backend/tests/test_config.py`
+- Create: `new_backend/tests/test_config.py`
 
 **Interfaces:**
 - Consumes: exact `trusted_proxy_cidrs` and internal header name `X-PSKit-Client-IP`.
@@ -153,7 +153,7 @@ Expected: PASS with no adapter retry and no caller-controlled internal IP.
 - [ ] **Step 5: Commit the trusted network slice**
 
 ```bash
-git add new_backend/app/services/client_ip.py new_backend/app/adapters/live/supabase_auth.py new_backend/app/domain/errors.py new_backend/app/config.py new_backend/tests/test_client_ip.py new_backend/tests/test_live_adapters.py new_backend/tests/test_config.py
+git add new_backend/app/services/client_ip.py new_backend/app/adapters/live/supabase_auth.py new_backend/app/ports/providers.py new_backend/app/config.py new_backend/tests/test_client_ip.py new_backend/tests/test_live_adapters.py new_backend/tests/test_config.py
 git commit -m "feat: trust and propagate verified auth client IPs"
 ```
 
