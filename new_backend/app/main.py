@@ -46,6 +46,7 @@ from app.api import (
     profile,
     runs,
     sandbox_files,
+    tool_products,
     usage,
     workspace,
 )
@@ -68,6 +69,8 @@ from app.domain.persistent_conversation import PersistentConversationStore
 from app.domain.quota import QuotaLedger
 from app.domain.sandboxes import SandboxArtifactStore
 from app.domain.store import DemoStore
+from app.domain.tool_products.registry import ToolProductRegistry
+from app.domain.tool_products.repository import ToolProductRepository
 from app.domain.tool_runs import ToolRunStore
 from app.ports.avatars import AvatarStorage
 from app.ports.captcha import CaptchaVerifier
@@ -409,6 +412,14 @@ def create_app(
         f"{frontend.scheme}://{frontend.netloc}",
     )
     app.state.database = database
+    app.state.tool_product_repository = (
+        ToolProductRepository(database) if database is not None else None
+    )
+    app.state.tool_product_registry = (
+        ToolProductRegistry(app.state.tool_product_repository)
+        if app.state.tool_product_repository is not None
+        else None
+    )
     app.state.auth_guard = configured_auth_guard
     app.state.auth_protection = AuthProtection(
         guard=configured_auth_guard,
@@ -673,6 +684,7 @@ def create_app(
     app.include_router(admin_services.router)
     app.include_router(admin_operations.router)
     app.include_router(sandbox_files.router)
+    app.include_router(tool_products.router)
     app.include_router(health.router)
     app.include_router(metrics.router)
     return app

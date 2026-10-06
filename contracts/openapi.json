@@ -5560,6 +5560,122 @@
         }
       }
     },
+    "/api/v1/tool-products": {
+      "get": {
+        "tags": [
+          "tool-products"
+        ],
+        "summary": "List Tool Products",
+        "description": "List immutable releases visible to the current member or guest.",
+        "operationId": "list_tool_products_api_v1_tool_products_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolProductPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tool-products/{slug}": {
+      "get": {
+        "tags": [
+          "tool-products"
+        ],
+        "summary": "Get Tool Product",
+        "description": "Resolve one currently published product without exposing its MCP binding.",
+        "operationId": "get_tool_product_api_v1_tool_products__slug__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedToolProduct"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health/live": {
       "get": {
         "tags": [
@@ -7612,6 +7728,21 @@
         ],
         "title": "DependencyReport"
       },
+      "DirectActionTarget": {
+        "properties": {
+          "action_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Action Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action_id"
+        ],
+        "title": "DirectActionTarget"
+      },
       "EmailLoginRequest": {
         "properties": {
           "email": {
@@ -8197,6 +8328,29 @@
         ],
         "title": "LimitsUpdate"
       },
+      "LocalizedText": {
+        "properties": {
+          "en": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "En"
+          },
+          "zh-CN": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Zh-Cn"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "en",
+          "zh-CN"
+        ],
+        "title": "LocalizedText"
+      },
       "McpInvokeResult": {
         "properties": {
           "tool": {
@@ -8602,6 +8756,60 @@
         ],
         "title": "PrepareFiles"
       },
+      "ProductAction": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Id"
+          },
+          "label": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "capability",
+              "workflow"
+            ],
+            "title": "Kind"
+          },
+          "binding_ids": {
+            "items": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Binding Ids"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Schema"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "binding_ids"
+        ],
+        "title": "ProductAction"
+      },
       "ProfileUpdateRequest": {
         "properties": {
           "name": {
@@ -8823,6 +9031,74 @@
         },
         "type": "object",
         "title": "ProjectSkillSettings"
+      },
+      "PublishedToolProduct": {
+        "properties": {
+          "release_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Release Id"
+          },
+          "product_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Product Id"
+          },
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,79}$",
+            "title": "Slug"
+          },
+          "revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Revision"
+          },
+          "title": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "description": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "ui_schema": {
+            "$ref": "#/components/schemas/ToolUiSchema"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/ProductAction"
+            },
+            "type": "array",
+            "title": "Actions"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "published",
+              "suspended"
+            ],
+            "title": "State"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Published At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "release_id",
+          "product_id",
+          "slug",
+          "revision",
+          "title",
+          "description",
+          "ui_schema",
+          "actions",
+          "state",
+          "published_at"
+        ],
+        "title": "PublishedToolProduct"
       },
       "QuotaCounter": {
         "properties": {
@@ -9523,6 +9799,44 @@
         ],
         "title": "SignupResponse"
       },
+      "StateActionSelection": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "map": {
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$"
+            },
+            "type": "object",
+            "maxProperties": 100,
+            "minProperties": 1,
+            "title": "Map"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source",
+          "map"
+        ],
+        "title": "StateActionSelection"
+      },
+      "StateActionTarget": {
+        "properties": {
+          "by_state": {
+            "$ref": "#/components/schemas/StateActionSelection"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "by_state"
+        ],
+        "title": "StateActionTarget"
+      },
       "StorageQuota": {
         "properties": {
           "limit": {
@@ -9625,6 +9939,34 @@
         ],
         "title": "ToolCallPart"
       },
+      "ToolProductPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublishedToolProduct"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ToolProductPage"
+      },
       "ToolResultPart": {
         "properties": {
           "type": {
@@ -9725,6 +10067,691 @@
           "project_id"
         ],
         "title": "ToolRunMove"
+      },
+      "ToolUiAction": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Id"
+          },
+          "label": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "kind": {
+            "type": "string",
+            "const": "start_run",
+            "title": "Kind",
+            "default": "start_run"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DirectActionTarget"
+              },
+              {
+                "$ref": "#/components/schemas/StateActionTarget"
+              }
+            ],
+            "title": "Target"
+          },
+          "visible_when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolUiCondition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "target"
+        ],
+        "title": "ToolUiAction"
+      },
+      "ToolUiCondition": {
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "equals": {
+            "title": "Equals"
+          },
+          "in": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array",
+                "maxItems": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In"
+          },
+          "exists": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exists"
+          },
+          "and": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ToolUiCondition"
+                },
+                "type": "array",
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "And"
+          },
+          "or": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ToolUiCondition"
+                },
+                "type": "array",
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Or"
+          },
+          "not": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolUiCondition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ToolUiCondition"
+      },
+      "ToolUiField": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Id"
+          },
+          "component": {
+            "type": "string",
+            "enum": [
+              "text-input",
+              "number-input",
+              "textarea",
+              "select",
+              "segmented-control",
+              "checkbox",
+              "switch",
+              "file-upload",
+              "protein-input",
+              "sequence-input",
+              "parameter-group",
+              "advanced-section"
+            ],
+            "title": "Component"
+          },
+          "label": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "input_pointer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Pointer"
+          },
+          "help": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": false
+          },
+          "default": {
+            "title": "Default"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiOption"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "title": "Options"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "accepted_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Accepted Types"
+          },
+          "max_files": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Files"
+          },
+          "visible_when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolUiCondition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiField"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Fields"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "component",
+          "label"
+        ],
+        "title": "ToolUiField"
+      },
+      "ToolUiHandoff": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Id"
+          },
+          "label": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "summary_source": {
+            "type": "string",
+            "title": "Summary Source"
+          },
+          "artifact_sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Artifact Sources"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "summary_source"
+        ],
+        "title": "ToolUiHandoff"
+      },
+      "ToolUiOption": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              }
+            ],
+            "title": "Value"
+          },
+          "label": {
+            "$ref": "#/components/schemas/LocalizedText"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "ToolUiOption"
+      },
+      "ToolUiPageLayout": {
+        "properties": {
+          "layout": {
+            "type": "string",
+            "enum": [
+              "split-workspace",
+              "single-column"
+            ],
+            "title": "Layout"
+          },
+          "input_width": {
+            "type": "integer",
+            "maximum": 9.0,
+            "minimum": 3.0,
+            "title": "Input Width",
+            "default": 5
+          },
+          "result_width": {
+            "type": "integer",
+            "maximum": 9.0,
+            "minimum": 3.0,
+            "title": "Result Width",
+            "default": 7
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "layout"
+        ],
+        "title": "ToolUiPageLayout"
+      },
+      "ToolUiProduct": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,79}$",
+            "title": "Slug"
+          },
+          "title": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "description": {
+            "$ref": "#/components/schemas/LocalizedText"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "slug",
+          "title",
+          "description"
+        ],
+        "title": "ToolUiProduct"
+      },
+      "ToolUiResultView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Id"
+          },
+          "component": {
+            "type": "string",
+            "enum": [
+              "metric-grid",
+              "stage-flow",
+              "sequence-table",
+              "data-table",
+              "line-chart",
+              "scatter-plot",
+              "heatmap",
+              "structure-viewer",
+              "artifact-list",
+              "json-inspector"
+            ],
+            "title": "Component"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "empty": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preview_limit": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Preview Limit",
+            "default": 100
+          },
+          "full_data_artifact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Data Artifact"
+          },
+          "visible_when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolUiCondition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transforms": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiTransform"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Transforms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "component",
+          "source"
+        ],
+        "title": "ToolUiResultView"
+      },
+      "ToolUiSchema": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "pskit.tool-ui.v1",
+            "title": "Schema Version",
+            "default": "pskit.tool-ui.v1"
+          },
+          "product": {
+            "$ref": "#/components/schemas/ToolUiProduct"
+          },
+          "page": {
+            "$ref": "#/components/schemas/ToolUiPageLayout"
+          },
+          "state": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "maxProperties": 100,
+            "title": "State"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiSection"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Sections"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiAction"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Actions"
+          },
+          "result_views": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiResultView"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Result Views"
+          },
+          "handoffs": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiHandoff"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Handoffs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product",
+          "page",
+          "actions"
+        ],
+        "title": "ToolUiSchema"
+      },
+      "ToolUiSection": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$",
+            "title": "Id"
+          },
+          "title": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "visible_when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolUiCondition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUiField"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Fields"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "fields"
+        ],
+        "title": "ToolUiSection"
+      },
+      "ToolUiTransform": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "identity",
+              "limit",
+              "sort",
+              "number-format",
+              "rename-fields"
+            ],
+            "title": "Name"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10000.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "asc",
+                  "desc"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction"
+          },
+          "digits": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 12.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digits"
+          },
+          "renames": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "maxProperties": 100,
+            "title": "Renames"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ToolUiTransform"
       },
       "UsageActivity": {
         "properties": {
