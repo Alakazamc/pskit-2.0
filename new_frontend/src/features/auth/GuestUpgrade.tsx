@@ -83,8 +83,7 @@ export function GuestUpgrade({ api, onSession }: {
         <input id="guest-upgrade-code" inputMode="numeric" autoComplete="one-time-code"
           value={code} onChange={(event) => setCode(event.target.value)} required /></>}
       {!sent && captchaSiteKey && <AuthCaptcha siteKey={captchaSiteKey}
-        action="guest_upgrade_email" resetSignal={captchaReset} onToken={setCaptchaToken}
-        onUnavailable={() => setError("error.captchaUnavailable")} />}
+        action="guest_upgrade_email" resetSignal={captchaReset} onToken={setCaptchaToken} />}
       {error && <p role="alert">{t(error)}</p>}
       <button type="submit" className="mono-button"
         disabled={busy || (!sent && (cooldown > 0 || Boolean(captchaSiteKey && !captchaToken)))}>

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ResearchApi } from "../../api/types";
@@ -73,6 +73,25 @@ it("requires a fresh Turnstile token before live guest signup and sends it only 
   expect(startAnonymous).toHaveBeenCalledWith("challenge-token");
   expect(reset).toHaveBeenCalledWith("widget-1");
   expect(guestButton).toBeDisabled();
+});
+
+it("does not expose a Turnstile outage as a login form error", () => {
+  vi.stubEnv("VITE_TURNSTILE_SITE_KEY", "site-key");
+  let challengeFailed: (() => void) | undefined;
+  vi.stubGlobal("turnstile", {
+    render: vi.fn((_container: HTMLElement, options: { "error-callback": () => void }) => {
+      challengeFailed = options["error-callback"];
+      return "failed-widget";
+    }),
+    reset: vi.fn(), remove: vi.fn(),
+  });
+  const api = { googleLoginUrl: () => "/api/v1/auth/google/start" } as unknown as ResearchApi;
+  render(<LanguageProvider><LoginPage api={api} onLogin={() => {}} /></LanguageProvider>);
+
+  act(() => challengeFailed?.());
+
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.queryByText("人机验证服务暂不可用，请稍后重试。")).not.toBeInTheDocument();
 });
 
 it("explains when live guest access is disabled by the Python server", async () => {

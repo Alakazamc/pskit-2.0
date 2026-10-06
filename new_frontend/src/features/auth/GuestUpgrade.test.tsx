@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import type { AuthSessionResponse, ResearchApi } from "../../api/types";
@@ -55,6 +55,24 @@ it("offers the Python Google identity link without using a browser SDK", async (
   expect(await screen.findByRole("link", { name: "继续前往 Google" })).toHaveAttribute(
     "href", "https://accounts.google.com/oauth",
   );
+});
+
+it("does not expose a Turnstile outage as an account-upgrade error", () => {
+  vi.stubEnv("VITE_TURNSTILE_SITE_KEY", "site-key");
+  let challengeFailed: (() => void) | undefined;
+  vi.stubGlobal("turnstile", {
+    render: vi.fn((_container: HTMLElement, options: { "error-callback": () => void }) => {
+      challengeFailed = options["error-callback"];
+      return "failed-widget";
+    }),
+    reset: vi.fn(), remove: vi.fn(),
+  });
+  render(<LanguageProvider><GuestUpgrade api={{} as ResearchApi} onSession={() => {}} /></LanguageProvider>);
+
+  act(() => challengeFailed?.());
+
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.queryByText("人机验证服务暂不可用，请稍后重试。")).not.toBeInTheDocument();
 });
 
 it("explains the new-account-only boundary in English", () => {
