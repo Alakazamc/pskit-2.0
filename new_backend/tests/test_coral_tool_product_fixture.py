@@ -29,7 +29,7 @@ def test_coral_product_fixture_exposes_four_stable_capabilities():
     assert validate_tool_ui(product.ui_schema, product.bindings)
 
 
-def test_coral_acceptance_fixture_blocks_publication_until_pocket_case_runs():
+def test_coral_acceptance_fixture_allows_publication_after_four_real_cases_pass():
     raw = _load("coral.acceptance.yaml")
     suite = AcceptanceSuite.model_validate(raw["suite"])
     cases = {case.action_id: case for case in suite.cases}
@@ -44,16 +44,20 @@ def test_coral_acceptance_fixture_blocks_publication_until_pocket_case_runs():
     assert evidence["cases"]["coral-one-shot"]["status"] == "passed"
     assert evidence["cases"]["coral-iterative"]["status"] == "passed"
     assert evidence["cases"]["coral-two-dimensional"]["status"] == "passed"
-    assert evidence["cases"]["coral-pocket"]["status"] == "blocked"
-    assert evidence["cases"]["coral-pocket"]["blocker"] == "AF3_WORKER_UNAVAILABLE"
-    assert raw["publication"]["eligible"] is False
+    assert evidence["cases"]["coral-pocket"]["status"] == "passed"
+    assert raw["publication"]["eligible"] is True
     assert raw["publication"]["required_case_status"] == "passed"
 
 
 def test_coral_real_case_evidence_records_usage_and_artifact_digests():
     evidence = _load("coral.acceptance.yaml")["evidence"]["cases"]
 
-    for case_id in ("coral-one-shot", "coral-iterative", "coral-two-dimensional"):
+    for case_id in (
+        "coral-one-shot",
+        "coral-iterative",
+        "coral-pocket",
+        "coral-two-dimensional",
+    ):
         case = evidence[case_id]
         assert case["usage"]["wall_ms"] > 0
         assert case["usage"]["cpu_core_ms"] > 0
@@ -62,4 +66,5 @@ def test_coral_real_case_evidence_records_usage_and_artifact_digests():
 
     assert evidence["coral-one-shot"]["usage"]["gpu_device_ms"] > 0
     assert evidence["coral-iterative"]["usage"]["gpu_device_ms"] > 0
+    assert evidence["coral-pocket"]["usage"]["gpu_device_ms"] > 0
     assert evidence["coral-two-dimensional"]["usage"]["gpu_device_ms"] is None
