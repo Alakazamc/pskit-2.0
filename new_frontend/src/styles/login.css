@@ -36,6 +36,20 @@
   --login-scene: url("../assets/login-biology-night.webp");
   background: #082227;
 }
+@supports (background-image: image-set(url("") type("image/avif"))) {
+  .login-page {
+    --login-scene: image-set(
+      url("../assets/login-biology-day.avif") type("image/avif"),
+      url("../assets/login-biology-day.webp") type("image/webp")
+    );
+  }
+  .login-page.dark {
+    --login-scene: image-set(
+      url("../assets/login-biology-night.avif") type("image/avif"),
+      url("../assets/login-biology-night.webp") type("image/webp")
+    );
+  }
+}
 .login-page::before,
 .login-page::after {
   content: "";
