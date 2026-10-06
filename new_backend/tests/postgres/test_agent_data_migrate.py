@@ -9,7 +9,7 @@ import pytest
 from deploy.agent.scripts.agent_data_snapshot import snapshot
 from psycopg import sql
 
-from app.db.postgres_migrations import migrate_postgres
+from app.db.postgres_migrations import SCHEMA_VERSION, migrate_postgres
 from app.domain.catalog import CatalogStore
 from app.domain.identity_policy import IdentityPolicyStore
 from app.domain.persistent_conversation import PersistentConversationStore
@@ -190,7 +190,7 @@ def test_failed_import_keeps_active_schema(
         ).fetchone() == (0,)
         assert connection.execute(
             sql.SQL("SELECT COUNT(*) FROM {}.schema_migrations").format(sql.Identifier(target))
-        ).fetchone() == (6,)
+        ).fetchone() == (SCHEMA_VERSION,)
 
 
 def test_pi_copy_into_existing_empty_volume(tmp_path: Path) -> None:

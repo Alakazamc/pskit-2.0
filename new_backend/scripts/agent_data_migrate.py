@@ -73,7 +73,13 @@ _POSTGRES_CONTROL_PLANE = {
     "admin_revisions",
     "admin_user_limits",
 }
-_POSTGRES_ONLY = _POSTGRES_COMPUTE | _POSTGRES_CONTROL_PLANE
+_POSTGRES_AUTH_ABUSE = {
+    "auth_abuse_buckets",
+    "auth_abuse_locks",
+    "auth_abuse_claims",
+    "auth_abuse_claim_items",
+}
+_POSTGRES_ONLY = _POSTGRES_COMPUTE | _POSTGRES_CONTROL_PLANE | _POSTGRES_AUTH_ABUSE
 
 
 @dataclass(frozen=True)
@@ -550,7 +556,11 @@ def export_sqlite_snapshot(
                     )
                 ).fetchone()
                 if exists:
-                    kind = "Compute" if table in _POSTGRES_COMPUTE else "Management or sandbox"
+                    kind = (
+                        "Compute" if table in _POSTGRES_COMPUTE
+                        else "Auth abuse" if table in _POSTGRES_AUTH_ABUSE
+                        else "Management or sandbox"
+                    )
                     raise ValueError(
                         f"{kind} state requires a PostgreSQL backup; SQLite export would lose data"
                     )

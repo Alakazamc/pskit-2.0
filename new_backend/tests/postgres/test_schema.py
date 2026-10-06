@@ -33,6 +33,7 @@ EXPECTED_TABLES = {
     "pdf_execution_leases", "mcp_tool_calls", "internal_tool_auth",
     "guest_creation_events", "schema_migrations",
     "agent_session_titles",
+    "auth_abuse_buckets", "auth_abuse_locks", "auth_abuse_claims", "auth_abuse_claim_items",
 }
 
 
@@ -178,3 +179,18 @@ def test_quota_migration_upgrades_existing_version_two_schema(pg_schema: tuple[s
                 sql.Identifier(schema)
             )
         ).fetchone() == ("old-call", 1)
+
+
+def test_auth_abuse_schema_contract(pg_schema):
+    dsn, schema = pg_schema
+    assert SCHEMA_VERSION == 8
+    migrate_postgres(dsn, schema=schema)
+    with psycopg.connect(dsn) as conn:
+        columns = {row[0] for row in conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_schema=%s AND table_name LIKE 'auth_abuse_%%'", (schema,)
+        )}
+        assert not columns & {"email", "ip", "password", "otp", "captcha_token"}
+        for table in ("auth_abuse_buckets", "auth_abuse_locks", "auth_abuse_claims", "auth_abuse_claim_items"):
+            assert conn.execute(
+                "SELECT 1 FROM pg_indexes WHERE schemaname=%s AND tablename=%s AND indexdef LIKE '%%expires_at%%'", (schema, table)
+            ).fetchone()

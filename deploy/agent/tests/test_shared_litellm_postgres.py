@@ -4,6 +4,7 @@ import json
 import os
 import stat
 import subprocess
+import uuid
 from pathlib import Path
 
 import psycopg
@@ -151,3 +152,23 @@ def test_existing_candidate_key_must_authenticate_against_target(tmp_path, monke
         bootstrap_pskit.main([
             "--base-url", "http://10.9.8.1:4001", "--key-file", str(candidate),
         ])
+
+
+def test_auth_abuse_tables_use_only_private_application_permissions(provisioned_pg):
+    from app.db.postgres import PostgresDatabase
+    from app.db.postgres_migrations import migrate_postgres
+    from app.domain.auth_abuse import AuthAbuseGuard
+    migrate_postgres(provisioned_pg)
+    app_dsn = psycopg.conninfo.make_conninfo(provisioned_pg, user="pskit_app", password="local-pskit-test-password")
+    db = PostgresDatabase(app_dsn)
+    try:
+        guard = AuthAbuseGuard(db, secret="permissions-test-secret-at-least-32-chars")
+        guard.claim_login(f"permission-{uuid.uuid4().hex}@example.com", "192.0.2.254")
+    finally:
+        db.close()
+    with psycopg.connect(provisioned_pg) as conn:
+        for table in ("auth_abuse_buckets", "auth_abuse_locks", "auth_abuse_claims", "auth_abuse_claim_items"):
+            for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE"):
+                assert conn.execute("SELECT has_table_privilege('pskit_app', %s, %s)", (f"pskit.{table}", privilege)).fetchone() == (True,)
+                assert conn.execute("SELECT has_table_privilege('litellm', %s, %s)", (f"pskit.{table}", privilege)).fetchone() == (False,)
+            assert conn.execute("SELECT has_schema_privilege('pskit_app', 'pskit', 'CREATE')").fetchone() == (False,)
