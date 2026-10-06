@@ -23,39 +23,39 @@ scope:
   canonical_real_cases_passed: 4
   canonical_evidence: coral.acceptance.yaml
 staging_evidence:
-  verified_at: 2026-10-07T00:57:37+08:00
+  verified_at: 2026-10-07T01:10:13+08:00
   environment: isolated-staging
   backend_image:
-    tag: pskit-agent-backend:20261007-tool-products-runtime-r3
-    id: sha256:34140931d1155484030a43608073d4c30e71649b4ebc4198d86660e45ae6d943
-    archive_sha256: c7dfc24c32e37b2e0fea1d13865fda9ed67646b333d00b2b5c8fd913b4c5e460
-  service_revision: 10
-  product_revision: 8
+    tag: pskit-agent-backend:20261007-tool-products-runtime-r4
+    id: sha256:03107b7953e5e214b624233265b07cba1dd7df039a6c03323ed1aa9d4f071282
+    archive_sha256: e49d6ff0b9d2add6133a4fff3e755fdb0a799d73b07afe0b1af0b36e9c725bb1
+  service_revision: 11
+  product_revision: 9
   qualification:
-    report_id: qualification-e9144073-7bdb-4181-85f4-e88a1b3ab601
+    report_id: qualification-d8e738e6-1cad-41d2-97e6-63ef51b09a48
     status: passed
     protocol_passed: true
     scientific_passed: true
-    binding_digest: 193859355daebe50966e04b13d62d68caf1dc317e67e5b4191bee04bb413e2a2
+    binding_digest: e3c7ec18b519c084f29efbccb21ab9999b1353a38cbabb4d48cf9ae13d46f627
     ui_digest: 51d39f4d34a2d8539f8cc8cab1373f0e5596d054cf863b0b438a73f8563ab497
     suite_digest: e28d4d342e82eae51364e72c336f9db72763605caba307e731a177683b67998a
   release:
-    id: release-c5c78cde-137b-4e88-9313-3c5ea25d7da3
+    id: release-403f035c-823a-436e-b1e6-8b587211c816
     final_state: suspended
   run:
-    id: tool-run-99cfe2b3-3bb5-4f40-b839-7afab449e0c0
+    id: tool-run-33d4d34b-2fc1-4cc3-8168-ca971269e95b
     status: completed
     usage:
-      wall_ms: 2611
-      cpu_core_ms: 2576
-      gpu_device_ms: 2609
+      wall_ms: 2648
+      cpu_core_ms: 2610
+      gpu_device_ms: 2646
       gpu_count: 1
       source: service_reported
     artifacts:
-      - id: provider-c389c5eb40a9843c88872a33
+      - id: provider-061f5333bd448a41916e2e8b
         name: generated_rna.csv
-        size: 71
-        sha256: c389c5eb40a9843c88872a334387b9df36f8c4934ed39d6ac7520ba123034a1e
+        size: 70
+        sha256: 061f5333bd448a41916e2e8b44f70ac99b602f7952caabe613f595521adc5c9a
   receiver_journal_rows_after_ack: 0
   synthetic_admin_roles_after_cleanup: []
   production_changed: false
