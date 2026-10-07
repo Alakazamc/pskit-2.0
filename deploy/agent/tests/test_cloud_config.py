@@ -63,14 +63,15 @@ def test_cloud_supabase_is_private_and_uses_durable_volumes():
         assert config["volumes"][mount["source"]]["name"].startswith("pskit-agent-")
 
 
-def test_cloud_app_has_only_loopback_published_ports():
+def test_cloud_app_has_only_loopback_published_ports(monkeypatch):
     base = ROOT / "deploy/agent"
+    monkeypatch.setenv("AGENT_BACKEND_ENV_FILE", str(base / "cloud.backend.env.example"))
     config = compose_config([base / "compose.yaml", base / "compose.local.yaml",
                              base / "compose.cloud.yaml"],
                             base / "cloud.env.example", profiles=("private-test",))
     assert config["name"] == "pskit-agent-cloud"
     assert all(ip == "127.0.0.1" for ip in published_host_ips(config))
-    assert config["services"]["backend"]["environment"]["RESEARCH_AGENT_MEMBER_DAILY_GPU_MINUTES"] == "0"
+    assert config["services"]["backend"]["environment"]["RESEARCH_AGENT_MEMBER_DAILY_GPU_MINUTES"] == "60"
     assert config["services"]["backend"]["environment"]["RESEARCH_AGENT_AUTH_COOKIE_SECURE"] == "true"
     assert config["networks"]["supabase"]["name"] == "pskit-agent-supabase_default"
     mock = config["services"]["model-gateway-mock"]

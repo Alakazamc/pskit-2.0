@@ -64,6 +64,8 @@ def test_generates_distinct_private_staging_secrets(release, monkeypatch):
     }
     assert backend["RESEARCH_AGENT_MCP_TIMEOUT_SECONDS"] == "900"
     assert backend["RESEARCH_AGENT_COMPUTE_CPU_DAILY_LIMIT_MS"] == "3600000"
+    assert backend["RESEARCH_AGENT_MEMBER_DAILY_GPU_MINUTES"] == "60"
+    assert backend["RESEARCH_AGENT_GUEST_DAILY_GPU_MINUTES"] == "0"
     assert backend["RESEARCH_AGENT_AUTH_ABUSE_MODE"] == "observe"
     assert len(backend["RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET"]) >= 64
     assert len(backend["RESEARCH_AGENT_AUTH_CSRF_SECRET"]) >= 64

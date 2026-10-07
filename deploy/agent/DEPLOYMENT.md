@@ -42,6 +42,8 @@
 
 通用计算还需要 CPU 配额。在实际 `AGENT_BACKEND_ENV_FILE` 指向的文件中设置 `RESEARCH_AGENT_COMPUTE_CPU_DAILY_LIMIT_MS=3600000`，即每天 1 CPU 核小时；计量日按 UTC 划分。该值是未单独设置 CPU 配额的用户默认值，用户级设置优先；GPU 配额独立计算。缺少此字段时后端默认 CPU 额度为 0，CORAL 等需要预留 CPU 的任务会返回 `CPU_QUOTA_EXCEEDED`（HTTP 429）。修改环境文件后，定向重建后端容器，使环境变量生效。
 
+GPU 默认额度使用 `RESEARCH_AGENT_MEMBER_DAILY_GPU_MINUTES=60`（正式用户每天 60 GPU 设备分钟）和 `RESEARCH_AGENT_GUEST_DAILY_GPU_MINUTES=0`（游客不可执行 GPU 任务）。个人 `agent_gpu_limits` 设置优先，显式 0 仍会禁止该账号使用 GPU。旧部署的私网验证阶段曾把会员默认值设成 0；发布真实计算时必须检查实际后端环境文件和已运行容器，不能只检查代码默认值。CORAL 一次生成需预留 120,000 GPU 设备毫秒，即 2 分钟；设置 0 会返回 `GPU_QUOTA_EXCEEDED`，即使没有历史用量也一样。诊断必须沿用应用的 `PersistentConversationStore._gpu_limit_for` 身份策略，不能给独立 `ComputeLedger` 人为指定 60 分钟来判断生产准入。
+
 在阿里云仓库根目录运行：
 
 ```bash
@@ -193,7 +195,7 @@ curl --noproxy '*' --resolve agent.bioailab.net:443:10.9.8.1 \
   https://agent.bioailab.net/admin/models
 ```
 
-预期结果：后端就绪；未登录的 `usage` 返回 `401`；公网 `internal` 返回 `404`；登录页返回 `200`；公网管理页面返回 `403`，WireGuard 管理页面返回 `200`。管理 API 公网返回 `403`，WireGuard 未登录返回 `401`。再用授权账号核对登录、项目、对话、SSE、上传、模型选择和 Token 额度。工具发布还需断言已批准的 slug（例如 `coral`）出现在 `/api/v1/tool-products`，打开配置 UI 并提交受限任务；目录 200 或应用代码存在不代表工具已开放。真实 AF3 要另外检查 Job 领取、进度、产物、GPU 结算与 Pi 自动唤醒。当前生产配置把会员 GPU 日额度设为 `0`；只有明确给测试账号配置额度后，真实 AF3 验收才有意义。不要把只读回调请求当成真实计算成功。
+预期结果：后端就绪；未登录的 `usage` 返回 `401`；公网 `internal` 返回 `404`；登录页返回 `200`；公网管理页面返回 `403`，WireGuard 管理页面返回 `200`。管理 API 公网返回 `403`，WireGuard 未登录返回 `401`。再用授权账号核对登录、项目、对话、SSE、上传、模型选择和 Token 额度。工具发布还需断言已批准的 slug（例如 `coral`）出现在 `/api/v1/tool-products`，打开配置 UI 并提交受限任务；目录 200 或应用代码存在不代表工具已开放。真实 AF3 要另外检查 Job 领取、进度、产物、GPU 结算与 Pi 自动唤醒。2026-10-07 用户确认会员默认每天 60 GPU 设备分钟；真实计算验收仍需使用受控输入及预算上限。不要把只读回调请求当成真实计算成功。
 
 ## 7. 停止和恢复
 
