@@ -61,6 +61,7 @@
 
 - Keep upload guidance out of the composer until a limit is exceeded. Count ready and pending attachments together, including images, against ten files per turn. Accept files up to the remaining capacity and show a bilingual overflow alert only for the excess; the user can select the remaining files next turn. Release places on removal, cancellation, or failure, and reset the allowance after a successful send. Keep per-file size and format validation in upload errors.
 - Keep attachment previews in a bounded, keyboard-accessible scrolling region so ten files leave the input and send action visible on small screens. Use the shared theme scrollbar styles.
+- Restore image thumbnails from ready file IDs when switching conversations or refreshing. Cache preview Blobs in memory by user and file ID with five-minute idle expiry; recover cache misses through the authenticated file API. Revoke display URLs on removal/unmount and retain only file references in localStorage. Verify same-name images, refresh, late downloads after removal and inaccessible files.
 
 ## Streaming replies
 

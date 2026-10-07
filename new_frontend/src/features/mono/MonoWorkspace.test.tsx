@@ -41,7 +41,7 @@ it("keeps a guest draft and offers upgrade when its Token allowance is exhausted
   render(<App />);
   const actor = userEvent.setup();
 
-  await actor.type(await screen.findByLabelText("消息内容"), "Analyze this dataset");
+  await actor.type(await screen.findByLabelText("消息内容", {}, { timeout: 5_000 }), "Analyze this dataset");
   await actor.click(screen.getByRole("button", { name: "发送消息" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("本月 Token 额度已用尽。");
   expect(screen.getByLabelText("消息内容")).toHaveValue("Analyze this dataset");

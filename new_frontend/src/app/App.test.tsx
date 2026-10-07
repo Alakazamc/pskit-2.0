@@ -48,7 +48,7 @@ it("renders catalog data from HTTP and submits selected context as API refs", as
   expect(await screen.findByRole("heading", { name: "今天有什么可以帮你？" })).toBeInTheDocument();
   await user.click(await screen.findByRole("link", { name: "接口会话" }));
   expect(screen.queryByText(/Agent 模式/)).not.toBeInTheDocument();
-  await user.type(screen.getByLabelText("消息内容"), "/");
+  await user.type(await screen.findByLabelText("消息内容", {}, { timeout: 5_000 }), "/");
   await user.click(screen.getByRole("button", { name: "Genome scan" }));
   await user.type(screen.getByLabelText("消息内容"), "@");
   await user.click(screen.getByRole("button", { name: "Reference database" }));

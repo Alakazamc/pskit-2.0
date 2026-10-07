@@ -11,12 +11,14 @@ import { errorTranslationKey } from "../../i18n/errors";
 import type { TranslationKey } from "../../i18n/translations";
 import { useWorkspacePortalContainer } from "../../hooks/useWorkspacePortalContainer";
 import { ModelPicker } from "./ModelPicker";
+import { AttachmentImagePreview } from "./AttachmentImagePreview";
 
 type UploadTile = {
   key: string;
   name: string;
   kind: "image" | "pdf" | "html" | "file";
   previewUrl?: string;
+  previewBlob?: Blob;
   progress: number | null;
   status: "uploading" | "ready";
   refId?: string;
@@ -37,7 +39,7 @@ export function Composer(props: Parameters<typeof ComposerInput>[0]) {
   return <ComposerInput key={JSON.stringify([props.draftScope?.userId, props.draftScope?.conversationId])} {...props} />;
 }
 
-function ComposerInput({ draftScope, onSend, onUpload, onStop, runActive = false, skills, projectSkillIds = [], resources, models = [], disabled = false }: { draftScope?: ComposerDraftScope; onSend: (message: MessageRequest) => Promise<boolean>; onUpload: (file: File, onProgress: (value: number) => void) => Promise<ContextRef>; onStop?: () => Promise<void>; runActive?: boolean; skills: CatalogItem[]; projectSkillIds?: string[]; resources: CatalogItem[]; models?: ModelOption[]; disabled?: boolean }) {
+function ComposerInput({ draftScope, onSend, onUpload, onLoadAttachmentImage, onStop, runActive = false, skills, projectSkillIds = [], resources, models = [], disabled = false }: { draftScope?: ComposerDraftScope; onSend: (message: MessageRequest) => Promise<boolean>; onUpload: (file: File, onProgress: (value: number) => void) => Promise<ContextRef>; onLoadAttachmentImage?: (id: string) => Promise<Blob>; onStop?: () => Promise<void>; runActive?: boolean; skills: CatalogItem[]; projectSkillIds?: string[]; resources: CatalogItem[]; models?: ModelOption[]; disabled?: boolean }) {
   const { t } = useLanguage();
   const [uploadTiles, setUploadTiles] = useState<UploadTile[]>([]);
   const [uploadError, setUploadError] = useState<TranslationKey | null>(null);
@@ -116,7 +118,7 @@ function ComposerInput({ draftScope, onSend, onUpload, onStop, runActive = false
       const entries = acceptedFiles.map((file): { file: File; tile: UploadTile } => {
         const previewUrl = fileKind(file) === "image" && typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : undefined;
         if (previewUrl) objectUrls.current.add(previewUrl);
-        return { file, tile: { key: crypto.randomUUID(), name: file.name, kind: fileKind(file), previewUrl, progress: null, status: "uploading" } };
+        return { file, tile: { key: crypto.randomUUID(), name: file.name, kind: fileKind(file), previewUrl, previewBlob: fileKind(file) === "image" ? file : undefined, progress: null, status: "uploading" } };
       });
       entries.forEach(({ tile }) => pendingUploads.current.add(tile.key));
       setUploadTiles((current) => [...current, ...entries.map(({ tile }) => tile)]);
@@ -166,7 +168,9 @@ function ComposerInput({ draftScope, onSend, onUpload, onStop, runActive = false
     {toastHost ? createPortal(uploadErrorToast, toastHost) : uploadErrorToast}
     <div className="composer-surface">
       {visibleUploads.length > 0 && <div className="attachment-previews" role="region" aria-label={t("composer.attachments")} tabIndex={0}>{visibleUploads.map((tile) => <div className={`attachment-preview ${tile.kind}`} key={tile.key} role="group" aria-label={t(tile.status === "uploading" ? tile.progress === null ? "composer.uploadingNamedUnknown" : "composer.uploadingNamed" : "composer.uploadedNamed", { name: tile.name, progress: tile.progress ?? 0 })}>
-        {tile.previewUrl ? <img src={tile.previewUrl} alt="" /> : <div className="attachment-preview-glyph">{tile.kind === "pdf" ? <FileText size={25} /> : tile.kind === "html" ? <Globe2 size={25} /> : <File size={25} />}</div>}
+        {tile.kind === "image" && tile.refId && userId && onLoadAttachmentImage
+          ? <AttachmentImagePreview userId={userId} fileId={tile.refId} loadImage={onLoadAttachmentImage} initialImage={tile.previewBlob} />
+          : tile.previewUrl ? <img src={tile.previewUrl} alt="" /> : <div className="attachment-preview-glyph">{tile.kind === "pdf" ? <FileText size={25} /> : tile.kind === "html" ? <Globe2 size={25} /> : <File size={25} />}</div>}
         {tile.status === "uploading" && <div className={`attachment-preview-progress ${tile.progress === null ? "indeterminate" : ""}`} role="progressbar" aria-label={t(tile.progress === null ? "composer.uploadingNamedUnknown" : "composer.uploadingNamed", { name: tile.name, progress: tile.progress ?? 0 })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={tile.progress ?? undefined}><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="14" className="track" /><circle cx="18" cy="18" r="14" className="value" strokeDasharray={88} strokeDashoffset={tile.progress === null ? 66 : 88 * (1 - tile.progress / 100)} /></svg><span>{tile.progress === null ? "…" : `${tile.progress}%`}</span></div>}
         <div className="attachment-preview-name">{tile.kind === "pdf" && <span className="attachment-pdf-tag">PDF</span>}{tile.name}</div>
         <button type="button" className="attachment-preview-remove" aria-label={t("composer.remove", { name: tile.name })} onClick={() => removeUpload(tile)}><X size={13} /></button>
