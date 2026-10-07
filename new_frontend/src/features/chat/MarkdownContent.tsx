@@ -2,7 +2,6 @@ import { code } from "@streamdown/code";
 import { cjk } from "@streamdown/cjk";
 import { createMathPlugin } from "@streamdown/math";
 import { Streamdown, type Components } from "streamdown";
-import { useDeferredValue } from "react";
 import { MarkdownTable } from "./MarkdownTable";
 
 const plugins = { code, cjk, math: createMathPlugin({ singleDollarTextMath: true }) };
@@ -13,7 +12,8 @@ const components: Components = {
 };
 
 export function MarkdownContent({ text, streaming = false }: { text: string; streaming?: boolean }) {
-  const deferredText = useDeferredValue(text);
+  // Removed useDeferredValue to reduce streaming latency
+  // Streamdown handles its own throttling internally
   return <Streamdown
     className="message-markdown"
     mode={streaming ? "streaming" : "static"}
@@ -23,5 +23,5 @@ export function MarkdownContent({ text, streaming = false }: { text: string; str
     tableMaxHeight={0}
     components={components}
     skipHtml
-  >{streaming ? deferredText : text}</Streamdown>;
+  >{text}</Streamdown>;
 }

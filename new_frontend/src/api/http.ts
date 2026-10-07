@@ -186,9 +186,25 @@ export function createHttpApi({ baseUrl = "/api/v1", token, fetcher = fetch, onU
         while ((boundary = buffer.indexOf("\n\n")) !== -1) {
           const frame = buffer.slice(0, boundary);
           buffer = buffer.slice(boundary + 2);
-          const data = frame.split("\n").filter((line) => line.startsWith("data:"))
-            .map((line) => line.slice(5).trimStart()).join("\n");
-          if (data && !signal.aborted) onEvent(JSON.parse(data) as RunEvent);
+
+          // Parse SSE frame: support multi-line data fields
+          const lines = frame.split("\n");
+          let eventData = "";
+
+          for (const line of lines) {
+            if (line.startsWith("data:")) {
+              const content = line.slice(5).trimStart();
+              eventData += (eventData ? "\n" : "") + content;
+            }
+          }
+
+          if (eventData && !signal.aborted) {
+            try {
+              onEvent(JSON.parse(eventData) as RunEvent);
+            } catch (e) {
+              console.error("Failed to parse SSE event:", eventData, e);
+            }
+          }
         }
         if (buffer.length > 1_000_000) throw new Error("Event frame too large");
       };

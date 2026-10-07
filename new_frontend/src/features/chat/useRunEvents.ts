@@ -33,11 +33,15 @@ export function useRunEvents(api: ResearchApi, runId: string | null, onCompleted
         } else {
           accept(await api.getRunEvents(runId, cursor));
         }
-      } catch {
+      } catch (error) {
         if (cancelled) return;
+        // Log errors for debugging but don't break the loop
+        console.error("Run events fetch error:", error);
       }
       if (cancelled || terminal) return;
-      timer = setTimeout(tick, 1200);
+      // Use shorter interval for active streams (200ms), longer for completed (1200ms)
+      const pollInterval = terminal ? 1200 : 200;
+      timer = setTimeout(tick, pollInterval);
     };
     void tick();
     return () => { cancelled = true; controller.abort(); clearTimeout(timer); };
