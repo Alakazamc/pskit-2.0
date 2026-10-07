@@ -13,6 +13,7 @@ import { completeComposerDraft, conversationDraftScope, moveComposerDraft, readC
 import { Conversation } from "../chat/Conversation";
 import { ConversationArtifacts } from "../chat/ConversationArtifacts";
 import { useRunEvents } from "../chat/useRunEvents";
+import { useRunHistory } from "../chat/useRunHistory";
 import { CreateProjectDialog, MoveChatDialog, ProjectDetail, ProjectIndex } from "./ProjectPages";
 import { personalSessionPath, projectPath, projectSessionPath, sessionPath } from "./sessionPaths";
 import { CatalogLibrary } from "../../components/catalog/CatalogLibrary";
@@ -23,6 +24,8 @@ import { AccountMenu } from "./AccountMenu";
 import { SearchDialog } from "./SearchDialog";
 import { SessionRenameDialog } from "./SessionRenameDialog";
 import { ProjectIconGlyph } from "./ProjectIcon";
+import { PageLoading, PageLoadError } from "../../components/PageLoading";
+import { isMarkdownContentReady, loadMarkdownContent } from "../chat/markdownLoader";
 
 type Theme = "dark" | "light";
 
@@ -111,6 +114,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = (
   const personalChatMatch = pathname.match(/^\/session\/([^/]+)\/?$/);
   const projectChatMatch = pathname.match(/^\/p\/[^/]+\/c\/([^/]+)\/?$/);
   const activeSessionId = decodeURIComponent(personalChatMatch?.[1] ?? projectChatMatch?.[1] ?? "") || null;
+  const isChat = pathname === "/" || !!activeSessionId || /^\/p\/[^/]+\/new$/.test(pathname);
   const personalProjectId = `project-${user.id}`;
   const draftScope = conversationDraftScope(user.id, activeSessionId, activeProjectId);
   const [theme, setTheme] = useState<Theme>(initialTheme);
@@ -124,6 +128,9 @@ export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = (
   const [sendError, setSendError] = useState<string | null>(null);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [currentRun, setCurrentRun] = useState<{ sessionId: string; runId: string } | null>(null);
+  useEffect(() => {
+    if (currentRun && currentRun.sessionId !== activeSessionId) setCurrentRun(null);
+  }, [activeSessionId, currentRun]);
   const sendGuard = useRef(false);
   const pendingSend = useRef<{ sessionId: string; body: string; key: string } | null>(null);
   useEffect(() => { window.localStorage.setItem("pskit-theme", theme); document.documentElement.dataset.theme = theme; }, [theme]);
@@ -131,6 +138,8 @@ export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = (
   const personalSessions = useQuery({ queryKey: ["sessions", user.id, personalProjectId], queryFn: () => api.getSessions(null), refetchInterval: (query) => !query.state.error && query.state.data?.some((session) => session.title_status === "pending") ? 1000 : false });
   const projectSessions = useQuery({ queryKey: ["sessions", user.id, activeProjectId], queryFn: () => api.getSessions(activeProjectId!), enabled: !!activeProjectId, refetchInterval: (query) => !query.state.error && query.state.data?.some((session) => session.title_status === "pending") ? 1000 : false });
   const messages = useQuery({ queryKey: ["messages", user.id, activeSessionId], queryFn: () => api.getMessages(activeSessionId!, activeProjectId), enabled: !!activeSessionId });
+  const markdown = useQuery({ queryKey: ["markdown-renderer"], queryFn: loadMarkdownContent, enabled: isChat, staleTime: Infinity, gcTime: Infinity });
+  const markdownReady = markdown.isSuccess || isMarkdownContentReady();
   const skills = useQuery({ queryKey: ["skills", user.id], queryFn: api.getSkills });
   const resources = useQuery({ queryKey: ["resources", user.id], queryFn: api.getResources });
   const models = useQuery({ queryKey: ["models", user.id], queryFn: api.getModels });
@@ -150,7 +159,12 @@ export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = (
     }
     previousTitleStatus.current = { sessionId: currentSession?.id, status: currentSession?.title_status };
   }, [currentSession?.id, currentSession?.title_status, queryClient, user.id]);
-  const visibleRunId = submitting ? null : currentRun?.sessionId === activeSessionId ? currentRun.runId : currentSession?.latest_run_id ?? null;
+  const sessionRunId = currentSession && !["completed", "failed", "cancelled", "idle"].includes(currentSession.status ?? "") ? currentSession.latest_run_id ?? null : null;
+  const visibleRunId = submitting ? null : currentRun?.sessionId === activeSessionId ? currentRun.runId : sessionRunId;
+  const historyRunId = !submitting && currentRun?.sessionId !== activeSessionId &&
+    (currentSession?.status === "failed" || currentSession?.status === "cancelled")
+    ? currentSession.latest_run_id ?? null : null;
+  const historyRun = useRunHistory(api, user.id, historyRunId);
   const onRunCompleted = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["messages", user.id, activeSessionId] });
     void queryClient.invalidateQueries({ queryKey: ["sessions", user.id, activeProjectId ?? personalProjectId] });
@@ -160,7 +174,8 @@ export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = (
     void queryClient.invalidateQueries({ queryKey: ["usage-activity", user.id] });
     if (activeSessionId) void queryClient.invalidateQueries({ queryKey: ["session-artifacts", user.id, activeSessionId] });
   }, [activeProjectId, activeSessionId, personalProjectId, queryClient, user.id]);
-  const run = useRunEvents(api, visibleRunId, onRunCompleted);
+  const liveRun = useRunEvents(api, visibleRunId, onRunCompleted);
+  const run = historyRunId ? historyRun.view : liveRun;
   const runActive = (run.status === "running" || run.status === "waiting") ||
     (run.status === "idle" && !!visibleRunId && (
       (currentRun?.sessionId === activeSessionId && currentRun.runId === visibleRunId) ||
@@ -176,7 +191,6 @@ export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = (
     void queryClient.invalidateQueries({ queryKey: ["usage", user.id] });
     void queryClient.invalidateQueries({ queryKey: ["usage-entries", user.id] });
   };
-  const isChat = pathname === "/" || !!activeSessionId || /^\/p\/[^/]+\/new$/.test(pathname);
   const send = async (payload: MessageRequest) => {
     if (sendGuard.current || !payload.content.trim()) return false;
     sendGuard.current = true;
@@ -260,18 +274,34 @@ export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = (
     if (currentProject && pathname === projectPath(currentProject.id)) return currentProject.name;
     return t("mono.pageNotFound");
   })();
+  const retryChat = () => {
+    if (messages.isError) void messages.refetch();
+    if (sessionLookup.isError) void sessionLookup.refetch();
+    if (sessionListPending || (activeProjectId ? projectSessions.isError : personalSessions.isError)) {
+      void (activeProjectId ? projectSessions : personalSessions).refetch();
+    }
+    if (markdown.isError) void markdown.refetch();
+    if (historyRun.query.isError) void historyRun.query.refetch();
+  };
   const renderPage = () => {
     if (activeProjectId === personalProjectId) return <div className="mono-page-scroll"><div className="mono-empty-panel">{isChat && <h2>{t("mono.pageNotFound")}</h2>}<Link to="/">{t("mono.backNewChat")}</Link></div></div>;
     if (isChat) {
-      if (activeSessionId && !currentSession) return sessionListPending || sessionLookup.isPending || !!sessionLookup.data
-        ? <div className="mono-loading-page" role="status">{t("mono.openingChat")}</div>
+      if (activeSessionId && !currentSession) return sessionListPending || sessionLookup.isFetching
+        ? <PageLoading label={t("mono.openingChat")} />
+        : sessionLookup.isError && !(sessionLookup.error instanceof ApiError && sessionLookup.error.status === 404)
+        ? <PageLoadError message={t("mono.chatLoadFailed")} retryLabel={t("loading.retry")} onRetry={retryChat} />
         : <div className="mono-page-scroll"><div className="mono-empty-panel"><h2>{t("mono.pageNotFound")}</h2><Link to="/">{t("mono.backNewChat")}</Link></div></div>;
-      return <div className="mono-chat-layout">{activeSessionId ? <Conversation messages={messages.data ?? []} run={run} runId={visibleRunId} awaitingEvents={run.status === "idle" && runActive} onCancel={visibleRunId ? cancelRun : undefined} onApproval={decideApproval} /> : <div className="mono-empty-chat"><h1>{t("mono.emptyChatTitle")}</h1><p>{t("mono.emptyChatDescription")}</p></div>}{sendError && <div className="mono-error" role="alert">{sendError}{showUpgradePrompt && <Link to="/settings">{t("guest.upgradeToContinue")}</Link>}</div>}{defaultSkills.length > 0 && <div className="mono-default-skills">{t("mono.defaultSkills")}{defaultSkills.map((skill) => <span className="mono-chip" key={skill.id}>✦ {skill.name}</span>)}</div>}<Composer draftScope={draftScope} onSend={send} onUpload={upload} onStop={visibleRunId ? cancelRun : undefined} runActive={runActive} skills={skills.data ?? []} projectSkillIds={projectSkillSettings.data?.skill_ids ?? []} resources={resources.data ?? []} models={models.data ?? []} disabled={sending} /></div>;
+      if (activeSessionId && (messages.data === undefined || !markdownReady || (historyRunId && historyRun.query.data === undefined))) {
+        return (messages.isError || markdown.isError || (historyRunId && historyRun.query.isError))
+          ? <PageLoadError message={t("mono.chatLoadFailed")} retryLabel={t("loading.retry")} onRetry={retryChat} />
+          : <PageLoading label={t("mono.openingChat")} />;
+      }
+      return <div className="mono-chat-layout">{activeSessionId ? <Conversation key={activeSessionId} messages={messages.data ?? []} run={run} runId={visibleRunId ?? historyRunId} awaitingEvents={run.status === "idle" && runActive} onCancel={visibleRunId ? cancelRun : undefined} onApproval={decideApproval} /> : <div className="mono-empty-chat"><h1>{t("mono.emptyChatTitle")}</h1><p>{t("mono.emptyChatDescription")}</p></div>}{sendError && <div className="mono-error" role="alert">{sendError}{showUpgradePrompt && <Link to="/settings">{t("guest.upgradeToContinue")}</Link>}</div>}{defaultSkills.length > 0 && <div className="mono-default-skills">{t("mono.defaultSkills")}{defaultSkills.map((skill) => <span className="mono-chip" key={skill.id}>✦ {skill.name}</span>)}</div>}<Composer draftScope={draftScope} onSend={send} onUpload={upload} onStop={visibleRunId ? cancelRun : undefined} runActive={runActive} skills={skills.data ?? []} projectSkillIds={projectSkillSettings.data?.skill_ids ?? []} resources={resources.data ?? []} models={models.data ?? []} disabled={sending} /></div>;
     }
     if (pathname === "/g") return <ProjectIndex projects={visibleProjects} />;
     if (pathname === "/artifacts") return <Navigate to="/" replace />;
     if (currentProject && pathname === projectPath(currentProject.id)) return <ProjectDetail api={api} project={currentProject} sessions={projectSessions.data ?? []} skills={skills.data ?? []} userId={user.id} />;
-    if (activeProjectId && projects.isLoading) return <div className="mono-loading-page" role="status">{t("mono.openingProject")}</div>;
+    if (activeProjectId && projects.isLoading) return <PageLoading label={t("mono.openingProject")} />;
     if (pathname === "/tools/runs") return <Navigate to="/tools" replace />;
     if (pathname === "/tools" || isToolDetail) return <ToolDirectory api={api} userId={user.id} projects={visibleProjects} theme={theme} viewer={pathname === "/tools/structure"} selectedName={pathname === "/tools/pdb" ? "search_pdb" : pathname.startsWith("/tools/run/") ? decodeURIComponent(pathname.split("/")[3]) : undefined} productSlug={/^\/tools\/[^/]+$/.test(pathname) && !["pdb", "structure", "runs"].includes(pathname.split("/")[2]) ? decodeURIComponent(pathname.split("/")[2]) : undefined} />;
     if (pathname === "/skills" || pathname === "/resources") return <div className="mono-page-scroll"><div className="mono-page-content"><CatalogLibrary key={pathname} kind={pathname === "/skills" ? "skills" : "resources"} items={(pathname === "/skills" ? skills.data : resources.data) ?? []} loading={pathname === "/skills" ? skills.isLoading : resources.isLoading} error={pathname === "/skills" ? skills.isError : resources.isError} /></div></div>;

@@ -43,6 +43,13 @@
 
 - Use one clear page title. Keep page-level descriptions only when they add information needed to act; do not repeat the navigation label or describe obvious page functions. Preserve user-written project descriptions and tool-specific guidance.
 
+## Page loading and navigation
+
+- Retain the workspace shell during initial Tools and conversation loads. Use `src/components/PageLoading.tsx` for one quiet, accessible spinner; reveal the tool grid after both catalogs settle. Preserve available cached content during refresh and offer retry for failed requests.
+- Tool details use the catalog's official title immediately when cached; cold links reserve the title and description space while loading. Keep Back usable throughout preparation.
+- Reveal historical conversations after their session, messages and Markdown renderer are ready, and position the selected history before paint. Completed runs use saved messages; failed or cancelled runs load their final event snapshot once. Active runs keep streaming. Reset conversation scroll state on session changes while restoring that session's local draft and model preferences.
+- Verify delayed requests, cold and cached navigation, error retries and live replies in both themes at desktop and mobile widths.
+
 ## Profile and usage settings
 
 - Center settings within a bounded content width. Use quiet section dividers, theme surfaces and compact form controls; account forms and usage charts retain their purpose-specific layouts instead of catalog cards. Keep nickname saving and avatar upload/removal in the Profile section, and update the sidebar after a successful Python API response. Preserve unsaved input on failure.
