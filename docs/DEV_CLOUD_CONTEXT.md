@@ -1,6 +1,6 @@
 # PSKit 本地开发与云端背景
 
-更新时间：2026-10-07（Asia/Shanghai）。用户确认的默认流程是：**本地前后端一起运行 → 本地验证 → 云端 Staging → 云端生产**。
+更新时间：2026-10-08（Asia/Shanghai）。用户确认的默认流程是：**本地前后端一起运行 → 本地验证 → 云端 Staging → 云端生产**。
 
 本文用于新对话恢复环境和工作背景。连接配置已在本地核对；云端职责来自最新部署及发布记录，本次发布前已只读核对阿里云和 A6000 运行配置；具体制品及验收状态见末尾交接。每次部署仍需核对目标主机实际状态。
 
@@ -185,15 +185,15 @@ A6000 升级或恢复前核对唯一接收器、活动任务、journal/outbox/sp
 
 ## 7. 当前交接与维护
 
-快照日期：2026-10-07 23:12（Asia/Shanghai）。本次流式性能与后端质量发布已完成；详细制品、验证、已知计算对账项与撤回方法见 [发布记录](releases/2026-10-07-streaming-quality.md)。
+快照日期：2026-10-08 00:54（Asia/Shanghai）。流式性能发布和后续 A6000 收尾均已完成；生产制品见 [流式发布记录](releases/2026-10-07-streaming-quality.md)，接收器、对账、镜像源与 CORAL provider 证据见 [A6000 收尾记录](releases/2026-10-08-a6000-runtime-mirrors.md)。
 
 - **已确认的用户偏好：** 本地前后端一起运行，完成开发与验证后部署云端。
-- **已发布源码：** `a28b9af069cfcccbd42e1d3f009abc9b2c7a1abe`。此前未发布的 `f215a12` 后端质量改进、`9d0d422`/`dee2e64` 前端流式性能改进现已发布；`a28b9af` 恢复失败 MCP 缺少用量时的安全对账边界，并隔离本地 Turnstile 配置对前端测试的污染。
+- **当前源码与部署：** 主仓库当前提交为 `e164dab8363915cd2e8daff5bc8fbf6169712af0`；阿里云生产与 Staging backend 仍使用 `a28b9af069cfcccbd42e1d3f009abc9b2c7a1abe`，A6000 接收器使用 `e164dab` runtime。`e164dab` 只增加后续镜像构建入口和部署说明，不要求重建当前阿里云后端。
 - **本地验证：** 前端 typecheck、lint、284 项测试和生产构建通过，Molstar 为 18 个延迟 chunk。后端 Ruff 与 7 项对账/CORAL 回归通过；完整 suite 为 577 passed、281 skipped，一个既有 MCP 租约时序用例在整套高负载下失败、隔离连续 5 次通过。不能据此宣称完整 suite 全绿；未运行真实付费模型或 GPU。
 - **生产与 Staging：** 两环境前端均为 dist 哈希 `f4eb708783ed2b95f1286fbc2b554ca19d04317bb36ed1b95109e296e01f85ba`，401 个新文件逐一核对。两环境后端均为 `pskit-agent-backend:20261007-streaming-a28b9af`，阿里云配置 ID `sha256:d713d9b57327ac231462c8b229cfaebb35178ba88413145409b8cebc3cc73e5f`。Staging 私有 API和 WireGuard Nginx 两轮 smoke 均通过登录、文件、SSE、配额和模拟 AF3，生产只读快照未变。生产 ready、HTTPS 200、usage 401、internal 404、首屏资源与未完成 Run=0 均已核对；基础设施和 Nginx 未重启。
-- **A6000：** 唯一接收器仍挂载 `runtime-c1d7407`，没有在旧 CORAL 执行不确定时替换。`compute-700e7c142f0747268eb8cf40d9960696` 在本地 journal 为 `executing`，中央为 `cancelling`/`pending_reconciliation`；另有一个同能力 Job `queued`。本次未删 journal、未补造用量、未重提任务，也未做真实 CORAL/AF3 推理。
-- **发布性能结论：** 此次慢点是 WSL/Docker NAT 到 Docker Hub/PyPI；默认 PyPI 约 20 KB/s，清华镜像约 8–12 MB/s。固定基础镜像通过本地回环缓存取得，新旧 `pip freeze` 一致。后续应把可信 PyPI/npm 缓存和 BuildKit cache 正式写入构建流程，避免每次临时处理。
+- **A6000：** 唯一接收器已挂载 `runtime-e164dab`，三个 journal 均无未确认记录；原 AF3 计算容器 ID 和启动时间不变。两条旧 CORAL Job 已基于提供端证据完成管理员审计结算，中央无非终态或待对账 Job。4090 CORAL provider 已固化失败计量和产物读取修复到独立仓库提交 `25afdc0`；四个工具发现通过，修复后没有运行真实模型推理。
+- **发布性能结论：** 此次慢点是 WSL/Docker NAT 到 Docker Hub/PyPI；默认 PyPI 约 20 KB/s，清华镜像约 8–12 MB/s。`e164dab` 已给固定 Dockerfile 增加显式 PyPI/npm 镜像与已验证基础镜像参数；镜像源检查构建的 npm 层约 7 秒、pip 层约 20 秒，新旧 `pip freeze` 一致。生产依赖仍由锁文件和固定基础镜像 digest 决定。
 - **本地配置缺口：** 现有 live `.env` 未配置独立开发 PostgreSQL；日常开发使用第 3.1 节的独立 mock，真实联调补齐开发数据库后进行。
-- **下一步：** 先对账并终结旧 CORAL `cancelling` 记录，释放被阻塞的 queued Job，再制作并验收 A6000 接收器 runtime。随后把国内依赖缓存和镜像构建缓存固化到发布流程。真实模型和 GPU 验证另设明确输入及预算；本地开发进程接续时按实际端口重新核对。
+- **下一步：** 真实 CORAL/AF3 结果验收另设明确输入及预算；下一次后端镜像发布可直接使用已记录的可信依赖镜像参数，并继续比较 `pip freeze`、revision label 和最终 image ID。本地开发进程接续时按实际端口重新核对。
 
 每次交接更新此节的日期、分支/提交、未完成项、实际验证结果、生产/Staging 状态及下一步。镜像 ID、制品哈希和回滚证据写入对应发布记录并链接到此处；连接别名、端口或职责变化则同时修改前面的环境章节。
