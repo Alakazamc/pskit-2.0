@@ -185,15 +185,15 @@ A6000 升级或恢复前核对唯一接收器、活动任务、journal/outbox/sp
 
 ## 7. 当前交接与维护
 
-快照日期：2026-10-07 17:36（Asia/Shanghai）。本次图片消息、Pi 大图片和接收器诊断发布已完成；详细制品、验证与撤回方法见 [发布记录](releases/2026-10-07-message-images-pi-receiver.md)。
+快照日期：2026-10-07 23:12（Asia/Shanghai）。本次流式性能与后端质量发布已完成；详细制品、验证、已知计算对账项与撤回方法见 [发布记录](releases/2026-10-07-streaming-quality.md)。
 
 - **已确认的用户偏好：** 本地前后端一起运行，完成开发与验证后部署云端。
-- **已发布源码：** `c1d7407570d92778f4618c182b3257e65dee2fd3`，包括图片消息提交 `5684021`、失败响应缺少用量的安全诊断 `d4b342b`、背景文档 `c1d7407`，以及此前 `e3e9041` 的 Pi 大图片与接收器诊断修复。失败记录仍等待结算核对。
-- **本地验证：** 前端 typecheck、lint、284 项测试通过；正式构建及 Molstar 检查通过；八组图片消息浏览器检查覆盖中英文、明暗主题、桌面与手机。独立 mock 前后端的登录、上传、鉴权下载链路通过。后端最终完整运行 572 项通过、281 项跳过；Pi 本地网关协议十项通过，无真实模型计费。需要独立 PostgreSQL DSN 的跳过用例未据此宣称通过。
-- **生产与 Staging：** 两环境前端均为本次固定制品，401 个文件逐一核对。后端均为 `pskit-agent-backend:20261007-message-images-c1d7407`，镜像配置 ID 为 `sha256:04f6332abffa91792b082bd38096234270e637a07535d11206fbdc459bcb825a`。Staging 实际登录、上传、SSE、配额和模拟 AF3 烟测通过，生产只读快照未变；生产八组图片浏览器检查使用真实静态文件和合成接口夹具。HTTPS、就绪与公网管理隔离核对通过。运行配置、数据卷保留，未重装基础设施或 reload Nginx。
-- **A6000：** 唯一接收器挂载 `runtime-c1d7407`，固定依赖镜像未变；升级前后 CORAL journal 均有一条 executing，两份 AF3 journal 均为空，三个 spool 目录保留。此前生产 cancelling 任务未重提、未清理；本次未做真实 CORAL/AF3 推理验收。
-- **并行开发边界：** 发布期间另有 `f215a12` 后端质量改进与 `9d0d422` 前端流式性能提交。它们未包含在本次固定制品中，也未由本次发布代为提交；后续接续时先核对当前 Git 状态与归属。
+- **已发布源码：** `a28b9af069cfcccbd42e1d3f009abc9b2c7a1abe`。此前未发布的 `f215a12` 后端质量改进、`9d0d422`/`dee2e64` 前端流式性能改进现已发布；`a28b9af` 恢复失败 MCP 缺少用量时的安全对账边界，并隔离本地 Turnstile 配置对前端测试的污染。
+- **本地验证：** 前端 typecheck、lint、284 项测试和生产构建通过，Molstar 为 18 个延迟 chunk。后端 Ruff 与 7 项对账/CORAL 回归通过；完整 suite 为 577 passed、281 skipped，一个既有 MCP 租约时序用例在整套高负载下失败、隔离连续 5 次通过。不能据此宣称完整 suite 全绿；未运行真实付费模型或 GPU。
+- **生产与 Staging：** 两环境前端均为 dist 哈希 `f4eb708783ed2b95f1286fbc2b554ca19d04317bb36ed1b95109e296e01f85ba`，401 个新文件逐一核对。两环境后端均为 `pskit-agent-backend:20261007-streaming-a28b9af`，阿里云配置 ID `sha256:d713d9b57327ac231462c8b229cfaebb35178ba88413145409b8cebc3cc73e5f`。Staging 私有 API和 WireGuard Nginx 两轮 smoke 均通过登录、文件、SSE、配额和模拟 AF3，生产只读快照未变。生产 ready、HTTPS 200、usage 401、internal 404、首屏资源与未完成 Run=0 均已核对；基础设施和 Nginx 未重启。
+- **A6000：** 唯一接收器仍挂载 `runtime-c1d7407`，没有在旧 CORAL 执行不确定时替换。`compute-700e7c142f0747268eb8cf40d9960696` 在本地 journal 为 `executing`，中央为 `cancelling`/`pending_reconciliation`；另有一个同能力 Job `queued`。本次未删 journal、未补造用量、未重提任务，也未做真实 CORAL/AF3 推理。
+- **发布性能结论：** 此次慢点是 WSL/Docker NAT 到 Docker Hub/PyPI；默认 PyPI 约 20 KB/s，清华镜像约 8–12 MB/s。固定基础镜像通过本地回环缓存取得，新旧 `pip freeze` 一致。后续应把可信 PyPI/npm 缓存和 BuildKit cache 正式写入构建流程，避免每次临时处理。
 - **本地配置缺口：** 现有 live `.env` 未配置独立开发 PostgreSQL；日常开发使用第 3.1 节的独立 mock，真实联调补齐开发数据库后进行。
-- **下一步：** 独立核对后续开发改动；原 CORAL 不确定结果需结合提供方返回和计量记录完成终态核对。真实模型和 GPU 验证另设明确输入及预算。本地 mock API `18080`、Vite `5174` 和制品预览 `4176` 本次已启动；接续时核对进程是否仍在运行。
+- **下一步：** 先对账并终结旧 CORAL `cancelling` 记录，释放被阻塞的 queued Job，再制作并验收 A6000 接收器 runtime。随后把国内依赖缓存和镜像构建缓存固化到发布流程。真实模型和 GPU 验证另设明确输入及预算；本地开发进程接续时按实际端口重新核对。
 
 每次交接更新此节的日期、分支/提交、未完成项、实际验证结果、生产/Staging 状态及下一步。镜像 ID、制品哈希和回滚证据写入对应发布记录并链接到此处；连接别名、端口或职责变化则同时修改前面的环境章节。
