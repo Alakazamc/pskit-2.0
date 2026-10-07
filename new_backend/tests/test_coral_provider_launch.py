@@ -27,3 +27,13 @@ def test_existing_workspace_and_provider_environment_remain_effective(tmp_path):
     env = build_environment(tmp_path, Path('/env/bin/python'), {'PATH': '/usr/bin'})
     assert env['PSKIT_MCP_WORKSPACE_ROOT'] == str(tmp_path / 'existing')
     assert env['PYTHONPATH'] == '/source/src:' + str(tmp_path)
+
+
+def test_invalid_python_is_rejected_before_reading_or_stopping_provider(tmp_path):
+    import pytest
+
+    from integrations.coral.launch_artifact_server import main
+
+    # No PID or environment files: executable validation must precede either read.
+    with pytest.raises(ValueError, match='INVALID_PROVIDER_EXECUTABLE'):
+        main(['--provider-root', str(tmp_path), '--python', str(tmp_path / 'missing-python')])

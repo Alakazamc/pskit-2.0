@@ -37,13 +37,21 @@ def build_environment(root, python, inherited, *, foldseek=None):
     return environment
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--provider-root", required=True, type=Path)
     parser.add_argument("--python", required=True, type=Path)
     parser.add_argument("--foldseek", type=Path)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     root = args.provider_root.resolve()
+    for name in ("python", "foldseek"):
+        executable = getattr(args, name)
+        if executable is None:
+            continue
+        executable = executable.resolve()
+        if not executable.is_file() or not os.access(executable, os.X_OK):
+            raise ValueError("INVALID_PROVIDER_EXECUTABLE")
+        setattr(args, name, executable)
     environment = build_environment(root, args.python, os.environ, foldseek=args.foldseek)
     pid_file = root / ".pskit-mcp.pid"
     previous = int(pid_file.read_text())
