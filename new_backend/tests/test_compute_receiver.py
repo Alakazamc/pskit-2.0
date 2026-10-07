@@ -29,6 +29,75 @@ class Control:
 
 
 @pytest.mark.asyncio
+async def test_explicitly_idempotent_model_recovers_an_interrupted_submission(tmp_path):
+    from app.contracts.compute import Pending
+
+    service = ComputeService("lab", "v1")
+
+    @service.compute_tool(name="inspect")
+    def inspect(sequence: str):
+        return {}
+
+    grant = grant_for(service, {"sequence": "ACG"})
+    recovered = []
+
+    class Idempotent:
+        async def recover(self, persisted):
+            recovered.append(persisted.job.id)
+            return Pending(job_id="existing-model-job")
+
+    control = Control(grant)
+    control.fail_ack = False
+    async def heartbeat(persisted, payload):
+        from types import SimpleNamespace
+        return SimpleNamespace(cancel_requested=False)
+    control.heartbeat = heartbeat
+    journal = Journal(tmp_path / "receiver.sqlite3")
+    journal.begin(grant)
+    worker = Receiver(Idempotent(), control, journal,
+                      ComputeClaimRequest(service_id="lab", worker_id="worker-1"))
+    assert (await worker.run_once()).status == "pending"
+    assert recovered == [grant.job.id]
+    assert journal.recover()[0]["state"] == "waiting"
+    journal.close()
+
+
+@pytest.mark.asyncio
+async def test_recovery_does_not_submit_a_model_without_renewed_authority(tmp_path):
+    from app.contracts.compute import Pending
+
+    service = ComputeService("lab", "v1")
+
+    @service.compute_tool(name="inspect")
+    def inspect(sequence: str):
+        return {}
+
+    grant = grant_for(service, {"sequence": "ACG"})
+    submissions = []
+
+    class Idempotent:
+        async def recover(self, persisted):
+            submissions.append(persisted.job.id)
+            return Pending(job_id="model-job")
+
+    async def rejected_heartbeat(persisted, payload):
+        raise ConnectionError("Lease authority unavailable")
+
+    control = Control(grant)
+    control.fail_ack = False
+    control.heartbeat = rejected_heartbeat
+    journal = Journal(tmp_path / "receiver.sqlite3")
+    journal.begin(grant)
+    worker = Receiver(Idempotent(), control, journal,
+                      ComputeClaimRequest(service_id="lab", worker_id="w1"))
+    with pytest.raises(ConnectionError):
+        await worker.run_once()
+    assert submissions == []
+    assert journal.recover()[0]["state"] == "executing"
+    journal.close()
+
+
+@pytest.mark.asyncio
 async def test_lost_result_ack_replays_without_inference(tmp_path):
     executions = []
     service = ComputeService("lab", "v1")

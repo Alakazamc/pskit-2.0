@@ -66,15 +66,24 @@ class Receiver:
             if record["state"] == "outbox":
                 return await self._send(grant, record["payload"])
             if record["state"] == "executing":
-                # A process crash says nothing about a detached model. Never execute it again.
-                return ReceiverOutcome(status="unknown", job_id=grant.job.id)
-            seq = record["seq"]+1
-            update = await self._heartbeat(grant, seq, record["progress"])
-            if update.cancel_requested:
-                await self.executor.cancel(grant, record["pending"])
-            report = await self.executor.poll(grant, record["pending"])
-            if isinstance(report, Pending):
-                return ReceiverOutcome(status="pending", job_id=grant.job.id)
+                # A process crash says nothing about a detached model. Never blindly resubmit.
+                recover = getattr(self.executor, "recover", None)
+                if recover is None:
+                    return ReceiverOutcome(status="unknown", job_id=grant.job.id)
+                # Only a trusted adapter with durable input idempotency may recover submission.
+                seq = record["seq"] + 1
+                update = await self._heartbeat(grant, seq, record["progress"])
+                if update.cancel_requested:
+                    return ReceiverOutcome(status="unknown", job_id=grant.job.id)
+                report = await recover(grant)
+            else:
+                seq = record["seq"]+1
+                update = await self._heartbeat(grant, seq, record["progress"])
+                if update.cancel_requested:
+                    await self.executor.cancel(grant, record["pending"])
+                report = await self.executor.poll(grant, record["pending"])
+                if isinstance(report, Pending):
+                    return ReceiverOutcome(status="pending", job_id=grant.job.id)
         else:
             grant = await self.control.claim(self.identity)
             if grant is None:
