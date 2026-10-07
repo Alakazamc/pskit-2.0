@@ -136,6 +136,7 @@ async def test_live_worker_skips_legacy_job_with_unknown_gpu_memory_requirement(
         model_gateway_base_url="https://gateway.example.org/v1", model_gateway_model="research-model",
         model_gateway_api_key="server-key", af3_executor="callback",
         compute_callback_key="compute-key", af3_min_gpu_memory_mb=40_960,
+        auth_csrf_secret="isolated-af3-csrf-test-secret-at-least-32-bytes",
     ), pi_runner=object())
     app.state.identity_policy.observe_verified_user("alice", False)
     legacy = PersistentConversationStore(app.state.database).create_af3_job(

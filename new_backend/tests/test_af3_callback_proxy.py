@@ -8,7 +8,11 @@ import pytest
 from scripts.af3_callback_proxy import make_handler, request_matches_worker, route_allowed
 
 
-def test_proxy_uses_configured_upstream_host(monkeypatch):
+@pytest.mark.parametrize(("method", "path", "body"), [
+    ("POST", "/internal/compute/af3/jobs/claim", b'{"worker_id":"worker-1"}'),
+    ("GET", "/internal/compute/af3/jobs/12345678-1234-1234-1234-123456789abc", b""),
+])
+def test_proxy_uses_configured_upstream_host(monkeypatch, method, path, body):
     seen = []
 
     class Upstream(BaseHTTPRequestHandler):
@@ -21,6 +25,8 @@ def test_proxy_uses_configured_upstream_host(monkeypatch):
             self.send_response(200)
             self.end_headers()
             self.wfile.write(b'{"ok":true}')
+
+        do_GET = do_POST
 
     upstream = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
     proxy = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(
@@ -40,14 +46,12 @@ def test_proxy_uses_configured_upstream_host(monkeypatch):
         thread.start()
     try:
         connection = http.client.HTTPConnection("127.0.0.1", proxy.server_port)
-        connection.request("POST", "/internal/compute/af3/jobs/claim",
-                           body=b'{"worker_id":"worker-1"}',
+        connection.request(method, path, body=body,
                            headers={"X-Compute-Key": "secret"})
         response = connection.getresponse()
         assert response.status == 200
         assert response.read() == b'{"ok":true}'
-        assert seen == [("/internal/compute/af3/jobs/claim", "secret",
-                         b'{"worker_id":"worker-1"}')]
+        assert seen == [(path, "secret", body)]
         connection.close()
     finally:
         proxy.shutdown()
@@ -95,6 +99,7 @@ def test_proxy_rejects_wrong_worker_key_path_and_oversized_body():
 @pytest.mark.parametrize(("method", "path"), [
     ("POST", "/internal/compute/af3/jobs/claim"),
     ("GET", "/internal/compute/af3/jobs/owned"),
+    ("GET", "/internal/compute/af3/jobs/12345678-1234-1234-1234-123456789abc"),
     ("POST", "/internal/compute/af3/jobs/12345678-1234-1234-1234-123456789abc/heartbeat"),
     ("POST", "/internal/compute/af3/jobs/12345678-1234-1234-1234-123456789abc/progress"),
     ("PUT", "/internal/af3/jobs/12345678-1234-1234-1234-123456789abc/artifacts/model"),
@@ -108,7 +113,7 @@ def test_proxy_allows_only_needed_compute_routes(method, path):
     ("GET", "/api/v1/projects"),
     ("GET", "/internal/metrics"),
     ("GET", "/health/ready"),
-    ("GET", "/internal/compute/af3/jobs/12345678-1234-1234-1234-123456789abc"),
+    ("GET", "/internal/compute/af3/jobs/12345678-1234-1234-1234-123456789abc/extra"),
     ("DELETE", "/internal/compute/af3/jobs/claim"),
     ("POST", "/internal/af3/jobs/../../api/v1/projects/result"),
     ("POST", "/internal/compute/af3/jobs/claim/extra"),

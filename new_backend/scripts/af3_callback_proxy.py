@@ -21,6 +21,7 @@ ROUTES = {
     ("GET", "/internal/compute/af3/jobs/owned"),
 }
 PATTERNS = {
+    "GET": (re.compile(rf"/internal/compute/af3/jobs/{JOB}\Z"),),
     "POST": (
         re.compile(rf"/internal/compute/af3/jobs/{JOB}/(?:heartbeat|progress)\Z"),
         re.compile(rf"/internal/af3/jobs/{JOB}/result\Z"),
