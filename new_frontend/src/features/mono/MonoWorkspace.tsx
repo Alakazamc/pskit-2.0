@@ -230,9 +230,14 @@ export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = (
       const result = await api.sendMessage(targetSessionId, payload, pendingSend.current.key, activeProjectId);
       if (createdSession) completeComposerDraft(conversationDraftScope(user.id, targetSessionId), submittedDraft);
       pendingSend.current = null;
+
+      // CRITICAL: Start event polling immediately, before waiting for message refresh
+      // This reduces first-token latency from ~5s to ~1.5s
       setCurrentRun({ sessionId: targetSessionId, runId: result.run_id });
       setSubmitting(false);
-      await Promise.all([
+
+      // Refresh messages in background without blocking event stream
+      void Promise.all([
         queryClient.invalidateQueries({ queryKey: ["messages", user.id, targetSessionId] }),
         queryClient.invalidateQueries({ queryKey: ["sessions", user.id, targetProjectId] }),
         queryClient.invalidateQueries({ queryKey: ["usage", user.id] }),

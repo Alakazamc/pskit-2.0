@@ -10,6 +10,7 @@ export function useRunEvents(api: ResearchApi, runId: string | null, onCompleted
     let cancelled = false;
     let cursor: string | undefined;
     let terminal = false;
+    let pollCount = 0;
     let timer: ReturnType<typeof setTimeout>;
     const controller = new AbortController();
     const accept = (events: Awaited<ReturnType<ResearchApi["getRunEvents"]>>) => {
@@ -39,8 +40,10 @@ export function useRunEvents(api: ResearchApi, runId: string | null, onCompleted
         console.error("Run events fetch error:", error);
       }
       if (cancelled || terminal) return;
-      // Use shorter interval for active streams (200ms), longer for completed (1200ms)
-      const pollInterval = terminal ? 1200 : 200;
+      pollCount++;
+      // CRITICAL: First 3 polls use 50ms for fast first-token display
+      // Then switch to 200ms for efficiency, 1200ms after completion
+      const pollInterval = terminal ? 1200 : pollCount <= 3 ? 50 : 200;
       timer = setTimeout(tick, pollInterval);
     };
     void tick();
