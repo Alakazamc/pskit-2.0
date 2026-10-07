@@ -271,7 +271,7 @@ it("shows a quota rejection on approval and keeps the decision available", async
   expect(within(controls).getByRole("button", { name: "批准执行" })).toBeEnabled();
 });
 
-it("shows server Token and daily GPU limits with pending GPU reconciliation in settings", async () => {
+it("shows server Token and daily GPU limits without raw ledger rows in settings", async () => {
   loggedIn("/settings");
   const fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
@@ -299,8 +299,9 @@ it("shows server Token and daily GPU limits with pending GPU reconciliation in s
   expect(within(usage).getAllByText("GPU 每日额度").length).toBeGreaterThan(0);
   expect(within(usage).getByText("28")).toBeInTheDocument();
   expect(within(usage).getByText(/预留 20/)).toBeInTheDocument();
-  expect(await within(usage).findByText("待对账")).toBeInTheDocument();
-  expect(fetcher.mock.calls.some(([input]) => String(input).endsWith("/usage/entries"))).toBe(true);
+  expect(within(usage).queryByText("最近用量")).not.toBeInTheDocument();
+  expect(within(usage).queryByText("待对账")).not.toBeInTheDocument();
+  expect(fetcher.mock.calls.some(([input]) => String(input).endsWith("/usage/entries"))).toBe(false);
   expect(within(usage).queryByText(/New API/)).not.toBeInTheDocument();
 });
 
@@ -320,7 +321,7 @@ it("localizes the active Skill navigation and page title", async () => {
   expect(within(screen.getByRole("navigation", { name: "主导航" })).getByRole("link", { name: "技能" })).toBeInTheDocument();
 });
 
-it("labels the same quota and pending usage in English", async () => {
+it("labels quotas in English without the internal usage ledger", async () => {
   loggedIn("/settings");
   window.localStorage.setItem("research_language", "en");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
@@ -342,7 +343,8 @@ it("labels the same quota and pending usage in English", async () => {
   const usage = await screen.findByRole("region", { name: "Usage and limits" });
   expect(await within(usage).findByText("Monthly Token quota")).toBeInTheDocument();
   expect(within(usage).getAllByText("Daily GPU quota").length).toBeGreaterThan(0);
-  expect(await within(usage).findByText("Pending reconciliation")).toBeInTheDocument();
+  expect(within(usage).queryByText("Recent usage")).not.toBeInTheDocument();
+  expect(within(usage).queryByText("Pending reconciliation")).not.toBeInTheDocument();
 });
 
 it("keeps the composer menu inside the themed workspace", async () => {

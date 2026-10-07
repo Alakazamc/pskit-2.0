@@ -85,3 +85,16 @@ it("renders server daily usage as keyboard-accessible squares and switches Token
   gpu.focus(); await actor.keyboard("{ArrowUp}");
   expect(screen.getByRole("button", { name: "2026-10-04：0 GPU 分钟" })).toHaveFocus();
 });
+
+it.each([
+  ["zh", "最近用量", "2026-10-05：300 Token"],
+  ["en", "Recent usage", "2026-10-05: 300 Token"],
+] as const)("keeps the activity squares without the raw ledger panel in %s", async (language, historyTitle, cellLabel) => {
+  const { fetcher } = setup();
+  localStorage.setItem("research_language", language);
+  render(<App />);
+  expect(await screen.findByRole("button", { name: cellLabel })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: historyTitle })).not.toBeInTheDocument();
+  expect(document.querySelector(".mono-usage-history")).toBeNull();
+  expect(fetcher.mock.calls.some(([input]) => String(input).endsWith("/usage/entries"))).toBe(false);
+});
