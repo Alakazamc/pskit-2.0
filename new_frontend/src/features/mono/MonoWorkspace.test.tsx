@@ -772,12 +772,12 @@ it("translates tool parameters and scoped history in the tools content area", as
   }));
   render(<App />);
   const panel = await screen.findByRole("article", { name: "search_pdb" });
-  expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("Tools");
+  expect(within(document.querySelector<HTMLElement>(".mono-topbar")!).getByRole("heading", { name: "search_pdb", level: 1 })).toBeInTheDocument();
   expect(within(panel).getByRole("textbox", { name: "Protein name, UniProt or PDB ID" })).toBeInTheDocument();
   await actor.click(within(panel).getByRole("tab", { name: "Run history" }));
   expect(await within(panel).findByText("No runs yet")).toBeInTheDocument();
   expect(within(panel).getByText("Run this tool to see its history here.")).toBeInTheDocument();
-  await actor.click(within(panel).getByRole("button", { name: "Back to tools" }));
+  await actor.click(screen.getByRole("button", { name: "Back to tools" }));
   expect(screen.getByRole("heading", { name: "Tools", level: 1 })).toBeInTheDocument();
   expect(await screen.findByRole("searchbox", { name: "Search tools" })).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "My runs" })).not.toBeInTheDocument();
@@ -829,7 +829,7 @@ it("uses a published MCP tool schema to invoke a newly listed tool", async () =>
   }));
   render(<App />);
   await actor.type(await screen.findByRole("textbox", { name: "accession" }), "P12345");
-  expect(document.querySelector(".mono-topbar-left > h1")).toHaveTextContent("工具集");
+  expect(within(document.querySelector<HTMLElement>(".mono-topbar")!).getByRole("heading", { name: "fetch_uniprot", level: 1 })).toBeInTheDocument();
   expect(screen.getByRole("article", { name: "fetch_uniprot" })).toBeInTheDocument();
   await actor.click(screen.getByRole("button", { name: "运行工具" }));
   expect(await screen.findByText(/"accession": "P12345"/)).toBeInTheDocument();

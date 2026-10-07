@@ -43,6 +43,12 @@ it("opens a tool in the full tools area with a back button and tool-scoped histo
   expect(trigger).toHaveClass("catalog-entry-card-large");
   await actor.click(trigger);
   const panel = await screen.findByRole("article", { name: "fetch_uniprot" });
+  const header = document.querySelector<HTMLElement>(".mono-topbar")!;
+  expect(within(header).getByRole("heading", { name: "fetch_uniprot", level: 1 })).toBeInTheDocument();
+  expect(within(header).getByText("Read a protein record")).toBeInTheDocument();
+  expect(screen.getAllByText("Read a protein record")).toHaveLength(1);
+  expect(within(header).getByRole("button", { name: "Switch to light mode" })).toBeInTheDocument();
+  expect(within(panel).queryByRole("heading", { name: "fetch_uniprot" })).not.toBeInTheDocument();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(screen.queryByRole("searchbox", { name: "Search tools" })).not.toBeInTheDocument();
   expect(history).toEqual([]);
@@ -53,13 +59,16 @@ it("opens a tool in the full tools area with a back button and tool-scoped histo
   await actor.click(within(panel).getByRole("tab", { name: "Run history" }));
   expect(await within(panel).findByText("fetch_uniprot saved call")).toBeInTheDocument();
   expect(history).toEqual(["fetch_uniprot"]);
-  await actor.click(within(panel).getByRole("button", { name: "Edit" }));
+  await actor.click(within(header).getByRole("button", { name: "Edit" }));
   const field = within(panel).getByRole("textbox", { name: "accession" });
   expect(field).toHaveValue("P12345");
   // The pencil switches back to parameters and focuses the editable field.
   await vi.waitFor(() => expect(field).toHaveFocus());
-  await actor.click(within(panel).getByRole("button", { name: "Back to tools" }));
+  await actor.click(within(header).getByRole("button", { name: "Back to tools" }));
   expect(await screen.findByRole("searchbox", { name: "Search tools" })).toBeInTheDocument();
+  expect(within(header).getByRole("heading", { name: "Tools", level: 1 })).toBeInTheDocument();
+  expect(within(header).queryByRole("button", { name: "Back to tools" })).not.toBeInTheDocument();
+  expect(within(header).queryByText("Read a protein record")).not.toBeInTheDocument();
   expect(screen.getByRole("link", { name: /fetch_uniprot/ })).toHaveFocus();
   await actor.click(screen.getByRole("link", { name: /search_pdb/ }));
   const pdb = await screen.findByRole("article", { name: "search_pdb" });
@@ -68,6 +77,26 @@ it("opens a tool in the full tools area with a back button and tool-scoped histo
   expect(within(pdb).queryByText("fetch_uniprot saved call")).not.toBeInTheDocument();
   expect(history).toEqual(["fetch_uniprot", "search_pdb"]);
 }, 15_000);
+
+it.each([
+  { language: "en", theme: "light", title: "Structure viewer", back: "Back to tools", description: "Explore PDB and mmCIF structures in 3D." },
+  { language: "zh", theme: "dark", title: "结构查看器", back: "返回工具集", description: "查看 PDB 与 mmCIF 三维结构。" },
+])("uses the structure viewer's title in the workspace header ($language, $theme)", async ({ language, theme, title, back, description }) => {
+  window.localStorage.setItem("research_access_token", "demo-token");
+  window.localStorage.setItem("research_language", language);
+  window.localStorage.setItem("pskit-theme", theme);
+  window.history.replaceState(null, "", "/tools/structure");
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => String(input).endsWith("/me")
+    ? json({ id: "alice", name: "Alice", email: "alice@example.org" }) : json([])));
+  render(<App />);
+  const heading = await screen.findByRole("heading", { name: title, level: 1 });
+  const header = document.querySelector<HTMLElement>(".mono-topbar")!;
+  expect(header).toContainElement(heading);
+  expect(within(header).getByText(description)).toBeInTheDocument();
+  expect(within(header).getByRole("button", { name: back })).toBeInTheDocument();
+  expect(screen.getAllByRole("heading", { name: title })).toHaveLength(1);
+  expect(screen.getAllByText(description)).toHaveLength(1);
+});
 
 it("searches compact skill cards and opens their full details without leaving the directory", async () => {
   window.localStorage.setItem("research_access_token", "demo-token");

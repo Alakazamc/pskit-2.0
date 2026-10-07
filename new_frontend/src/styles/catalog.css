@@ -29,7 +29,6 @@
 .catalog-detail-body .mono-page-content{width:100%;max-width:none;padding:0}
 .catalog-detail-body .mono-tool-layout{grid-template-columns:1fr;gap:10px}
 .catalog-detail-body .mono-tool-layout .mono-panel{min-height:0;padding:15px}
-.catalog-detail-body .mono-tool-description{display:none}
 .catalog-detail-body .mono-empty-panel{padding:24px 14px;margin:0}
 .catalog-detail-body .mono-run-item{grid-template-columns:minmax(0,1fr);gap:10px}
 .catalog-detail-body .mono-run-item>div:first-child{flex-wrap:wrap}
@@ -45,10 +44,11 @@
 .catalog-info dd{margin:3px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .mono-tool-detail-screen{display:flex;flex-direction:column}
 .mono-tool-detail{display:flex;flex:1;flex-direction:column;min-width:0}
-.mono-tool-detail-heading{display:flex;align-items:flex-start;gap:14px;margin:0 0 24px}
-.mono-tool-detail-heading>div{min-width:0;flex:1;padding-top:5px}
-.mono-tool-detail-heading h2{margin:0;font-size:18px;font-weight:620;overflow-wrap:anywhere}
-.mono-tool-detail-heading p{margin:6px 0 0;max-width:760px;font-size:13px;line-height:1.5;color:var(--mono-muted,var(--text-secondary));overflow-wrap:anywhere}
+.mono-tool-standalone-header{margin-bottom:24px}
+.mono-tool-page-heading{display:flex;align-items:flex-start;gap:10px;min-width:0}
+.mono-tool-page-title{min-width:0;flex:1;padding-top:8px}
+.mono-tool-page-title h1{margin:0;font-size:17px;font-weight:600;letter-spacing:-.35px;line-height:1.3;color:var(--mono-text,var(--text));overflow-wrap:anywhere}
+.mono-tool-page-title p{margin:5px 0 0;max-width:760px;font-size:13px;line-height:1.5;color:var(--mono-muted,var(--text-secondary));overflow-wrap:anywhere}
 .mono-tool-back,.mono-tool-edit{display:grid;place-items:center;flex:none;width:40px;height:40px;border:0;border-radius:9px;background:transparent;color:var(--mono-muted,var(--text-secondary));cursor:pointer}
 .mono-tool-back:hover,.mono-tool-edit:hover{background:var(--mono-subtle,var(--surface-hover));color:var(--mono-text,var(--text))}
 .mono-tool-detail-body{flex:1;min-width:0}
@@ -57,4 +57,4 @@
 .mono-tool-detail-body .mono-structure-page{min-height:calc(100dvh - 250px);padding:0}
 .mono-tool-detail-body .mono-empty-panel{margin-top:0}
 @media(max-width:600px){.catalog-detail-panel{padding:14px;width:calc(100vw - 20px);max-height:calc(100dvh - 20px)}.catalog-detail-heading button{width:44px;height:44px}.catalog-detail-tabs button{min-height:44px}}
-@media(max-width:600px){.catalog-tools-grid{grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px}.catalog-entry-card-large{min-height:145px;padding:12px}.mono-tool-detail-heading{gap:8px}.mono-tool-back,.mono-tool-edit{width:44px;height:44px}.mono-tool-detail-body .mono-structure-page{min-height:calc(100dvh - 250px)}}
+@media(max-width:600px){.catalog-tools-grid{grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px}.catalog-entry-card-large{min-height:145px;padding:12px}.mono-tool-page-heading{gap:8px}.mono-tool-back,.mono-tool-edit{width:44px;height:44px}.mono-tool-detail-body .mono-structure-page{min-height:calc(100dvh - 250px)}}

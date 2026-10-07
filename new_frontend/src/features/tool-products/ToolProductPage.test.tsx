@@ -95,7 +95,12 @@ it("adds a published product to the directory and opens its full Tools route wit
   expect(card).toHaveAttribute("href", "/tools/flex-design");
   await actor.click(card);
   const page = await screen.findByRole("article", { name: "Flexible Design" });
-  expect(within(page).getByRole("button", { name: "Back to tools" })).toBeInTheDocument();
+  const header = document.querySelector<HTMLElement>(".mono-topbar")!;
+  expect(within(header).getByRole("heading", { name: "Flexible Design", level: 1 })).toBeInTheDocument();
+  expect(within(header).getByText("A published scientific workflow")).toBeInTheDocument();
+  expect(within(header).getByRole("button", { name: "Back to tools" })).toBeInTheDocument();
+  expect(within(page).queryByRole("heading", { name: "Flexible Design" })).not.toBeInTheDocument();
+  expect(screen.getAllByRole("heading", { name: "Flexible Design" })).toHaveLength(1);
   await actor.click(within(page).getByRole("tab", { name: "Run history" }));
   await waitFor(() => expect(requested).toContain("/api/v1/tool-products/flex-design/runs"));
 });

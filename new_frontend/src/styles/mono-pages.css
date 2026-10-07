@@ -23,7 +23,6 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .mono-picker-group button{width:100%}
 .mono-page-scroll{flex:1;min-height:0;overflow:auto}
 .mono-page-content{width:100%;min-width:0;min-height:100%;padding:18px 30px 80px}
-.mono-tool-description{color:var(--mono-muted);font-size:13px;line-height:1.65;margin:0 0 18px}
 .mono-button{min-height:36px;border:1px solid var(--mono-border);border-radius:9px;padding:8px 13px;background:var(--mono-surface);color:var(--mono-text);text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:12px;font-weight:570;white-space:nowrap}
 .mono-button:hover{background:var(--mono-hover)}
 .mono-button.primary{background:var(--mono-text);color:var(--mono-inverse);border-color:var(--mono-text)}

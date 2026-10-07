@@ -1,11 +1,12 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Clock3, Square, Sparkles } from "lucide-react";
+import { Clock3, Square, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { ArtifactRef, ResearchApi, ToolProductRun } from "../../api/types";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { personalSessionPath } from "../mono/sessionPaths";
+import { ToolPageHeader } from "../mono/ToolPageHeader";
 import { ToolUiRenderer } from "./ToolUiRenderer";
 import { localized, projectActionArguments, resolvePointer, setFormPointer, type ToolForm, type ToolUiField, type ToolUiSchema } from "./toolUiSchema";
 
@@ -171,12 +172,12 @@ export function ToolProductPage({ api, slug, userId, theme, onBack }: {
   const currentSchema = product.data?.ui_schema;
   const title = localized(product.data?.title, language) || slug;
   const handoffs = useMemo(() => currentSchema?.handoffs ?? [], [currentSchema]);
-  if (product.isLoading) return <div className="mono-loading-page" role="status">{t("toolProduct.loading")}</div>;
-  if (product.isError || !product.data || !currentSchema) return <div className="mono-empty-panel" role="alert"><h2>{t("mono.pageNotFound")}</h2><p>{t("toolProduct.notAvailable")}</p></div>;
+  const header = <ToolPageHeader title={title} description={localized(product.data?.description, language)} onBack={onBack} />;
+  if (product.isLoading) return <>{header}<div className="mono-loading-page" role="status">{t("toolProduct.loading")}</div></>;
+  if (product.isError || !product.data || !currentSchema) return <>{header}<div className="mono-empty-panel" role="alert"><h2>{t("mono.pageNotFound")}</h2><p>{t("toolProduct.notAvailable")}</p></div></>;
 
   return <article className="mono-tool-detail tool-product-page" aria-label={title}>
-    <header className="mono-tool-detail-heading"><button type="button" className="mono-tool-back" aria-label={t("tools.back")} title={t("tools.back")} onClick={onBack}><ArrowLeft size={19} /></button>
-      <div><h2>{title}</h2><p>{localized(product.data.description, language)}</p></div></header>
+    {header}
     <div className="mono-tool-detail-body"><Tabs.Root value={tab} onValueChange={selectTab}>
       <Tabs.List className="catalog-detail-tabs" aria-label={title}><Tabs.Trigger value="run">{t("tools.arguments")}</Tabs.Trigger><Tabs.Trigger value="history">{t("tools.history")}</Tabs.Trigger></Tabs.List>
       <Tabs.Content value="run" forceMount hidden={tab !== "run"}>

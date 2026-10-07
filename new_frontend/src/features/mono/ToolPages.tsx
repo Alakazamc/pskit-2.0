@@ -1,6 +1,6 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Atom, Boxes, Clock3, Database, ExternalLink, PenLine, Search } from "lucide-react";
+import { ArrowRight, Atom, Boxes, Clock3, Database, ExternalLink, Search } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { McpResult, Project, ResearchApi } from "../../api/types";
@@ -13,6 +13,7 @@ import { GenericToolPage } from "./GenericToolPage";
 import { StructureViewerPage } from "./StructureViewerPage";
 import { ToolProductPage } from "../tool-products/ToolProductPage";
 import { localized } from "../tool-products/toolUiSchema";
+import { ToolPageHeader } from "./ToolPageHeader";
 
 export function ToolDirectory({ api, userId, projects, selectedName, productSlug, viewer = false, theme }: {
   api: ResearchApi; userId: string; projects: Project[]; selectedName?: string;
@@ -87,10 +88,7 @@ function ToolDetails({ title, description, onClose, api, userId, projects, tool,
     else { focusPending.current = true; selectTab("run"); }
   };
   return <article className="mono-tool-detail" aria-label={title}>
-    <header className="mono-tool-detail-heading"><button type="button" className="mono-tool-back" aria-label={t("tools.back")} title={t("tools.back")} onClick={onClose}><ArrowLeft size={19} /></button>
-      <div><h2>{title}</h2>{description && <p>{description}</p>}</div>
-      <button type="button" className="mono-tool-edit" aria-label={t("catalog.edit")} title={t("catalog.edit")} onClick={edit}><PenLine size={17} /></button>
-    </header>
+    <ToolPageHeader title={title} description={description} onBack={onClose} onEdit={edit} />
     <div className="mono-tool-detail-body" ref={body}><Tabs.Root value={tab} onValueChange={selectTab}>
       {tool && <Tabs.List className="catalog-detail-tabs" aria-label={title}>
         <Tabs.Trigger value="run">{t("tools.arguments")}</Tabs.Trigger><Tabs.Trigger value="history">{t("tools.history")}</Tabs.Trigger>

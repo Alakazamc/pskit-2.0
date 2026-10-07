@@ -17,6 +17,7 @@ import { CreateProjectDialog, MoveChatDialog, ProjectDetail, ProjectIndex } from
 import { personalSessionPath, projectPath, projectSessionPath, sessionPath } from "./sessionPaths";
 import { CatalogLibrary } from "../../components/catalog/CatalogLibrary";
 import { ToolDirectory } from "./ToolPages";
+import { ToolPageHeaderProvider } from "./ToolPageHeader";
 import { SettingsPage } from "./SettingsPage";
 import { AccountMenu } from "./AccountMenu";
 import { SearchDialog } from "./SearchDialog";
@@ -103,6 +104,8 @@ export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = (
   const navigate = useNavigate();
   const location = useLocation();
   const pathname = location.pathname;
+  const isToolDetail = /^\/tools\/(?:run\/[^/]+|[^/]+)$/.test(pathname) && pathname !== "/tools/runs";
+  const [toolHeaderTarget, setToolHeaderTarget] = useState<HTMLDivElement | null>(null);
   const projectMatch = pathname.match(/^\/p\/([^/]+)(?:\/|$)/);
   const activeProjectId = projectMatch ? decodeURIComponent(projectMatch[1]) : null;
   const personalChatMatch = pathname.match(/^\/session\/([^/]+)\/?$/);
@@ -270,7 +273,7 @@ export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = (
     if (currentProject && pathname === projectPath(currentProject.id)) return <ProjectDetail api={api} project={currentProject} sessions={projectSessions.data ?? []} skills={skills.data ?? []} userId={user.id} />;
     if (activeProjectId && projects.isLoading) return <div className="mono-loading-page" role="status">{t("mono.openingProject")}</div>;
     if (pathname === "/tools/runs") return <Navigate to="/tools" replace />;
-    if (pathname === "/tools" || pathname === "/tools/pdb" || pathname === "/tools/structure" || /^\/tools\/run\/[^/]+$/.test(pathname) || /^\/tools\/[^/]+$/.test(pathname)) return <ToolDirectory api={api} userId={user.id} projects={visibleProjects} theme={theme} viewer={pathname === "/tools/structure"} selectedName={pathname === "/tools/pdb" ? "search_pdb" : pathname.startsWith("/tools/run/") ? decodeURIComponent(pathname.split("/")[3]) : undefined} productSlug={/^\/tools\/[^/]+$/.test(pathname) && !["pdb", "structure", "runs"].includes(pathname.split("/")[2]) ? decodeURIComponent(pathname.split("/")[2]) : undefined} />;
+    if (pathname === "/tools" || isToolDetail) return <ToolDirectory api={api} userId={user.id} projects={visibleProjects} theme={theme} viewer={pathname === "/tools/structure"} selectedName={pathname === "/tools/pdb" ? "search_pdb" : pathname.startsWith("/tools/run/") ? decodeURIComponent(pathname.split("/")[3]) : undefined} productSlug={/^\/tools\/[^/]+$/.test(pathname) && !["pdb", "structure", "runs"].includes(pathname.split("/")[2]) ? decodeURIComponent(pathname.split("/")[2]) : undefined} />;
     if (pathname === "/skills" || pathname === "/resources") return <div className="mono-page-scroll"><div className="mono-page-content"><CatalogLibrary key={pathname} kind={pathname === "/skills" ? "skills" : "resources"} items={(pathname === "/skills" ? skills.data : resources.data) ?? []} loading={pathname === "/skills" ? skills.isLoading : resources.isLoading} error={pathname === "/skills" ? skills.isError : resources.isError} /></div></div>;
     if (pathname === "/settings") return <SettingsPage api={api} user={user} theme={theme} onThemeChange={setTheme} onUserChange={onUserChange} onSession={onSession} onLogout={onLogout} />;
     return <div className="mono-page-scroll"><div className="mono-empty-panel"><Link to="/">{t("mono.backNewChat")}</Link></div></div>;
@@ -278,10 +281,10 @@ export function MonoWorkspace({ api, user, onLogout, onSession, onUserChange = (
   return <div className={`mono-app ${theme}`} data-theme={theme}>
     <div className="mono-desktop-sidebar">{sidebar}</div>
     {mobileOpen && <div className="mono-mobile-overlay"><button type="button" aria-label={t("mono.closeSidebar")} onClick={() => setMobileOpen(false)} className="mono-mobile-backdrop" />{sidebar}</div>}
-    <main className="mono-main">
-      <header className="mono-topbar"><div className="mono-topbar-left"><button type="button" className="mono-mobile-menu" aria-label={t("mono.openSidebar")} onClick={() => setMobileOpen(true)}><Menu size={19} /></button>{isChat ? <span>{headerTitle}</span> : <h1>{headerTitle}</h1>}{isChat && <ChevronDown size={15} />}{currentSession && <small>{currentSession.title}</small>}</div><div className="mono-topbar-right">{isChat && currentSession && <ConversationArtifacts key={currentSession.id} api={api} userId={user.id} sessionId={currentSession.id} sessionTitle={currentSession.title} runActive={runActive} />}{currentSession && <button className="mono-header-action" onClick={() => setMoveOpen(true)}><FolderInput size={16} /><span>{t("mono.moveToProject")}</span></button>}{pathname === "/g" && <button type="button" className="mono-header-action" onClick={() => setCreateProjectOpen(true)}><Plus size={16} /><span>{t("project.new")}</span></button>}<button type="button" className="mono-theme-toggle" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} title={t(theme === "dark" ? "theme.switchToLight" : "theme.switchToDark")} aria-label={t(theme === "dark" ? "theme.switchToLight" : "theme.switchToDark")}>{theme === "dark" ? <Sun size={19} aria-hidden="true" /> : <Moon size={19} aria-hidden="true" />}</button></div></header>
+    <ToolPageHeaderProvider target={toolHeaderTarget}><main className="mono-main">
+      <header className={`mono-topbar${isToolDetail ? " mono-topbar-tool" : ""}`}><div className="mono-topbar-left"><button type="button" className="mono-mobile-menu" aria-label={t("mono.openSidebar")} onClick={() => setMobileOpen(true)}><Menu size={19} /></button>{isToolDetail ? <div className="mono-tool-header-slot" ref={setToolHeaderTarget} /> : isChat ? <span>{headerTitle}</span> : <h1>{headerTitle}</h1>}{isChat && <ChevronDown size={15} />}{currentSession && <small>{currentSession.title}</small>}</div><div className="mono-topbar-right">{isChat && currentSession && <ConversationArtifacts key={currentSession.id} api={api} userId={user.id} sessionId={currentSession.id} sessionTitle={currentSession.title} runActive={runActive} />}{currentSession && <button className="mono-header-action" onClick={() => setMoveOpen(true)}><FolderInput size={16} /><span>{t("mono.moveToProject")}</span></button>}{pathname === "/g" && <button type="button" className="mono-header-action" onClick={() => setCreateProjectOpen(true)}><Plus size={16} /><span>{t("project.new")}</span></button>}<button type="button" className="mono-theme-toggle" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} title={t(theme === "dark" ? "theme.switchToLight" : "theme.switchToDark")} aria-label={t(theme === "dark" ? "theme.switchToLight" : "theme.switchToDark")}>{theme === "dark" ? <Sun size={19} aria-hidden="true" /> : <Moon size={19} aria-hidden="true" />}</button></div></header>
       {renderPage()}
-    </main>
+    </main></ToolPageHeaderProvider>
     {currentSession && <MoveChatDialog open={moveOpen} onOpenChange={setMoveOpen} api={api} session={currentSession} projects={[{ id: personalProjectId, name: t("mono.personalChats"), description: "" }, ...visibleProjects]} userId={user.id} onMoved={(projectId) => navigate(sessionPath(projectId, personalProjectId, currentSession.id), { replace: true })} />}
     <SessionRenameDialog key={renameTarget?.id ?? "closed"} api={api} session={renameTarget} userId={user.id} onClose={() => setRenameTarget(null)} />
     <CreateProjectDialog api={api} userId={user.id} open={createProjectOpen} onOpenChange={setCreateProjectOpen} />
