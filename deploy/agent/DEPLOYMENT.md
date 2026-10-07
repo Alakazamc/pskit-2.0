@@ -40,6 +40,8 @@
 
 `cloud.backend.env` 的模型别名必须存在于 LiteLLM。提供商 API key 留在 LiteLLM；React 构建不得包含这些 key。`cloud.env` 中的 `AGENT_BACKEND_IMAGE` 必须指向本次固定镜像。示例字段见 [`cloud.backend.env.example`](cloud.backend.env.example)与[`cloud.env.example`](cloud.env.example)。
 
+通用计算还需要 CPU 配额。在实际 `AGENT_BACKEND_ENV_FILE` 指向的文件中设置 `RESEARCH_AGENT_COMPUTE_CPU_DAILY_LIMIT_MS=3600000`，即每天 1 CPU 核小时；计量日按 UTC 划分。该值是未单独设置 CPU 配额的用户默认值，用户级设置优先；GPU 配额独立计算。缺少此字段时后端默认 CPU 额度为 0，CORAL 等需要预留 CPU 的任务会返回 `CPU_QUOTA_EXCEEDED`（HTTP 429）。修改环境文件后，定向重建后端容器，使环境变量生效。
+
 在阿里云仓库根目录运行：
 
 ```bash

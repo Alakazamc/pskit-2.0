@@ -185,6 +185,7 @@ def prepare_staging(target_dir: Path, *, backend_image: str, frontend_dist: Path
             f"RESEARCH_AGENT_ADMIN_API_KEY={_secret(32)}",
             'RESEARCH_AGENT_ADMIN_MCP_NETWORK_ZONES_JSON={"wireguard-private":["172.31.226.126/32"]}',
             "RESEARCH_AGENT_MCP_TIMEOUT_SECONDS=900",
+            "RESEARCH_AGENT_COMPUTE_CPU_DAILY_LIMIT_MS=3600000",
             f"RESEARCH_AGENT_DATABASE_URL={app_dsn}",
             "RESEARCH_AGENT_COMPUTE_SERVICE_KEYS_JSON=" + json.dumps(
                 {"coral-mcp": mcp_service_key}, separators=(",", ":"),

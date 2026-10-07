@@ -63,6 +63,7 @@ def test_generates_distinct_private_staging_secrets(release, monkeypatch):
         "wireguard-private": ["172.31.226.126/32"]
     }
     assert backend["RESEARCH_AGENT_MCP_TIMEOUT_SECONDS"] == "900"
+    assert backend["RESEARCH_AGENT_COMPUTE_CPU_DAILY_LIMIT_MS"] == "3600000"
     assert backend["RESEARCH_AGENT_AUTH_ABUSE_MODE"] == "observe"
     assert len(backend["RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET"]) >= 64
     assert len(backend["RESEARCH_AGENT_AUTH_CSRF_SECRET"]) >= 64
