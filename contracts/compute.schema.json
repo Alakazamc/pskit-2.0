@@ -503,6 +503,33 @@
           "default": null,
           "title": "Cancel Tool"
         },
+        "artifact_tool": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Artifact Tool"
+        },
+        "submit_job_id_argument": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,119}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Submit Job Id Argument"
+        },
         "remote_output_schema": {
           "additionalProperties": true,
           "title": "Remote Output Schema",

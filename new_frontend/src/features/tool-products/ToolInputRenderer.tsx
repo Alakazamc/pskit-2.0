@@ -1,5 +1,6 @@
 import type { ChangeEvent, ReactNode } from "react";
 import { useLanguage } from "../../i18n/LanguageProvider";
+import { JsonInput } from "./JsonInput";
 import {
   conditionMatches,
   localized,
@@ -12,7 +13,7 @@ import {
 
 const supported = new Set([
   "text-input", "number-input", "textarea", "select", "segmented-control", "checkbox", "switch",
-  "file-upload", "protein-input", "sequence-input", "parameter-group", "advanced-section",
+  "file-upload", "protein-input", "sequence-input", "parameter-group", "advanced-section", "json-input",
 ]);
 
 function FieldShell({ field, children }: { field: ToolUiField; children: ReactNode }) {
@@ -28,6 +29,11 @@ function ScalarField({ field, form, update }: { field: ToolUiField; form: ToolFo
   const label = localized(field.label, language);
   const value = field.input_pointer ? resolvePointer({ form }, field.input_pointer) : undefined;
   const describedBy = field.help ? `${field.id}-help` : undefined;
+  if (field.component === "json-input") return <FieldShell field={field}>
+    <label htmlFor={field.id}>{label}</label>
+    <JsonInput id={field.id} value={value} required={field.required} describedBy={describedBy}
+      language={language} onChange={(next) => update(field, next)} />
+  </FieldShell>;
   if (field.component === "textarea" || field.component === "sequence-input") return <FieldShell field={field}>
     <label htmlFor={field.id}>{label}</label>
     <textarea id={field.id} aria-describedby={describedBy} required={field.required} value={typeof value === "string" ? value : ""}

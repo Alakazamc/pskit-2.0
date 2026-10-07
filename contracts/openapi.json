@@ -3620,6 +3620,240 @@
         }
       }
     },
+    "/internal/compute/jobs/{job_id}/artifacts/{artifact_id}": {
+      "put": {
+        "tags": [
+          "compute-worker"
+        ],
+        "summary": "Upload Artifact",
+        "operationId": "upload_artifact_internal_compute_jobs__job_id__artifacts__artifact_id__put",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Artifact Id"
+            }
+          },
+          {
+            "name": "X-Compute-Service",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Compute-Service"
+            }
+          },
+          {
+            "name": "X-Compute-Worker",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "title": "X-Compute-Worker"
+            }
+          },
+          {
+            "name": "X-Compute-Attempt",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "X-Compute-Attempt"
+            }
+          },
+          {
+            "name": "X-Compute-Fence",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "X-Compute-Fence"
+            }
+          },
+          {
+            "name": "X-Compute-Artifact",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 4096,
+              "title": "X-Compute-Artifact"
+            }
+          },
+          {
+            "name": "X-Compute-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compute-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactRef"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "compute-worker"
+        ],
+        "summary": "Upload Artifact",
+        "operationId": "upload_artifact_internal_compute_jobs__job_id__artifacts__artifact_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Artifact Id"
+            }
+          },
+          {
+            "name": "X-Compute-Service",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Compute-Service"
+            }
+          },
+          {
+            "name": "X-Compute-Worker",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "title": "X-Compute-Worker"
+            }
+          },
+          {
+            "name": "X-Compute-Attempt",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "X-Compute-Attempt"
+            }
+          },
+          {
+            "name": "X-Compute-Fence",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "X-Compute-Fence"
+            }
+          },
+          {
+            "name": "X-Compute-Artifact",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 4096,
+              "title": "X-Compute-Artifact"
+            }
+          },
+          {
+            "name": "X-Compute-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compute-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactRef"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/internal/compute/jobs": {
       "post": {
         "tags": [
@@ -7858,6 +8092,45 @@
             ],
             "title": "Cancel Tool"
           },
+          "artifact_tool": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Tool"
+          },
+          "submit_job_id_argument": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,119}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submit Job Id Argument"
+          },
+          "accepted_sources": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "service_reported",
+                "measured",
+                "estimated",
+                "unknown"
+              ]
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Accepted Sources"
+          },
           "remote_output_schema": {
             "additionalProperties": true,
             "type": "object",
@@ -9194,6 +9467,31 @@
               }
             ],
             "title": "Cancel Tool"
+          },
+          "artifact_tool": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Tool"
+          },
+          "submit_job_id_argument": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,119}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submit Job Id Argument"
           },
           "remote_output_schema": {
             "additionalProperties": true,
@@ -12598,6 +12896,7 @@
               "text-input",
               "number-input",
               "textarea",
+              "json-input",
               "select",
               "segmented-control",
               "checkbox",
@@ -12746,6 +13045,7 @@
               "text-input",
               "number-input",
               "textarea",
+              "json-input",
               "select",
               "segmented-control",
               "checkbox",

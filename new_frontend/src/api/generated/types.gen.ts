@@ -739,6 +739,18 @@ export type CapabilityBinding = {
      */
     cancel_tool?: string | null;
     /**
+     * Artifact Tool
+     */
+    artifact_tool?: string | null;
+    /**
+     * Submit Job Id Argument
+     */
+    submit_job_id_argument?: string | null;
+    /**
+     * Accepted Sources
+     */
+    accepted_sources?: Array<'service_reported' | 'measured' | 'estimated' | 'unknown'>;
+    /**
      * Remote Output Schema
      */
     remote_output_schema: {
@@ -1507,6 +1519,14 @@ export type ExecutionBindingSnapshot = {
      * Cancel Tool
      */
     cancel_tool?: string | null;
+    /**
+     * Artifact Tool
+     */
+    artifact_tool?: string | null;
+    /**
+     * Submit Job Id Argument
+     */
+    submit_job_id_argument?: string | null;
     /**
      * Remote Output Schema
      */
@@ -3427,7 +3447,7 @@ export type ToolUiFieldInput = {
     /**
      * Component
      */
-    component: 'text-input' | 'number-input' | 'textarea' | 'select' | 'segmented-control' | 'checkbox' | 'switch' | 'file-upload' | 'protein-input' | 'sequence-input' | 'parameter-group' | 'advanced-section';
+    component: 'text-input' | 'number-input' | 'textarea' | 'json-input' | 'select' | 'segmented-control' | 'checkbox' | 'switch' | 'file-upload' | 'protein-input' | 'sequence-input' | 'parameter-group' | 'advanced-section';
     label: LocalizedText;
     /**
      * Input Pointer
@@ -3484,7 +3504,7 @@ export type ToolUiFieldOutput = {
     /**
      * Component
      */
-    component: 'text-input' | 'number-input' | 'textarea' | 'select' | 'segmented-control' | 'checkbox' | 'switch' | 'file-upload' | 'protein-input' | 'sequence-input' | 'parameter-group' | 'advanced-section';
+    component: 'text-input' | 'number-input' | 'textarea' | 'json-input' | 'select' | 'segmented-control' | 'checkbox' | 'switch' | 'file-upload' | 'protein-input' | 'sequence-input' | 'parameter-group' | 'advanced-section';
     label: LocalizedText;
     /**
      * Input Pointer
@@ -6150,6 +6170,126 @@ export type ResultInternalComputeJobsJobIdResultPostResponses = {
 };
 
 export type ResultInternalComputeJobsJobIdResultPostResponse = ResultInternalComputeJobsJobIdResultPostResponses[keyof ResultInternalComputeJobsJobIdResultPostResponses];
+
+export type UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdGetData = {
+    body?: never;
+    headers: {
+        /**
+         * X-Compute-Service
+         */
+        'X-Compute-Service': string;
+        /**
+         * X-Compute-Worker
+         */
+        'X-Compute-Worker': string;
+        /**
+         * X-Compute-Attempt
+         */
+        'X-Compute-Attempt': number;
+        /**
+         * X-Compute-Fence
+         */
+        'X-Compute-Fence': string;
+        /**
+         * X-Compute-Artifact
+         */
+        'X-Compute-Artifact': string;
+        /**
+         * X-Compute-Key
+         */
+        'X-Compute-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+        /**
+         * Artifact Id
+         */
+        artifact_id: string;
+    };
+    query?: never;
+    url: '/internal/compute/jobs/{job_id}/artifacts/{artifact_id}';
+};
+
+export type UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdGetError = UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdGetErrors[keyof UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdGetErrors];
+
+export type UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ArtifactRef;
+};
+
+export type UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdGetResponse = UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdGetResponses[keyof UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdGetResponses];
+
+export type UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdPutData = {
+    body?: never;
+    headers: {
+        /**
+         * X-Compute-Service
+         */
+        'X-Compute-Service': string;
+        /**
+         * X-Compute-Worker
+         */
+        'X-Compute-Worker': string;
+        /**
+         * X-Compute-Attempt
+         */
+        'X-Compute-Attempt': number;
+        /**
+         * X-Compute-Fence
+         */
+        'X-Compute-Fence': string;
+        /**
+         * X-Compute-Artifact
+         */
+        'X-Compute-Artifact': string;
+        /**
+         * X-Compute-Key
+         */
+        'X-Compute-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+        /**
+         * Artifact Id
+         */
+        artifact_id: string;
+    };
+    query?: never;
+    url: '/internal/compute/jobs/{job_id}/artifacts/{artifact_id}';
+};
+
+export type UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdPutError = UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdPutErrors[keyof UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdPutErrors];
+
+export type UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: ArtifactRef;
+};
+
+export type UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdPutResponse = UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdPutResponses[keyof UploadArtifactInternalComputeJobsJobIdArtifactsArtifactIdPutResponses];
 
 export type SubmitAgentJobInternalComputeJobsPostData = {
     body: InternalComputeSubmit;

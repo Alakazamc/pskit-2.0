@@ -77,6 +77,8 @@ export type ExecutionBindingSnapshot = {
   "submit_tool": string;
   "status_tool"?: string | null;
   "cancel_tool"?: string | null;
+  "artifact_tool"?: string | null;
+  "submit_job_id_argument"?: string | null;
   "remote_output_schema": Record<string, unknown>;
   "result_mapping": ExecutionResultMapping;
 };

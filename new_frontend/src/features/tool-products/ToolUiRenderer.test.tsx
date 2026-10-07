@@ -21,6 +21,35 @@ afterEach(() => {
 
 const text = (en: string, zh: string) => ({ en, "zh-CN": zh });
 
+it("accepts configured JSON input as an object and blocks invalid JSON instead of submitting stale input", async () => {
+  const onAction = vi.fn();
+  const schema = schemaFixture();
+  schema.state = {};
+  schema.sections = [{ id: "af3", title: text("Input", "输入"), fields: [{
+    id: "fold", component: "json-input", label: text("Fold input", "折叠输入"),
+    input_pointer: "/form/fold_input", required: true, default: { name: "example" },
+  }] }];
+  schema.actions = [{ id: "submit", label: text("Run AF3", "运行 AF3"), target: { action_id: "af3-predict" } }];
+  function JsonHarness() {
+    const [form, setForm] = useState<Record<string, unknown>>({});
+    return <LanguageProvider><ToolUiRenderer schema={schema} form={form} run={null} events={[]}
+      onChange={setForm} onAction={onAction} /></LanguageProvider>;
+  }
+  render(<JsonHarness />);
+  const user = userEvent.setup();
+  const input = screen.getByRole("textbox");
+  await user.clear(input);
+  await user.paste('{"name":"my protein"}');
+  await user.click(screen.getByRole("button", { name: /AF3/ }));
+  expect(onAction).toHaveBeenCalledWith("af3-predict", { fold_input: { name: "my protein" } });
+  onAction.mockClear();
+  await user.clear(input);
+  await user.paste('{"name":');
+  expect(input).toBeInvalid();
+  await user.click(screen.getByRole("button", { name: /AF3/ }));
+  expect(onAction).not.toHaveBeenCalled();
+});
+
 function schemaFixture(): ToolUiSchema {
   return {
     schema_version: "pskit.tool-ui.v1",
