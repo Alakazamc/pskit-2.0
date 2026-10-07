@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 import yaml
 
 from app.contracts.tool_products import AcceptanceSuite, ToolProductDraft
@@ -93,3 +94,31 @@ def test_coral_staging_product_exposes_only_the_smoke_action():
         "coral.generate.one_shot"
     ]
     assert validate_tool_ui(product.ui_schema, product.bindings)
+
+
+@pytest.mark.asyncio
+async def test_cpu_only_analysis_accepts_reported_cpu_without_inventing_gpu_usage():
+    from app.domain.admin.qualification import QualificationEvaluator
+
+    class CpuProvider:
+        async def execute(self, binding, arguments, idempotency_key):
+            return {
+                'remote_execution_id': 'cpu-analysis-1',
+                'report': {
+                    'status': 'completed',
+                    'result': {'sample_size': 100, 'molecule': 'dna',
+                               'structure_skipped': True, 'elapsed_seconds': 0.5},
+                    'usage': {'wall_ms': 500, 'cpu_core_ms': 200,
+                              'gpu_device_ms': None, 'gpu_count': 0, 'source': 'unknown'},
+                    'artifacts': [],
+                },
+                'events': [],
+            }
+
+    product = ToolProductDraft.model_validate(_load('coral.product.yaml'))
+    raw_suite = _load('coral.acceptance.yaml')['suite']
+    raw_suite['cases'] = [raw_suite['cases'][-1]]
+    suite = AcceptanceSuite.model_validate(raw_suite)
+    report = await QualificationEvaluator(CpuProvider()).evaluate(product, suite)
+    assert report.status == 'passed'
+    assert report.cases[0].usage_source == 'unknown'

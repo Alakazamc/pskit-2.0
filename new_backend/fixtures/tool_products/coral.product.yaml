@@ -307,6 +307,9 @@ bindings:
       additionalProperties: false
     result_mapping: {kind: json_pointer, pointer: /result}
     required_usage: [wall_ms, cpu_core_ms]
+    # The native CPU analysis leaves GPU provenance unknown. Required CPU/wall
+    # metrics must still be present; never invent GPU measurements.
+    accepted_sources: [measured, service_reported, unknown]
     gpu_count: 0
     max_budget: {cpu_core_ms: 300000, gpu_device_ms: 0}
     concurrency: 1
