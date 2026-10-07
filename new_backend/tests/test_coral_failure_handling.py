@@ -1,21 +1,16 @@
-"""Tests for CORAL failure handling without usage metrics."""
+"""Tests for CORAL reports at the generic MCP accounting boundary."""
 
 import pytest
 from mcp import types
 
-from app.contracts.compute import Failed, UsageReport
+from app.contracts.compute import Completed, Failed
 from pskit_compute.service import ProtocolError
 from tests.test_dynamic_mcp_receiver import binding, dynamic_grant
 
 
 @pytest.mark.asyncio
-async def test_coral_pdb_download_failure_without_usage():
-    """Test that PDB download failures are handled even without GPU usage.
-
-    This is a regression test for the issue where CORAL tasks that failed
-    during PDB download (before any GPU computation) would get stuck in
-    "Running" state because they lacked usage metrics.
-    """
+async def test_coral_pdb_download_failure_without_usage_requires_reconciliation():
+    """A receiver must not invent zero usage for a provider failure."""
     from pskit_compute.dynamic_mcp import DynamicMcpAdapter
 
     # Create test binding and grant
@@ -25,7 +20,7 @@ async def test_coral_pdb_download_failure_without_usage():
         credential_ref="coral-key"
     )
     grant = dynamic_grant(
-        required_usage=("gpu_seconds",),
+        required_usage=("gpu_device_ms",),
         execution_binding=test_binding
     )
 
@@ -50,13 +45,8 @@ async def test_coral_pdb_download_failure_without_usage():
         }
     )
 
-    # Before fix: this would raise MCP_FAILED_USAGE_MISSING
-    # After fix: should process the failure and return Failed status
-    result = adapter._report(mock_response, grant)
-
-    assert isinstance(result, Failed)
-    assert result.error.code == "PDB_DOWNLOAD_FAILED"
-    assert "1ABC" in result.error.message
+    with pytest.raises(ProtocolError, match="MCP_FAILED_USAGE_MISSING"):
+        adapter._report(mock_response, grant)
 
 
 @pytest.mark.asyncio
@@ -65,7 +55,9 @@ async def test_coral_failure_with_partial_usage():
     from pskit_compute.dynamic_mcp import DynamicMcpAdapter
 
     test_binding = binding(adapter="immediate_mcp")
-    grant = dynamic_grant(required_usage=("gpu_seconds",), execution_binding=test_binding)
+    grant = dynamic_grant(
+        required_usage=("gpu_device_ms",), execution_binding=test_binding
+    )
 
     adapter = DynamicMcpAdapter(
         test_binding,
@@ -83,9 +75,8 @@ async def test_coral_failure_with_partial_usage():
                 "message": "Structure optimization failed to converge"
             },
             "usage": {
-                "source": "gpu_monitor",
-                "gpu_seconds": 45.2,
-                "device": "a6000"
+                "source": "measured",
+                "gpu_device_ms": 45_200
             }
         }
     )
@@ -93,17 +84,19 @@ async def test_coral_failure_with_partial_usage():
     result = adapter._report(mock_response, grant)
 
     assert isinstance(result, Failed)
-    assert result.usage.gpu_seconds == 45.2
+    assert result.usage.gpu_device_ms == 45_200
     assert result.error.code == "CORAL_COMPUTATION_FAILED"
 
 
 @pytest.mark.asyncio
-async def test_coral_timeout_without_usage():
-    """Test timeout scenarios without usage metrics."""
+async def test_coral_timeout_without_usage_requires_reconciliation():
+    """Preparation timeouts also retain the quota hold until reconciled."""
     from pskit_compute.dynamic_mcp import DynamicMcpAdapter
 
     test_binding = binding(adapter="immediate_mcp")
-    grant = dynamic_grant(required_usage=("gpu_seconds",), execution_binding=test_binding)
+    grant = dynamic_grant(
+        required_usage=("gpu_device_ms",), execution_binding=test_binding
+    )
 
     adapter = DynamicMcpAdapter(
         test_binding,
@@ -124,24 +117,21 @@ async def test_coral_timeout_without_usage():
         }
     )
 
-    result = adapter._report(mock_response, grant)
-
-    assert isinstance(result, Failed)
-    assert result.error.code == "TIMEOUT"
+    with pytest.raises(ProtocolError, match="MCP_FAILED_USAGE_MISSING"):
+        adapter._report(mock_response, grant)
 
 
 @pytest.mark.asyncio
 async def test_successful_coral_task_with_usage():
     """Test successful CORAL task with proper usage reporting."""
     from pskit_compute.dynamic_mcp import DynamicMcpAdapter
-    from app.contracts.compute import Completed
 
     test_binding = binding(
         adapter="immediate_mcp",
         result_mapping={"kind": "json_pointer", "pointer": "/result"}
     )
     grant = dynamic_grant(
-        required_usage=("gpu_seconds",),
+        required_usage=("gpu_device_ms",),
         execution_binding=test_binding,
         output_schema={"type": "object"}
     )
@@ -161,16 +151,15 @@ async def test_successful_coral_task_with_usage():
                 "confidence": 0.95
             },
             "usage": {
-                "source": "gpu_monitor",
-                "gpu_seconds": 120.5,
-                "device": "a6000"
+                "source": "measured",
+                "gpu_device_ms": 120_500
             },
             "artifacts": [
                 {
                     "id": "structure-1",
                     "name": "optimized_structure.pdb",
-                    "mime_type": "chemical/x-pdb",
-                    "size_bytes": 102400,
+                    "kind": "chemical/x-pdb",
+                    "size": 102400,
                     "available": True
                 }
             ]
@@ -180,7 +169,7 @@ async def test_successful_coral_task_with_usage():
     result = adapter._report(mock_response, grant)
 
     assert isinstance(result, Completed)
-    assert result.usage.gpu_seconds == 120.5
+    assert result.usage.gpu_device_ms == 120_500
     assert len(result.artifacts) == 1
     assert result.artifacts[0].id == "structure-1"
 
@@ -191,8 +180,6 @@ async def test_mcp_report_size_limit():
     from pskit_compute.dynamic_mcp import DynamicMcpAdapter
 
     test_binding = binding(adapter="immediate_mcp")
-    grant = dynamic_grant(execution_binding=test_binding)
-
     adapter = DynamicMcpAdapter(
         test_binding,
         endpoint_url="https://example.org/mcp",

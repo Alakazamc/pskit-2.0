@@ -1,15 +1,16 @@
 """Database query optimization utilities."""
 
-from typing import List, Dict, Any
+from collections.abc import Callable
+from typing import Any
 
 
 def batch_fetch_by_ids(
     db,
     table: str,
     id_column: str,
-    ids: List[str],
+    ids: list[str],
     columns: str = "*"
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Fetch multiple rows by IDs in a single query.
 
     Args:
@@ -35,9 +36,9 @@ def batch_fetch_by_ids(
 def fetch_with_related(
     db,
     main_query: str,
-    related_fetchers: Dict[str, callable],
+    related_fetchers: dict[str, Callable[[list[str]], dict[str, Any]]],
     params: tuple = ()
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Fetch main records and eagerly load related data.
 
     Args:

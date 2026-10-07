@@ -114,17 +114,10 @@ class DynamicMcpAdapter:
             )
             raise ProtocolError("MCP_REMOTE_OUTPUT_INVALID")
 
-        # Allow failed tasks without usage — they'll be marked for reconciliation
-        # This handles cases like PDB download failures where no GPU computation occurred
+        # The receiver cannot infer whether a failed provider call consumed resources.
+        # Preserve the grant and its quota hold until the provider reports usage.
         if data.get("status") == "failed" and "usage" not in data:
-            mcp_logger.warning(
-                "Task failed without usage metrics, marking for reconciliation",
-                error_code=ErrorCode.MCP_FAILED_USAGE_MISSING,
-                service_id=grant.job.service_id,
-                job_id=grant.job.id,
-                failure_reason=data.get("error", {}).get("message", "Unknown")
-            )
-            # Don't raise error - allow the failure to be processed
+            raise ProtocolError("MCP_FAILED_USAGE_MISSING")
 
         if not Draft202012Validator(self.binding.remote_output_schema).is_valid(data):
             mcp_logger.error(

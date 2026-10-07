@@ -31,7 +31,9 @@ export default defineConfig(({ mode }) => {
     },
     test: {
       environment: "jsdom",
-      env: { VITE_AUTH_MODE: "demo" },
+      // Keep local production credentials out of tests. Individual Turnstile
+      // tests opt in with vi.stubEnv so auth fixtures remain deterministic.
+      env: { VITE_AUTH_MODE: "demo", VITE_TURNSTILE_SITE_KEY: "" },
       setupFiles: ["./src/test/setup.ts"],
       maxWorkers: 2,
     },

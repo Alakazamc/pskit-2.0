@@ -1,22 +1,22 @@
 """Retry utilities for handling transient failures."""
 
 import asyncio
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable, Type, TypeVar, Tuple
+from typing import TypeVar
 
 from app.domain.errors import ErrorCode, ErrorSeverity, get_error_severity
 from app.services.structured_logging import get_logger
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 logger = get_logger("pskit.retry")
 
 # Transient errors that should be retried
-TRANSIENT_EXCEPTIONS: Tuple[Type[Exception], ...] = (
+TRANSIENT_EXCEPTIONS: tuple[type[Exception], ...] = (
     OSError,
     TimeoutError,
     ConnectionError,
-    asyncio.TimeoutError,
 )
 
 
@@ -43,7 +43,7 @@ def retry_with_backoff(
     base_delay_seconds: float = 1.0,
     max_delay_seconds: float = 60.0,
     exponential: bool = True,
-    retryable_exceptions: Tuple[Type[Exception], ...] = TRANSIENT_EXCEPTIONS,
+    retryable_exceptions: tuple[type[Exception], ...] = TRANSIENT_EXCEPTIONS,
 ):
     """Decorator for retrying async functions with exponential backoff.
 
@@ -133,7 +133,7 @@ async def retry_with_timeout(
         try:
             async with asyncio.timeout(timeout_seconds):
                 return await coro
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             last_error = e
 
             if attempt < max_attempts - 1:

@@ -1,7 +1,6 @@
 """Centralized error codes and error handling utilities."""
 
 from enum import Enum
-from typing import Dict
 
 
 class ErrorCode(str, Enum):
@@ -82,7 +81,7 @@ class ErrorSeverity(str, Enum):
     CRITICAL = "critical"      # Unexpected errors requiring immediate attention
 
 
-ERROR_MESSAGES: Dict[ErrorCode, str] = {
+ERROR_MESSAGES: dict[ErrorCode, str] = {
     # MCP errors
     ErrorCode.MCP_REPORT_REQUIRED: "远程服务未返回有效的计算报告",
     ErrorCode.MCP_REPORT_TOO_LARGE: "计算结果超出大小限制（最大1MB）",
@@ -112,7 +111,7 @@ ERROR_MESSAGES: Dict[ErrorCode, str] = {
     ErrorCode.UNAVAILABLE: "服务暂时不可用",
 }
 
-ERROR_SEVERITY: Dict[ErrorCode, ErrorSeverity] = {
+ERROR_SEVERITY: dict[ErrorCode, ErrorSeverity] = {
     # Expected errors
     ErrorCode.AUTH_REQUIRED: ErrorSeverity.EXPECTED,
     ErrorCode.CAPTCHA_REQUIRED: ErrorSeverity.EXPECTED,

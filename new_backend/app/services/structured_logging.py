@@ -3,13 +3,14 @@
 import json
 import logging
 from contextvars import ContextVar
-from typing import Any, Dict, Optional
+from typing import Any
 
-from app.domain.errors import ErrorCode, ErrorSeverity, get_error_severity
-
+from app.domain.errors import ErrorCode, get_error_severity
 
 # Context variable to track request-scoped data
-request_context: ContextVar[Dict[str, Any]] = ContextVar('request_context', default={})
+request_context: ContextVar[dict[str, Any] | None] = ContextVar(
+    "request_context", default=None
+)
 
 
 class StructuredLogger:
@@ -23,11 +24,11 @@ class StructuredLogger:
         self,
         level: int,
         message: str,
-        error_code: Optional[str] = None,
+        error_code: str | None = None,
         **extra_fields
     ):
         """Log with structured data including request context."""
-        context = request_context.get({})
+        context = request_context.get() or {}
 
         log_data = {
             "message": message,
@@ -65,7 +66,7 @@ class StructuredLogger:
     def error(
         self,
         message: str,
-        error_code: Optional[str] = None,
+        error_code: str | None = None,
         exc_info: bool = False,
         **kwargs
     ):
@@ -74,16 +75,16 @@ class StructuredLogger:
             kwargs["exc_info"] = True
         self._log(logging.ERROR, message, error_code=error_code, **kwargs)
 
-    def critical(self, message: str, error_code: Optional[str] = None, **kwargs):
+    def critical(self, message: str, error_code: str | None = None, **kwargs):
         """Log critical message with context."""
         self._log(logging.CRITICAL, message, error_code=error_code, **kwargs)
 
 
 def set_request_context(
-    user_id: Optional[str] = None,
-    run_id: Optional[str] = None,
-    task_id: Optional[str] = None,
-    request_id: Optional[str] = None,
+    user_id: str | None = None,
+    run_id: str | None = None,
+    task_id: str | None = None,
+    request_id: str | None = None,
     **extra
 ):
     """Set request context for structured logging."""

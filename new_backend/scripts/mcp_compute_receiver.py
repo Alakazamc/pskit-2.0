@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import httpx
 
 from app.contracts.compute import ComputeClaimRequest, WorkerResources
-from app.domain.errors import ErrorCode
 from app.services.structured_logging import compute_logger
 from pskit_compute.dynamic_mcp import DynamicMcpExecutor
 from pskit_compute.journal import Journal
