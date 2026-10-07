@@ -8,6 +8,10 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+# Pi echoes up to ten 4 MiB images as base64 in a single JSONL user event.
+# Keep the pipe bounded while allowing those valid turns and event metadata.
+MAX_RPC_RECORD_BYTES = 64 * 1024 * 1024
+
 
 class PiRpcError(Exception):
     def __init__(
@@ -218,6 +222,7 @@ class PiRpcRunner:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                limit=MAX_RPC_RECORD_BYTES,
                 env=child_env,
                 cwd=working_directory or directory,
             )

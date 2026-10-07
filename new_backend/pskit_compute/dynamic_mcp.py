@@ -103,6 +103,9 @@ class DynamicMcpAdapter:
 
     def _report(self, result, grant):
         result, data = self._data(result)
+        if not isinstance(data, dict):
+            raise ProtocolError("MCP_REMOTE_OUTPUT_INVALID")
+        # Allow failed tasks without usage — they'll be marked as needing reconciliation
         if not Draft202012Validator(self.binding.remote_output_schema).is_valid(data):
             raise ProtocolError("MCP_REMOTE_OUTPUT_INVALID")
         if result.isError and data.get("status") != "failed":

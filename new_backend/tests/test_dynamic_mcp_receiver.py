@@ -2,6 +2,7 @@
 
 import base64
 import hashlib
+import logging
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
@@ -217,6 +218,7 @@ async def test_immediate_adapter_accepts_envelope_and_maps_bare_result():
 @pytest.mark.asyncio
 async def test_adapter_enforces_size_schema_usage_and_error_consistency():
     reports = iter([
+        types.CallToolResult(content=[types.TextContent(type="text", text="[]")]),
         types.CallToolResult(content=[], structuredContent={"blob": "x" * (1024 * 1024 + 1)}),
         types.CallToolResult(content=[], structuredContent={"wrong": True}),
         types.CallToolResult(content=[], structuredContent={
@@ -244,6 +246,7 @@ async def test_adapter_enforces_size_schema_usage_and_error_consistency():
     adapter = adapter_for(grant)
     adapter.remote._session = session
     for code in (
+        "MCP_REMOTE_OUTPUT_INVALID",
         "MCP_REPORT_TOO_LARGE",
         "MCP_REMOTE_OUTPUT_INVALID",
         "REQUIRED_USAGE_MISSING",
@@ -251,6 +254,84 @@ async def test_adapter_enforces_size_schema_usage_and_error_consistency():
     ):
         with pytest.raises(ProtocolError, match=code):
             await adapter.execute(grant)
+
+
+def test_receiver_error_codes_never_render_untrusted_exception_text():
+    from scripts.mcp_compute_receiver import _safe_error_code
+
+    class UnrenderableError(RuntimeError):
+        def __str__(self):
+            raise AssertionError("exception text must not be rendered")
+
+    assert _safe_error_code(ProtocolError("private provider details")) == "ProtocolError"
+    assert _safe_error_code(UnrenderableError()) == "UnrenderableError"
+
+
+@pytest.mark.asyncio
+async def test_failed_report_without_usage_stays_unknown_with_a_safe_log_code(
+    tmp_path, caplog, monkeypatch
+):
+    from scripts import mcp_compute_receiver
+
+    class Session:
+        async def call_tool(self, _name, _arguments):
+            return types.CallToolResult(
+                content=[],
+                structuredContent={
+                    "status": "failed",
+                    "error": {
+                        "code": "REMOTE_FAILURE",
+                        "message": "private provider details",
+                    },
+                },
+                isError=True,
+            )
+
+    @asynccontextmanager
+    async def session():
+        yield Session()
+
+    class StopReceiverLoop(Exception):
+        pass
+
+    sleeps = 0
+
+    async def stop_after_unknown(_seconds):
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps == 2:
+            raise StopReceiverLoop
+
+    grant = dynamic_grant()
+    adapter = adapter_for(grant)
+    adapter.remote._session = session
+    control = Control(grant)
+    journal = Journal(tmp_path / "missing-failed-usage.sqlite3")
+    receiver = Receiver(
+        adapter,
+        control,
+        journal,
+        ComputeClaimRequest(service_id="lab", worker_id="worker-1"),
+    )
+    monkeypatch.setattr(mcp_compute_receiver.asyncio, "sleep", stop_after_unknown)
+    caplog.set_level(logging.ERROR, logger="mcp_compute_receiver")
+    try:
+        with pytest.raises(StopReceiverLoop):
+            await mcp_compute_receiver.receive(
+                receiver, poll_seconds=0, isolate_failures=True
+            )
+
+        records = journal.recover()
+        assert len(records) == 1
+        assert records[0]["state"] == "executing"
+        assert records[0]["payload"] is None
+        assert control.sent == []
+        assert "MCP_FAILED_USAGE_MISSING" in caplog.text
+        assert "execution unknown" in caplog.text
+        assert "REMOTE_FAILURE" not in caplog.text
+        assert "private provider details" not in caplog.text
+    finally:
+        journal.close()
 
 
 @pytest.mark.asyncio

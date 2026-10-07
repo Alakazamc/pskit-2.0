@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 from contextlib import ExitStack, asynccontextmanager
 from pathlib import Path
@@ -19,8 +20,22 @@ from app.contracts.compute import ComputeClaimRequest, WorkerResources
 from pskit_compute.dynamic_mcp import DynamicMcpExecutor
 from pskit_compute.journal import Journal
 from pskit_compute.receiver import ControlClient, Receiver
+from pskit_compute.service import ProtocolError
 
 LOG = logging.getLogger("mcp_compute_receiver")
+SAFE_ERROR_CODE = re.compile(r"[A-Z][A-Z0-9_]{0,99}\Z")
+
+
+def _safe_error_code(error: Exception) -> str:
+    if isinstance(error, ProtocolError):
+        try:
+            value = str(error)
+        except Exception:  # noqa: BLE001 - Logging must not fail on exception rendering.
+            return "ProtocolError"
+        if SAFE_ERROR_CODE.fullmatch(value):
+            return value
+        return "ProtocolError"
+    return type(error).__name__
 
 
 def _string_map(raw: str, name: str) -> dict[str, str]:
@@ -80,7 +95,7 @@ async def receive(receiver, poll_seconds, *, cleanup=None, isolate_failures=Fals
             if not isolate_failures:
                 raise
             LOG.error("%s: requires reconciliation (%s); other services continue",
-                      receiver.identity.service_id, type(error).__name__)
+                      receiver.identity.service_id, _safe_error_code(error))
             await asyncio.sleep(30)
             continue
         if outcome.status == "unknown":

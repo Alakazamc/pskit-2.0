@@ -1,5 +1,9 @@
+import base64
 import json
+import random
+import struct
 import threading
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -10,6 +14,97 @@ from app.adapters.live.pi_rpc import PiRpcError, PiRpcRunner, _provider_error_co
 
 def test_local_proxy_quota_error_is_not_classified_as_gateway_rate_limit():
     assert _provider_error_code("HTTP 402 PSKIT_TOKEN_QUOTA_EXCEEDED") == "TOKEN_QUOTA_EXCEEDED"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("image_count", [1, 2, 10])
+async def test_real_pi_image_events_larger_than_default_pipe_limit_reach_the_gateway(
+    tmp_path, image_count,
+):
+    """Pi echoes image bytes in user events before the first assistant event."""
+    def chunk(kind, raw):
+        return struct.pack("!I", len(raw)) + kind + raw + struct.pack(
+            "!I", zlib.crc32(kind + raw) & 0xFFFFFFFF,
+        )
+
+    pixels = random.Random(0).randbytes(256 * 256 * 3)
+    scanlines = b"".join(b"\x00" + pixels[offset:offset + 768]
+                         for offset in range(0, len(pixels), 768))
+    png = (b"\x89PNG\r\n\x1a\n"
+           + chunk(b"IHDR", struct.pack("!2I5B", 256, 256, 8, 2, 0, 0, 0))
+           + chunk(b"IDAT", zlib.compress(scanlines)) + chunk(b"IEND", b""))
+    encoded = base64.b64encode(png).decode()
+    assert len(encoded) > 65536
+    requests = []
+
+    class Gateway(BaseHTTPRequestHandler):
+        def do_POST(self):
+            requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+            packets = []
+            for delta, reason in (({"role": "assistant", "content": "Image reviewed"}, None),
+                                  ({}, "stop")):
+                packet = {"id": "image-reply", "object": "chat.completion.chunk",
+                          "created": 1, "model": "vision-model", "choices": [
+                              {"index": 0, "delta": delta, "finish_reason": reason},
+                          ]}
+                if reason:
+                    packet["usage"] = {"prompt_tokens": 8, "completion_tokens": 3,
+                                       "total_tokens": 11}
+                packets.append(f"data: {json.dumps(packet)}\n\n".encode())
+            body = b"".join(packets) + b"data: [DONE]\n\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(body)
+            self.wfile.flush()
+
+        def log_message(self, *_):
+            pass
+
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Gateway)
+    except PermissionError:
+        pytest.skip("Loopback sockets are unavailable in the current sandbox")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        runner = PiRpcRunner(
+            executable=str(Path(__file__).resolve().parents[1] / "pi/node_modules/.bin/pi"),
+            session_dir=str(tmp_path / "sessions"),
+            model_gateway_base_url=f"http://127.0.0.1:{server.server_port}/v1",
+            model_gateway_model="vision-model", timeout_seconds=30,
+        )
+        events = []
+        try:
+            result = await runner.prompt("image-session", "Describe this image", events.append,
+                                         images=[{"type": "image", "mimeType": "image/png",
+                                                  "data": encoded}] * image_count, environment={
+                                             "MODEL_GATEWAY_API_KEY": "test-only-key",
+                                             "PSKIT_MODEL_SUPPORTS_IMAGES": "1",
+                                         })
+        except PiRpcError as exc:
+            raise AssertionError({"requests": len(requests), "events": [
+                {"type": event.get("type"),
+                 "error": event.get("message", {}).get("errorMessage")}
+                for event in events
+            ]}) from exc
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+    assert result["text"] == "Image reviewed"
+    user_event = next(event for event in events if event.get("type") == "message_start"
+                      and event.get("message", {}).get("role") == "user")
+    assert len([block for block in user_event["message"]["content"]
+                if block.get("data") == encoded]) == image_count
+    content = next(message["content"] for message in requests[0]["messages"]
+                   if message["role"] == "user")
+    assert len([block for block in content
+                if block.get("image_url", {}).get("url") == f"data:image/png;base64,{encoded}"]
+               ) == image_count
 
 
 @pytest.mark.asyncio
