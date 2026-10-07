@@ -9,14 +9,16 @@ export function ToolPageHeaderProvider({ target, children }: { target: HTMLEleme
   return <HeaderTarget.Provider value={target}>{children}</HeaderTarget.Provider>;
 }
 
-export function ToolPageHeader({ title, description, onBack, onEdit }: {
-  title: string; description?: string; onBack: () => void; onEdit?: () => void;
+export function ToolPageHeader({ title, description, loading = false, onBack, onEdit }: {
+  title: string; description?: string; loading?: boolean; onBack: () => void; onEdit?: () => void;
 }) {
   const { t } = useLanguage();
   const target = useContext(HeaderTarget);
   const heading = <div className="mono-tool-page-heading">
     <button type="button" className="mono-tool-back" aria-label={t("tools.back")} title={t("tools.back")} onClick={onBack}><ArrowLeft size={19} aria-hidden="true" /></button>
-    <div className="mono-tool-page-title"><h1>{title}</h1>{description && <p>{description}</p>}</div>
+    <div className="mono-tool-page-title">{loading
+      ? <div className="mono-tool-title-placeholder" aria-hidden="true"><span /><span /></div>
+      : <><h1>{title}</h1>{description && <p>{description}</p>}</>}</div>
     {onEdit && <button type="button" className="mono-tool-edit" aria-label={t("catalog.edit")} title={t("catalog.edit")} onClick={onEdit}><PenLine size={17} aria-hidden="true" /></button>}
   </div>;
   // Standalone tool pages retain their heading; the workspace owns its placement.

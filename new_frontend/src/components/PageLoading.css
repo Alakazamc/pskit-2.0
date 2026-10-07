@@ -1,0 +1,8 @@
+.page-loading{display:grid;place-items:center;flex:1;min-width:0;min-height:180px;color:var(--mono-muted,var(--text-secondary))}
+.mono-page-content>.page-loading{min-height:calc(100dvh - 210px)}
+.page-loading-spinner{display:flex;animation:page-loading-spin 1s linear infinite}
+.page-load-error{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:180px;padding:24px;color:var(--mono-muted,var(--text-secondary));text-align:center}
+.page-load-error p{margin:0;font-size:13px;line-height:1.6}
+.page-load-error button{min-height:44px;min-width:64px;cursor:pointer}
+@keyframes page-loading-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.page-loading-spinner{animation:none}}

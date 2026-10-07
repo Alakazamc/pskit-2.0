@@ -8,6 +8,7 @@ import { useLanguage } from "../../i18n/LanguageProvider";
 import { errorTranslationKey } from "../../i18n/errors";
 import { personalSessionPath } from "../mono/sessionPaths";
 import { ToolPageHeader } from "../mono/ToolPageHeader";
+import { PageLoading, PageLoadError } from "../../components/PageLoading";
 import { ToolUiRenderer } from "./ToolUiRenderer";
 import { localized, projectActionArguments, resolvePointer, setFormPointer, type ToolForm, type ToolUiField, type ToolUiSchema } from "./toolUiSchema";
 
@@ -45,7 +46,12 @@ export function ToolProductPage({ api, slug, userId, theme, onBack }: {
   const navigate = useNavigate();
   const cache = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const product = useQuery({ queryKey: ["tool-product", userId, slug], queryFn: () => api.getToolProduct(slug) });
+  const product = useQuery({
+    queryKey: ["tool-product", userId, slug], queryFn: () => api.getToolProduct(slug),
+    initialData: () => cache.getQueryData<Awaited<ReturnType<ResearchApi["getToolProducts"]>>>(["tool-products", userId])?.items?.find((item) => item.slug === slug),
+    initialDataUpdatedAt: () => cache.getQueryState(["tool-products", userId])?.dataUpdatedAt,
+    refetchOnMount: "always",
+  });
   const [form, setForm] = useState<ToolForm>({});
   const [run, setRun] = useState<ToolProductRun | null>(null);
   const [events, setEvents] = useState<Awaited<ReturnType<ResearchApi["getToolProductRunEvents"]>>>([]);
@@ -171,11 +177,11 @@ export function ToolProductPage({ api, slug, userId, theme, onBack }: {
   };
 
   const currentSchema = product.data?.ui_schema;
-  const title = localized(product.data?.title, language) || slug;
+  const title = localized(product.data?.title, language) || (product.isError ? t("mono.pageNotFound") : "");
   const handoffs = useMemo(() => currentSchema?.handoffs ?? [], [currentSchema]);
-  const header = <ToolPageHeader title={title} description={localized(product.data?.description, language)} onBack={onBack} />;
-  if (product.isLoading) return <>{header}<div className="mono-loading-page" role="status">{t("toolProduct.loading")}</div></>;
-  if (product.isError || !product.data || !currentSchema) return <>{header}<div className="mono-empty-panel" role="alert"><h2>{t("mono.pageNotFound")}</h2><p>{t("toolProduct.notAvailable")}</p></div></>;
+  const header = <ToolPageHeader title={title} description={localized(product.data?.description, language)} loading={product.isPending} onBack={onBack} />;
+  if (product.isPending) return <>{header}<PageLoading label={t("toolProduct.loading")} /></>;
+  if (!product.data || !currentSchema) return <>{header}<PageLoadError message={t("toolProduct.notAvailable")} retryLabel={t("loading.retry")} onRetry={() => { void product.refetch(); }} /></>;
 
   return <article className="mono-tool-detail tool-product-page" aria-label={title}>
     {header}
@@ -191,7 +197,7 @@ export function ToolProductPage({ api, slug, userId, theme, onBack }: {
         <ToolUiRenderer schema={currentSchema} form={form} run={run} events={events} onChange={setForm} onAction={(actionId, values) => void start(actionId, values)} onArtifactDownload={(artifact) => void downloadArtifact(artifact)} theme={theme} showHeader={false} />
       </Tabs.Content>
       <Tabs.Content value="history"><div className="mono-page-content tool-product-history">
-        {history.isLoading && <p role="status">{t("tools.loadingRuns")}</p>}
+        {history.isPending && <PageLoading label={t("tools.loadingRuns")} />}
         {history.isError && <p role="alert" className="mono-form-error">{t("tools.readFailed")}</p>}
         {history.data?.length ? <div className="mono-run-list">{history.data.map((item) => <button type="button" className="mono-run-item" key={item.run_id} aria-label={`${item.run_id} · ${item.status}`} onClick={() => {
           setParams((previous) => { const next = new URLSearchParams(previous); next.set("run", item.run_id); next.delete("tab"); return next; });

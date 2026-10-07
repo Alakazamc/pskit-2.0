@@ -774,7 +774,7 @@ it("translates tool parameters and scoped history in the tools content area", as
   }));
   render(<App />);
   const panel = await screen.findByRole("article", { name: "search_pdb" });
-  expect(within(document.querySelector<HTMLElement>(".mono-topbar")!).getByRole("heading", { name: "search_pdb", level: 1 })).toBeInTheDocument();
+  expect(await within(document.querySelector<HTMLElement>(".mono-topbar")!).findByRole("heading", { name: "search_pdb", level: 1 })).toBeInTheDocument();
   expect(within(panel).getByRole("textbox", { name: "Protein name, UniProt or PDB ID" })).toBeInTheDocument();
   await actor.click(within(panel).getByRole("tab", { name: "Run history" }));
   expect(await within(panel).findByText("No runs yet")).toBeInTheDocument();

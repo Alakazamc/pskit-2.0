@@ -14,6 +14,7 @@ import { StructureViewerPage } from "./StructureViewerPage";
 import { ToolProductPage } from "../tool-products/ToolProductPage";
 import { localized } from "../tool-products/toolUiSchema";
 import { ToolPageHeader } from "./ToolPageHeader";
+import { PageLoading } from "../../components/PageLoading";
 
 export function ToolDirectory({ api, userId, projects, selectedName, productSlug, viewer = false, theme }: {
   api: ResearchApi; userId: string; projects: Project[]; selectedName?: string;
@@ -31,38 +32,45 @@ export function ToolDirectory({ api, userId, projects, selectedName, productSlug
   const showViewer = matches(t("tools.viewerTitle"), t("tools.viewerCardDescription"));
   const selected = tools.data?.find((tool) => tool.name === selectedName);
   const showingDetail = !!(selectedName || productSlug || viewer);
+  const loadingDirectory = (tools.isPending && !tools.isFetched) || (products.isPending && !products.isFetched);
+  const retryCatalog = () => {
+    if (tools.isError) void tools.refetch();
+    if (products.isError) void products.refetch();
+  };
   useLayoutEffect(() => {
-    if (showingDetail || !focusOnReturn.current || tools.isLoading) return;
+    if (showingDetail || !focusOnReturn.current || loadingDirectory) return;
     const title = focusOnReturn.current;
     const card = Array.from(document.querySelectorAll<HTMLAnchorElement>(".catalog-tools-grid a.catalog-entry-card"))
       .find((item) => item.getAttribute("aria-label") === title);
     card?.focus();
     focusOnReturn.current = null;
-  }, [showingDetail, tools.isLoading, products.isLoading]);
+  }, [showingDetail, loadingDirectory]);
   const title = viewer ? t("tools.viewerTitle") : selectedName ?? "";
   return <div className="mono-page-scroll"><div className={`mono-page-content${showingDetail ? " mono-tool-detail-screen" : ""}`}>
-    {productSlug ? <ToolProductPage api={api} slug={productSlug} userId={userId} theme={theme} onBack={() => { focusOnReturn.current = productSlug; navigate("/tools"); }} />
+    {productSlug ? <ToolProductPage api={api} slug={productSlug} userId={userId} theme={theme} onBack={() => { focusOnReturn.current = localized(products.data?.items?.find((product) => product.slug === productSlug)?.title, language); navigate("/tools"); }} />
     : showingDetail ? <ToolDetails key={viewer ? "viewer" : selectedName} title={title}
+      loading={!viewer && tools.isPending}
       description={viewer ? t("tools.viewerCardDescription") : selected?.description} onClose={() => { focusOnReturn.current = title; navigate("/tools"); }}
       api={api} userId={userId} projects={projects} tool={selectedName}>
        {viewer ? <StructureViewerPage theme={theme} /> : selectedName === "search_pdb" ? <PdbWorkspace api={api} userId={userId} /> : <GenericToolPage api={api} userId={userId} name={selectedName!} />}
     </ToolDetails> : <>
       <CatalogSearch value={search} onChange={setSearch} label={t("tools.searchDirectory")} />
-      {(tools.isLoading || products.isLoading) && <p role="status">{t("workspace.loadingCatalog")}</p>}
-      {(tools.isError || products.isError) && <p className="mono-form-error" role="alert">{t("tools.loadFailed")}</p>}
+      {loadingDirectory ? <PageLoading label={t("workspace.loadingCatalog")} /> : <>
+      {(tools.isError || products.isError) && <div className="catalog-load-notice" role="alert"><span>{t("tools.loadFailed")}</span><button type="button" className="mono-text-button" onClick={retryCatalog}>{t("loading.retry")}</button></div>}
       <div className="catalog-entry-grid catalog-tools-grid">
         {showViewer && <CatalogCard size="large" title={t("tools.viewerTitle")} description={t("tools.viewerCardDescription")} icon={<Atom />} to="/tools/structure" />}
         {filteredProducts.map((product) => <CatalogCard size="large" key={product.release_id} title={localized(product.title, language)} description={localized(product.description, language)} icon={<Boxes />} to={`/tools/${encodeURIComponent(product.slug)}`} />)}
         {filtered.map((tool) => <CatalogCard size="large" key={tool.name} title={tool.name} description={tool.description} icon={<Database />} to={tool.name === "search_pdb" ? "/tools/pdb" : `/tools/run/${encodeURIComponent(tool.name)}`} />)}
       </div>
-       {!tools.isLoading && !products.isLoading && !tools.isError && !products.isError && !showViewer && filtered.length === 0 && filteredProducts.length === 0 && <p className="mono-muted">{t("catalog.noMatches")}</p>}
+       {!tools.isError && !products.isError && !showViewer && filtered.length === 0 && filteredProducts.length === 0 && <p className="mono-muted">{t("catalog.noMatches")}</p>}
+       </>}
     </>}
   </div></div>;
 }
 
-function ToolDetails({ title, description, onClose, api, userId, projects, tool, children }: {
+function ToolDetails({ title, description, loading = false, onClose, api, userId, projects, tool, children }: {
   title: string; description?: string; onClose: () => void; api: ResearchApi; userId: string;
-  projects: Project[]; tool?: string; children: React.ReactNode;
+  projects: Project[]; tool?: string; loading?: boolean; children: React.ReactNode;
 }) {
   const { t } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -88,14 +96,14 @@ function ToolDetails({ title, description, onClose, api, userId, projects, tool,
     else { focusPending.current = true; selectTab("run"); }
   };
   return <article className="mono-tool-detail" aria-label={title}>
-    <ToolPageHeader title={title} description={description} onBack={onClose} onEdit={edit} />
-    <div className="mono-tool-detail-body" ref={body}><Tabs.Root value={tab} onValueChange={selectTab}>
+    <ToolPageHeader title={title} description={description} loading={loading} onBack={onClose} onEdit={loading ? undefined : edit} />
+    <div className="mono-tool-detail-body" ref={body}>{loading ? <PageLoading label={t("tools.loading")} /> : <Tabs.Root value={tab} onValueChange={selectTab}>
       {tool && <Tabs.List className="catalog-detail-tabs" aria-label={title}>
         <Tabs.Trigger value="run">{t("tools.arguments")}</Tabs.Trigger><Tabs.Trigger value="history">{t("tools.history")}</Tabs.Trigger>
       </Tabs.List>}
       <Tabs.Content value="run" forceMount hidden={tab !== "run"}>{children}</Tabs.Content>
        {tool && <Tabs.Content value="history"><ToolRunHistory api={api} projects={projects} userId={userId} tool={tool} /></Tabs.Content>}
-    </Tabs.Root></div>
+    </Tabs.Root>}</div>
   </article>;
 }
 
@@ -114,7 +122,7 @@ export function ToolRunHistory({ api, projects, userId, tool }: { api: ResearchA
     } catch { setError(t("tools.saveFailed")); }
     finally { setSaving(null); }
   };
-  return <div className="mono-page-scroll"><div className="mono-page-content">{error && <p role="alert" className="mono-form-error">{error}</p>}{runs.isLoading && <div className="mono-loading-page" role="status">{t("tools.loadingRuns")}</div>}{runs.isError && <div className="mono-empty-panel"><h2>{t("tools.readFailed")}</h2><p>{t("tools.checkConnection")}</p></div>}{runs.data?.length ? <div className="mono-panel mono-run-list">{runs.data.map((run) => <div className="mono-run-item" key={run.id}><div><Database size={17} /><strong>{run.title}</strong><small>{new Date(run.created_at).toLocaleString()}</small></div><div className="mono-run-actions">{run.project_id ? <span className="mono-chip">{t("tools.saved", { name: projects.find((project) => project.id === run.project_id)?.name ?? t("project.title") })}</span> : <select aria-label={t("tools.saveRunLabel", { name: run.title })} value="" disabled={saving === run.id || projects.length === 0} onChange={(event) => void save(run.id, event.target.value)}><option value="">{t("tools.saveToProject")}</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select>}</div><details><summary>{t("tools.viewRawResult")}</summary><pre>{JSON.stringify(run.result, null, 2)}</pre></details></div>)}</div> : !runs.isLoading && !runs.isError && <div className="mono-empty-panel"><Clock3 size={24} /><h2>{t("tools.noRuns")}</h2><p>{t("tools.noRunsDescription")}</p></div>}</div></div>;
+  return <div className="mono-page-scroll"><div className="mono-page-content">{error && <p role="alert" className="mono-form-error">{error}</p>}{runs.isLoading && <PageLoading label={t("tools.loadingRuns")} />}{runs.isError && <div className="mono-empty-panel"><h2>{t("tools.readFailed")}</h2><p>{t("tools.checkConnection")}</p></div>}{runs.data?.length ? <div className="mono-panel mono-run-list">{runs.data.map((run) => <div className="mono-run-item" key={run.id}><div><Database size={17} /><strong>{run.title}</strong><small>{new Date(run.created_at).toLocaleString()}</small></div><div className="mono-run-actions">{run.project_id ? <span className="mono-chip">{t("tools.saved", { name: projects.find((project) => project.id === run.project_id)?.name ?? t("project.title") })}</span> : <select aria-label={t("tools.saveRunLabel", { name: run.title })} value="" disabled={saving === run.id || projects.length === 0} onChange={(event) => void save(run.id, event.target.value)}><option value="">{t("tools.saveToProject")}</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select>}</div><details><summary>{t("tools.viewRawResult")}</summary><pre>{JSON.stringify(run.result, null, 2)}</pre></details></div>)}</div> : !runs.isLoading && !runs.isError && <div className="mono-empty-panel"><Clock3 size={24} /><h2>{t("tools.noRuns")}</h2><p>{t("tools.noRunsDescription")}</p></div>}</div></div>;
 }
 
 export function PdbWorkspace({ api, userId }: { api: ResearchApi; userId: string }) {

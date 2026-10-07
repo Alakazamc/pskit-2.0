@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
@@ -9,6 +9,7 @@ import { ApiError } from "../../api/http";
 import { App } from "../../app/App";
 import { LanguageProvider } from "../../i18n/LanguageProvider";
 import { ToolProductPage } from "./ToolProductPage";
+import { ToolDirectory } from "../mono/ToolPages";
 
 vi.mock("../mono/MolstarCanvas", () => ({ default: () => <div data-testid="molstar" /> }));
 
@@ -75,6 +76,37 @@ function renderPage(api: ResearchApi, initial = "/tools/flex-design") {
 
 afterEach(() => {
   cleanup(); localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); window.history.replaceState(null, "", "/");
+});
+
+it("keeps the official cached title and description while a tool detail refresh is pending", async () => {
+  localStorage.setItem("research_language", "en");
+  let finish!: (value: PublishedToolProduct) => void;
+  const pending = new Promise<PublishedToolProduct>((resolve) => { finish = resolve; });
+  const api = apiFixture({ getMcpTools: vi.fn(async () => []), getToolProducts: vi.fn(async () => ({ items: [product], next_cursor: null })), getToolProduct: vi.fn(() => pending) });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(["tool-products", "alice"], { items: [product], next_cursor: null });
+  render(<QueryClientProvider client={client}><LanguageProvider><MemoryRouter initialEntries={["/tools/flex-design"]}>
+    <ToolDirectory api={api} userId="alice" projects={[]} productSlug="flex-design" theme="light" />
+  </MemoryRouter></LanguageProvider></QueryClientProvider>);
+  expect(screen.getByRole("heading", { name: "Flexible Design", level: 1 })).toBeInTheDocument();
+  expect(screen.getByText("A published scientific workflow")).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "flex-design" })).not.toBeInTheDocument();
+  await act(async () => { finish(product); });
+  expect(screen.getAllByRole("heading", { name: "Flexible Design", level: 1 })).toHaveLength(1);
+});
+
+it("shows a stable header placeholder and one loader on a cold tool link, never the route slug", async () => {
+  localStorage.setItem("research_language", "en");
+  let finish!: (value: PublishedToolProduct) => void;
+  const pending = new Promise<PublishedToolProduct>((resolve) => { finish = resolve; });
+  renderPage(apiFixture({ getToolProduct: vi.fn(() => pending) }));
+  expect(screen.getByRole("button", { name: "Back to tools" })).toBeEnabled();
+  expect(screen.queryByRole("heading", { name: "flex-design" })).not.toBeInTheDocument();
+  expect(document.querySelector(".mono-tool-title-placeholder")).toBeInTheDocument();
+  expect(document.querySelectorAll(".page-loading-spinner")).toHaveLength(1);
+  await act(async () => { finish(product); });
+  expect(await screen.findByRole("heading", { name: "Flexible Design", level: 1 })).toBeInTheDocument();
+  expect(document.querySelector(".mono-tool-title-placeholder")).not.toBeInTheDocument();
 });
 
 it("adds a published product to the directory and opens its full Tools route without a product branch", async () => {
