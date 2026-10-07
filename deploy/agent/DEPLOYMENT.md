@@ -1,6 +1,6 @@
 # 新版 PSKit Agent 部署与运行
 
-日期：2026-10-04。适用范围：阿里云生产、阿里云 Staging、A6000 AF3。
+日期：2026-10-07。适用范围：阿里云生产、阿里云 Staging、A6000 通用 MCP/AF3 接收器。
 
 本文借鉴 [ASD-STE100 官方 FAQ](https://www.asd-ste100.org/STE_faq.html)的清晰写作原则。每组命令先说明执行主机和条件，再说明预期结果。中文文档不宣称符合英语标准。系统职责见[架构文档](../../docs/AGENT_ARCHITECTURE.md)。
 
@@ -13,7 +13,9 @@
 | 阿里云宿主机 | Nginx、React `dist` | 普通站点 `https://agent.bioailab.net`；管理入口仅经 WireGuard 访问同一域名的 `/admin/models` |
 | 阿里云 Docker | Python/Pi、Supabase、PostgreSQL 17、LiteLLM、AF3 回调代理 | Python `127.0.0.1:18088`；回调代理 `127.0.0.1:18185` |
 | 阿里云 WireGuard | AF3 私网 Nginx | `10.9.8.1:18184`，只允许 A6000 `10.9.8.2` |
-| A6000 | 一个 AF3 接收器、一个计算容器 | 接收器主动连接阿里云 |
+| 阿里云 WireGuard | 通用计算私网 Caddy | `10.9.8.1:18186`，只允许 A6000 `10.9.8.2` |
+| A6000 | 一个通用 MCP/AF3 接收器、一个独立 AF3 计算容器 | 接收器主动连接阿里云；CORAL 调用 4090 MCP |
+| 4090 | CORAL MCP 模型服务 | 由已审核的服务绑定选择，不向浏览器暴露服务端凭据 |
 | 阿里云 Staging | 独立数据库、模型替身、AF3 替身、前端 `dist` | `10.9.8.1:18132`，仅私网 |
 
 生产前端由 Nginx 提供静态文件。生产 Agent 没有前端容器。`stack.sh` 是统一操作入口；它调用 Supabase、LiteLLM 和 Agent 三个 Compose 项目。三个项目共享一台 PostgreSQL 17 容器，但使用不同的逻辑库或 schema 与账号。
@@ -88,33 +90,54 @@ systemctl reload nginx
 
 管理员页面 `/admin` 和管理 API `/api/v1/admin` 只允许源地址为 WireGuard `10.9.8.0/24` 的连接。修改现有生产配置时，在阿里云 root 会话运行 `bash deploy/agent/scripts/install_private_admin_ingress.sh`；脚本先备份原配置，验证 Nginx 并探测公网拒绝、私网可达，失败则恢复原配置。浏览器需先连接 WireGuard，并在浏览器所在机器将 `agent.bioailab.net` 临时解析到 `10.9.8.1`，这样 HTTPS 证书与域名仍匹配。断开 WireGuard 后移除该临时解析。管理角色还需按 [管理台手册](../../new_backend/ADMIN.md)授予已验证账号；接入私网本身不会授予权限。
 
-## 4. A6000 AF3
+## 4. A6000 通用 MCP 与 AF3
 
-执行主机：阿里云 root 会话。执行条件：WireGuard 已提供 `10.9.8.1`，A6000 的地址是 `10.9.8.2`；本机回调代理已健康。在部署仓库根目录安装私网 Nginx 配置：
+A6000 使用一个 `pskit-mcp-receiver-a6000` 容器、一个 Python 进程接收 CORAL 和 AF3。CORAL 调用 4090 的已审核 MCP 服务；AF3 的 `af3.submit` / `af3.status` 在同一接收器进程内仅监听 `127.0.0.1:18187/mcp`。独立的 AF3 模型计算容器读取持久 spool；接收器重启不停止正在运行的计算。
 
-```bash
-install -m 0644 deploy/agent/host-nginx-af3.conf \
-  /etc/nginx/conf.d/agent-af3-private.conf
-nginx -t
-systemctl reload nginx
-```
+### 阿里云私网控制入口
 
-该配置仅在 `10.9.8.1:18184` 监听，并只接受 `10.9.8.2`。
+既有 AF3 兼容入口 `10.9.8.1:18184` 保留历史任务、GPU 结算和 Pi 唤醒。通用计算入口 `10.9.8.1:18186` 由固定版本 Caddy 提供，只允许源地址 `10.9.8.2` 的 claim、heartbeat、result。后端仍验证服务密钥和执行租约。该入口没有公网或通用管理 API 路由。
 
-执行主机：A6000。执行条件：接收器的环境文件权限为 `0600`；回调密钥与阿里云一致；持久 spool 目录可写。确保**只有一个**生产接收器在领任务。接收器声明见 [`compose.a6000-receiver.yaml`](compose.a6000-receiver.yaml)。它的镜像、挂载路径和 UID 与这台 A6000 的当前环境绑定；部署到别的 GPU 主机前要核对这些值。
+AF3 私网代理还需放行带密钥的 `GET /internal/compute/af3/jobs/:jobId`，用于确认终态与晚到用量结算；不能将全部 internal API 开放。云端 Compose 将 `AGENT_AF3_PROXY_SCRIPT` 指向本次已校验的不可变代理源码，默认使用仓库脚本，只读挂载到代理容器。修改白名单时只更新代理；无需重启后端或模型容器。
 
-在 A6000 部署仓库根目录运行，先把环境文件路径换成该机器的实际路径：
+执行主机：阿里云。后端及 `pskit-agent-cloud_app` 网络就绪后，在部署仓库根目录运行：
 
 ```bash
-AGENT_AF3_API_URL=http://10.9.8.1:18184 \
-AGENT_AF3_RECEIVER_ENV_FILE=/path/to/receiver.env \
-  docker compose -f deploy/agent/compose.a6000-receiver.yaml \
-  --profile cutover up -d af3-receiver
-docker compose -f deploy/agent/compose.a6000-receiver.yaml \
-  --profile cutover ps
+docker compose -f deploy/agent/compose.compute-ingress.yaml up -d --wait
+docker compose -f deploy/agent/compose.compute-ingress.yaml ps
 ```
 
-接收器主动向阿里云领 Job，再在 A6000 计算。它通过同一私网入口回报进度、上传产物和提交完成状态。不要向公网开放接收器或 AF3 计算容器端口。若接收器重启，保留 journal 与 spool；先核对服务端 Job 状态，再处理未确认结果。
+此独立项目加入既有应用网络，不重建数据库或 Agent。不要修改宿主 Nginx 来重复开放 internal 路由。
+
+### A6000 接收器
+
+声明见 [`compose.a6000-mcp-receiver.yaml`](compose.a6000-mcp-receiver.yaml)。先核对固定运行镜像的 MCP 依赖，制作已提交源码的不可变快照，并在隔离容器执行真实 MCP 协议 smoke。私有接收器环境文件必须为 `0600`，包含 `PSKIT_COMPUTE_SERVICE_KEY`、既有 `RESEARCH_AGENT_COMPUTE_CALLBACK_KEY`；凭据留在服务端。其他 provider credential ref 按服务配置提供。
+
+Compose 环境文件声明以下非秘密路径和固定镜像：
+
+```ini
+AGENT_MCP_RECEIVER_IMAGE=sha256:<verified-image-id>
+AGENT_MCP_RECEIVER_RUNTIME=/data/jhli/pskit-mcp-receiver-20261007/runtime-<commit>
+AGENT_MCP_RECEIVER_ENV_FILE=/data/jhli/pskit-mcp-receiver-20261007/receiver.env
+AGENT_MCP_RECEIVER_JOURNAL=/data/jhli/pskit-mcp-receiver-20261007/journal
+AGENT_MCP_RECEIVER_UID=1006
+AGENT_MCP_RECEIVER_GID=1006
+AGENT_AF3_RECEIVER_SPOOL=/data/jhli/pskit-af3-receiver-test-20261002/spool
+```
+
+UID/GID 必须匹配既有 AF3 spool。通用和 AF3 journal 分别使用 `coral.sqlite3`、`af3.sqlite3`；任何未确认记录都保留。切换前核对服务端活动任务及旧 journal，停止旧 AF3 接收器，保留模型计算容器，再运行：
+
+```bash
+docker compose --env-file /path/to/compose.env \
+  -f deploy/agent/compose.a6000-mcp-receiver.yaml up -d --wait
+docker logs --tail 30 pskit-mcp-receiver-a6000
+```
+
+必须确认两个循环均正常工作，且只有一个接收器领取生产 AF3。旧 [`compose.a6000-receiver.yaml`](compose.a6000-receiver.yaml) 只供经过 journal/owned 核对后的恢复使用，不能与通用接收器同时领任务。
+
+AF3 计算完成后，结果与产物先进入 outbox；收到且验证服务端提交回执后才清理 journal，再删除已确认的 spool。用户取消或任务超时后，已开始的计算继续报告晚到用量，确认 `reconciled` 后才清理，不重新打开任务。CORAL 的不确定结果保留为 `unknown`，只暂停该服务，AF3 循环继续运行。
+
+AF3 旧计算器只有取整 GPU 分钟，映射为 `gpu_device_ms` 时标为 `estimated`；缺失的 CPU/wall 耗时保持空值。不能把它当作 CUDA kernel 的实测耗时。
 
 ## 5. Staging
 
@@ -155,7 +178,7 @@ curl --noproxy '*' --resolve agent.bioailab.net:443:10.9.8.1 \
   https://agent.bioailab.net/admin/models
 ```
 
-预期结果：后端就绪；未登录的 `usage` 返回 `401`；公网 `internal` 返回 `404`；登录页返回 `200`；公网管理页面返回 `403`，WireGuard 管理页面返回 `200`。管理 API 公网返回 `403`，WireGuard 未登录返回 `401`。再用授权账号核对登录、项目、对话、SSE、上传、模型选择和 Token 额度。真实 AF3 要另外检查 Job 领取、进度、产物、GPU 结算与 Pi 自动唤醒。当前生产配置把会员 GPU 日额度设为 `0`；只有明确给测试账号配置额度后，真实 AF3 验收才有意义。不要把只读回调请求当成真实计算成功。
+预期结果：后端就绪；未登录的 `usage` 返回 `401`；公网 `internal` 返回 `404`；登录页返回 `200`；公网管理页面返回 `403`，WireGuard 管理页面返回 `200`。管理 API 公网返回 `403`，WireGuard 未登录返回 `401`。再用授权账号核对登录、项目、对话、SSE、上传、模型选择和 Token 额度。工具发布还需断言已批准的 slug（例如 `coral`）出现在 `/api/v1/tool-products`，打开配置 UI 并提交受限任务；目录 200 或应用代码存在不代表工具已开放。真实 AF3 要另外检查 Job 领取、进度、产物、GPU 结算与 Pi 自动唤醒。当前生产配置把会员 GPU 日额度设为 `0`；只有明确给测试账号配置额度后，真实 AF3 验收才有意义。不要把只读回调请求当成真实计算成功。
 
 ## 7. 停止和恢复
 

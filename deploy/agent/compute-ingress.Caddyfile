@@ -1,0 +1,24 @@
+{
+	admin off
+	auto_https off
+	persist_config off
+	storage file_system /tmp/caddy
+}
+
+:8080 {
+	@a6000 remote_ip 10.9.8.2/32
+	handle @a6000 {
+		@callbacks {
+			method POST
+			path_regexp callbacks ^/internal/compute/jobs/(claim|[A-Za-z0-9-]+/(heartbeat|result))$
+		}
+		handle @callbacks {
+			reverse_proxy backend:8000
+		}
+		handle /health/ready {
+			respond "ready" 200
+		}
+		respond 404
+	}
+	respond 403
+}

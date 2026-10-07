@@ -1,0 +1,38 @@
+# The runtime is an immutable source snapshot with its recorded SHA256.
+# The cached fixed image supplies the MCP SDK; no model code is imported here.
+name: pskit-agent-a6000-mcp
+services:
+  mcp-receiver:
+    image: ${AGENT_MCP_RECEIVER_IMAGE:?set the verified fixed receiver image}
+    container_name: pskit-mcp-receiver-a6000
+    network_mode: host
+    user: "${AGENT_MCP_RECEIVER_UID:?set the existing AF3 spool owner UID}:${AGENT_MCP_RECEIVER_GID:?set the existing AF3 spool owner GID}"
+    entrypoint: [python, -u]
+    command:
+      - /app/scripts/mcp_compute_receiver.py
+      - --backend-url
+      - http://10.9.8.1:18186
+      - --service-id
+      - coral-mcp
+      - --worker-id
+      - a6000-mcp-coral-1
+      - --journal
+      - /var/lib/pskit-mcp/coral.sqlite3
+      - --af3-backend-url
+      - http://10.9.8.1:18184
+      - --af3-worker-id
+      - a6000-af3-cloud-1
+      - --af3-spool-dir
+      - /var/lib/af3-receiver/jobs
+    env_file:
+      - ${AGENT_MCP_RECEIVER_ENV_FILE:?set the private receiver env path}
+    volumes:
+      - ${AGENT_MCP_RECEIVER_RUNTIME:?set the immutable runtime directory}:/app:ro
+      - ${AGENT_MCP_RECEIVER_JOURNAL:?set the persistent journal directory}:/var/lib/pskit-mcp
+      - ${AGENT_AF3_RECEIVER_SPOOL:?set the existing persistent AF3 spool directory}:/var/lib/af3-receiver
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped

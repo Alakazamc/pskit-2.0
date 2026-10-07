@@ -1,0 +1,27 @@
+# Standalone private ingress joining the existing Agent application network.
+# No public listener; the backend still authenticates each service and lease.
+name: pskit-agent-compute-ingress
+services:
+  compute-ingress:
+    image: caddy:2.10.2-alpine
+    command: [caddy, run, --config, /etc/caddy/Caddyfile, --adapter, caddyfile]
+    user: "10001:10001"
+    ports:
+      - "10.9.8.1:18186:8080"
+    volumes:
+      - ./compute-ingress.Caddyfile:/etc/caddy/Caddyfile:ro
+    networks: [app, ingress]
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    # The pinned Caddy binary carries this file capability even on port 8080.
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+networks:
+  ingress:
+    internal: false
+  app:
+    external: true
+    name: ${AGENT_COMPUTE_APP_NETWORK:-pskit-agent-cloud_app}

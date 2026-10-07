@@ -1,3 +1,5 @@
+# Legacy rollback only. Production uses compose.a6000-mcp-receiver.yaml.
+# Never run this receiver alongside the unified receiver for the same worker.
 # Start only after stopping pskit-af3-receiver-cloud-20261002 and checking
 # its journal/owned jobs. The existing compute container keeps running.
 name: pskit-agent-a6000-receiver

@@ -41,6 +41,8 @@ Molstar 的原 4.88 MB 单文件已拆成 18 个按需加载文件，最大 436,
 
 ## 正式服务开放范围
 
+后续开放记录见 [CORAL 与统一 A6000 接收器发布](2026-10-07-coral-unified-mcp-receiver.md)。以下描述保留本次应用代码发布完成时的状态。
+
 管理入口为 `https://agent.bioailab.net/admin/tool-products`，仅 WireGuard 可访问。生产尚无已审核发布的 Tool Product；CORAL/MCP 生产接收器 profile 保持关闭，原 Agent MCP 执行模式也未改变。
 
 本次是应用代码发布。正式开放 CORAL 或其他 MCP 服务仍需按管理台完成生产探测、发现、验收及管理员批准，并配置对应生产接收器、服务密钥与允许的网络区域；不得用 Staging 的审批记录或私有配置替代这些步骤。
