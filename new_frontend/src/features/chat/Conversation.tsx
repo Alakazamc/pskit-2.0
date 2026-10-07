@@ -9,6 +9,9 @@ import { useLanguage } from "../../i18n/LanguageProvider";
 import { localizedRunError } from "./runErrors";
 import { RunControls } from "../mono/RunControls";
 import { useChatAutoscroll } from "./useChatAutoscroll";
+import { MessageImageAttachment } from "./MessageImageAttachment";
+
+type AttachmentImages = { userId: string; loadImage: (id: string) => Promise<Blob> };
 
 function AssistantWaitingIndicator() {
   const { t } = useLanguage();
@@ -17,7 +20,7 @@ function AssistantWaitingIndicator() {
   </div>;
 }
 
-function UserMessage({ message }: { message: Message }) {
+function UserMessage({ message, attachmentImages }: { message: Message; attachmentImages?: AttachmentImages }) {
   const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
   const [canCollapse, setCanCollapse] = useState(false);
@@ -27,7 +30,8 @@ function UserMessage({ message }: { message: Message }) {
   const pendingAnchor = useRef<{ scroll: HTMLElement; element: HTMLElement; top: number } | null>(null);
   const textId = useId();
   const textParts = message.parts.filter((part) => part.type === "text");
-  const otherParts = message.parts.filter((part) => part.type !== "text");
+  const imageParts = message.parts.filter((part) => part.type === "file" && /\.(png|jpe?g|gif|webp)$/i.test(part.name));
+  const otherParts = message.parts.filter((part) => part.type !== "text" && !imageParts.includes(part));
 
   useLayoutEffect(() => {
     if (expanded || !textParts.length) return;
@@ -57,18 +61,25 @@ function UserMessage({ message }: { message: Message }) {
   };
 
   return <article className="message-row user" ref={rowRef}>
-    <div className="message-body">
+    <div className="user-message-content">
+      {imageParts.length > 0 && <div className="user-message-images" role="region" aria-label={t("composer.attachments")} tabIndex={0}>
+        {imageParts.map((part) => part.type === "file" && (attachmentImages
+          ? <MessageImageAttachment key={part.id} name={part.name} fileId={part.id} {...attachmentImages} />
+          : <div key={part.id} className="user-message-image-fallback">{t("conversation.imageUnavailable")} · {part.name}</div>))}
+      </div>}
+      {(textParts.length > 0 || otherParts.length > 0) && <div className="message-body">
       {textParts.length > 0 && <div id={textId} ref={textRef} className={`user-message-text${expanded ? "" : " is-collapsed"}`}><MessageParts parts={textParts} /></div>}
       <MessageParts parts={otherParts} />
       {canCollapse && <button ref={toggleRef} className="user-message-toggle" type="button" aria-expanded={expanded} aria-controls={textId} onClick={toggle}>
         {expanded ? t("conversation.collapseMessage") : t("conversation.expandMessage")}
         {expanded ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
       </button>}
+      </div>}
     </div>
   </article>;
 }
 
-export function Conversation({ messages, run, runId, awaitingEvents = false, onCancel, onApproval }: { messages: Message[]; run: RunView; runId?: string | null; awaitingEvents?: boolean; onCancel?: () => Promise<void>; onApproval?: (approvalId: string, decision: "approved" | "rejected") => Promise<void> }) {
+export function Conversation({ messages, run, runId, awaitingEvents = false, onCancel, onApproval, attachmentImages }: { messages: Message[]; run: RunView; runId?: string | null; awaitingEvents?: boolean; onCancel?: () => Promise<void>; onApproval?: (approvalId: string, decision: "approved" | "rejected") => Promise<void>; attachmentImages?: AttachmentImages }) {
   const { t } = useLanguage();
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -100,7 +111,7 @@ export function Conversation({ messages, run, runId, awaitingEvents = false, onC
           <span>{step.title}</span>
         </li>)}</ol>
       </section>}
-      {messages.map((message, index) => message.role === "user" ? <UserMessage message={message} key={message.id} />
+      {messages.map((message, index) => message.role === "user" ? <UserMessage message={message} attachmentImages={attachmentImages} key={message.id} />
         : message.role === "assistant" && index > lastUserIndex && showRunReply && !runFinished ? null
         : <article className={`message-row ${message.role}`} key={message.id}>
         <div className="message-body">

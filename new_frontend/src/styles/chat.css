@@ -79,6 +79,15 @@
 .message-row.user {
   justify-content:flex-end
 }
+.user-message-content {max-width:82%;min-width:0;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.user-message-content .message-body {max-width:100%;box-sizing:border-box}
+.mono-app .message-row.user .user-message-content .message-body {max-width:100%}
+.user-message-images {max-width:100%;max-height:320px;overflow:auto;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:flex-start;gap:8px;border-radius:12px}
+.user-message-image {margin:0;max-width:min(240px,100%);min-width:0}
+.user-message-image img {display:block;max-width:100%;max-height:240px;object-fit:contain;border-radius:12px}
+.user-message-image-fallback {width:160px;max-width:100%;min-height:120px;box-sizing:border-box;padding:12px;border-radius:12px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;text-align:center;background:var(--mono-surface,var(--surface));color:var(--mono-muted,var(--secondary));overflow-wrap:anywhere;font-size:12px}
+.user-message-image-fallback small {max-width:100%}
+.user-message-image-fallback button {max-width:100%;border:1px solid var(--mono-border,var(--border));border-radius:6px;background:transparent;color:var(--mono-text,var(--text));padding:5px 8px;cursor:pointer;font:inherit}
 .assistant-avatar {
   width:27px;
   height:27px;
