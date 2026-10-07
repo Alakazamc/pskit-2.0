@@ -31,7 +31,12 @@ class Af3McpExecutor(DynamicMcpExecutor):
         self.spool = spool
 
     async def recover(self, grant):
-        if grant.job.service_id != "af3-mcp" or grant.job.arguments.get("task_id") != grant.job.id:
+        injected = (grant.execution_binding and grant.execution_binding.submit_job_id_argument == "task_id"
+                    and grant.execution_binding.submit_tool == "af3.submit"
+                    and grant.execution_binding.status_tool == "af3.status")
+        if grant.job.service_id != "af3-mcp" or (
+            not injected and grant.job.arguments.get("task_id") != grant.job.id
+        ):
             raise ValueError("AF3_RECOVERY_IDENTITY_MISMATCH")
         # The local AF3 MCP service locks and compares input.json before publishing it.
         return await self.execute(grant)
@@ -46,13 +51,14 @@ class Af3McpExecutor(DynamicMcpExecutor):
 
 class Af3ControlClient:
     def __init__(self, client, *, base_url, key, spool, endpoint_url,
-                 gpu_memory_mb=49140, execution_seconds=86400):
+                 gpu_memory_mb=49140, execution_seconds=86400, mcp_credential_ref=None):
         self.client = client
         self.base_url = base_url.rstrip("/")
         self.headers = {"X-Compute-Key": key}
         self.spool, self.endpoint_url = spool, endpoint_url
         self.gpu_memory_mb, self.execution_seconds = gpu_memory_mb, execution_seconds
         self.acknowledged = set()
+        self.mcp_credential_ref = mcp_credential_ref
 
     async def request(self, method, path, **kwargs):
         headers = {**self.headers, **kwargs.pop("headers", {})}
@@ -90,6 +96,7 @@ class Af3ControlClient:
             lease_expires_at=now + timedelta(seconds=60),
             execution_binding=ExecutionBindingSnapshot(
                 adapter="job_mcp", endpoint_url=self.endpoint_url,
+                credential_ref=self.mcp_credential_ref,
                 submit_tool="af3.submit", status_tool="af3.status",
                 remote_output_schema={"type": "object"}, result_mapping={"pointer": "/result"},
             ),

@@ -1,0 +1,222 @@
+product_id: product-af3-structure-prediction
+slug: af3
+revision: 1
+owner_user_id: system
+title: &id001
+  en: AlphaFold 3
+  zh-CN: AlphaFold 3
+description: &id002
+  en: Predict protein, DNA and RNA structures on the A6000 service.
+  zh-CN: 在 A6000 计算服务上预测蛋白质、DNA 和 RNA 结构。
+ui_schema:
+  schema_version: pskit.tool-ui.v1
+  product:
+    slug: af3
+    title: *id001
+    description: *id002
+  page:
+    layout: split-workspace
+    input_width: 5
+    result_width: 7
+  sections:
+  - id: af3-inputs
+    title:
+      en: Fold input
+      zh-CN: 折叠输入
+    fields:
+    - id: af3-fold-input
+      component: json-input
+      label:
+        en: AlphaFold 3 JSON
+        zh-CN: AlphaFold 3 JSON
+      input_pointer: /form/fold_input
+      required: true
+      default:
+        name: af3-prediction
+        modelSeeds:
+        - 1
+        sequences:
+        - protein:
+            id: A
+            sequence: ''
+            unpairedMsa: ''
+            pairedMsa: ''
+            templates: []
+        dialect: alphafold3
+        version: 1
+      help:
+        en: Fill in your sequences or paste an AlphaFold 3 input JSON. GPU quota is
+          required.
+        zh-CN: 填写自己的序列，或粘贴 AlphaFold 3 输入 JSON。运行需要 GPU 额度。
+  actions:
+  - id: run-af3
+    label:
+      en: Run AlphaFold 3
+      zh-CN: 运行 AlphaFold 3
+    target:
+      action_id: af3-predict
+  result_views:
+  - id: af3-progress
+    component: stage-flow
+    source: /run/status
+    title:
+      en: Progress
+      zh-CN: 运行进度
+  - id: af3-summary
+    component: metric-grid
+    source: /run/result
+    title:
+      en: Result
+      zh-CN: 结果
+  - id: af3-artifacts
+    component: artifact-list
+    source: /run/artifacts
+    title:
+      en: Outputs
+      zh-CN: 产出文件
+    preview_limit: 128
+  handoffs:
+  - id: analyze-structure
+    label:
+      en: Analyze with Agent
+      zh-CN: 交给 Agent 分析
+    summary_source: /run/result
+    artifact_sources:
+    - /run/artifacts
+bindings:
+- binding_id: binding-af3-predict
+  product_action_id: af3-predict
+  service_id: af3-mcp
+  service_revision: 1
+  capability_id: af3.predict
+  capability_version: 1.0.0
+  adapter: job_mcp
+  submit_tool: af3.submit
+  status_tool: af3.status
+  artifact_tool: pskit.artifacts.read
+  submit_job_id_argument: task_id
+  remote_output_schema:
+    type: object
+    properties:
+      status:
+        enum:
+        - pending
+        - completed
+        - failed
+    required:
+    - status
+    additionalProperties: true
+  result_schema:
+    type: object
+    properties:
+      actual_gpu_minutes:
+        type: integer
+        minimum: 0
+      simulation:
+        type: boolean
+    required:
+    - actual_gpu_minutes
+    - simulation
+    additionalProperties: false
+  result_mapping:
+    kind: json_pointer
+    pointer: /result
+  required_usage:
+  - gpu_device_ms
+  - gpu_count
+  accepted_sources:
+  - estimated
+  - measured
+  - service_reported
+  gpu_count: 1
+  max_budget:
+    gpu_device_ms: 1200000
+    cpu_core_ms: 0
+  concurrency: 1
+  max_execution_seconds: 21600
+  cancellation: none
+  limit_mode: soft
+  exclusive_process: false
+actions:
+- id: af3-predict
+  label:
+    en: Predict structure
+    zh-CN: 预测结构
+  kind: capability
+  binding_ids:
+  - binding-af3-predict
+  input_schema:
+    type: object
+    properties:
+      fold_input:
+        additionalProperties: false
+        properties:
+          name:
+            maxLength: 120
+            minLength: 1
+            title: Name
+            type: string
+          modelSeeds:
+            items:
+              type: integer
+            maxItems: 4
+            minItems: 1
+            title: Modelseeds
+            type: array
+          sequences:
+            items:
+              additionalProperties: true
+              type: object
+            maxItems: 32
+            minItems: 1
+            title: Sequences
+            type: array
+          dialect:
+            const: alphafold3
+            title: Dialect
+            type: string
+          version:
+            enum:
+            - 1
+            - 2
+            - 3
+            - 4
+            title: Version
+            type: integer
+          bondedAtomPairs:
+            anyOf:
+            - items: {}
+              type: array
+            - type: 'null'
+            default: null
+            title: Bondedatompairs
+          userCCD:
+            anyOf:
+            - type: string
+            - type: 'null'
+            default: null
+            title: Userccd
+        required:
+        - name
+        - modelSeeds
+        - sequences
+        - dialect
+        - version
+        title: Af3FoldInput
+        type: object
+    required:
+    - fold_input
+    additionalProperties: false
+visibility:
+  audience: members
+acceptance_suite_id: suite-af3-structure
+acceptance_suite_revision: 1
+handoffs:
+- id: analyze-structure
+  label:
+    en: Analyze structure
+    zh-CN: 分析结构
+  prompt_template_id: tool-result-analysis
+  summary_pointer: /run/result
+  artifact_pointers:
+  - /run/artifacts

@@ -24,6 +24,10 @@ services:
       - a6000-af3-cloud-1
       - --af3-spool-dir
       - /var/lib/af3-receiver/jobs
+      - --af3-mcp-host
+      - 10.9.8.2
+      - --af3-gpu-uuid
+      - ${AGENT_AF3_GPU_UUID:?set the actual native AF3 GPU UUID}
     env_file:
       - ${AGENT_MCP_RECEIVER_ENV_FILE:?set the private receiver env path}
     volumes:

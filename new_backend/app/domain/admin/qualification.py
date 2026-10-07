@@ -33,6 +33,7 @@ from app.contracts.tool_products import (
 )
 from app.domain.compute.common import payload_hash
 from app.domain.tool_products.ui_schema import validate_tool_ui
+from pskit_compute.artifacts import read_artifact_chunks
 
 
 def _pointer(document: Any, pointer: str) -> Any:
@@ -186,19 +187,43 @@ class DirectMcpQualificationExecutor:
             return copy.deepcopy(cached)
         endpoint, transport_name, credential = self.binding_resolver(binding)
         transport = self.transport_factory(transport_name)
+        invocation = dict(arguments)
+        if binding.submit_job_id_argument:
+            if binding.submit_job_id_argument in invocation:
+                raise ValueError("MCP_JOB_ID_OVERRIDE")
+            invocation[binding.submit_job_id_argument] = str(uuid.uuid5(uuid.NAMESPACE_OID, idempotency_key))
         try:
-            async with asyncio.timeout(self.timeout_seconds):
+            wait_seconds = (min(binding.max_execution_seconds, 1800)
+                            if binding.adapter == "job_mcp" else self.timeout_seconds)
+            async with asyncio.timeout(wait_seconds):
                 protocol = await transport.initialize(endpoint, credential)
                 if protocol.get("final_url", endpoint.uri) != endpoint.uri:
                     raise ValueError("REDIRECT_FORBIDDEN")
-                response = await transport.call_tool(binding.submit_tool, arguments)
+                response = await transport.call_tool(binding.submit_tool, invocation)
+                report = self._report(response)
+                external_id = report.get("job_id")
+                while report.get("status") == "pending":
+                    if binding.adapter != "job_mcp" or not binding.status_tool or not external_id:
+                        raise ValueError("MCP_STATUS_TOOL_REQUIRED")
+                    await asyncio.sleep(min(1, self.timeout_seconds / 10))
+                    report = self._report(await transport.call_tool(
+                        binding.status_tool, {"job_id": external_id}
+                    ))
+                    if report.get("job_id") != external_id:
+                        raise ValueError("EXTERNAL_JOB_CONFLICT")
+                if binding.artifact_tool and report.get("status") == "completed":
+                    terminal = Completed.model_validate(report)
+                    for artifact in terminal.artifacts:
+                        if artifact.available:
+                            async def read_chunk(arguments):
+                                return self._report(await transport.call_tool(binding.artifact_tool, arguments))
+                            await read_artifact_chunks(read_chunk, artifact, external_id or "qualification")
         except TimeoutError as exc:
             raise ValueError("QUALIFICATION_EXECUTION_TIMEOUT") from exc
         finally:
             close = getattr(transport, "close", None)
             if close is not None:
                 await close()
-        report = self._report(response)
         evidence = {
             "report": report,
             "events": [],
@@ -350,6 +375,13 @@ class QualificationEvaluator:
                     f"qualification:{evaluation_id}:{draft.product_id}:"
                     f"{draft.revision}:{case.case_id}"
                 )
+                if binding.submit_job_id_argument:
+                    # Retrying an approved idempotent long job observes the same
+                    # durable submission instead of scheduling another GPU run.
+                    key = "qualification:" + payload_hash({
+                        "draft": draft.model_dump(mode="json", by_alias=True),
+                        "suite": suite.model_dump(mode="json"), "case": case.case_id,
+                    })
                 execution = await self.executor.execute(binding, case.arguments, key)
                 if case.check_idempotency:
                     repeated = await self.executor.execute(binding, case.arguments, key)
@@ -369,6 +401,7 @@ class QualificationEvaluator:
 
             usage_complete = bool(
                 report
+                and report.usage.source in binding.accepted_sources
                 and all(getattr(report.usage, metric) is not None for metric in binding.required_usage)
             )
             artifacts_valid = bool(

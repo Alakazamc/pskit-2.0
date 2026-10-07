@@ -105,15 +105,21 @@ async def receive(receiver, poll_seconds, *, cleanup=None, isolate_failures=Fals
 
 
 @asynccontextmanager
-async def local_af3_mcp(spool, port):
+async def local_af3_mcp(spool, port, *, host="127.0.0.1", token=""):
     """Host the AF3 protocol in this receiver process, bound only to loopback."""
     import uvicorn
 
+    from pskit_compute.af3_entry import McpBearerAuth
     from pskit_compute.af3_spool import create_mcp
 
+    app = create_mcp(spool, host=host, port=port).streamable_http_app()
+    if token:
+        app = McpBearerAuth(app, token)
+    elif host != "127.0.0.1":
+        raise ValueError("AF3_MCP_TOKEN_REQUIRED")
+
     server = uvicorn.Server(uvicorn.Config(
-        create_mcp(spool, port=port).streamable_http_app(),
-        host="127.0.0.1", port=port, log_level="warning", access_log=False,
+        app, host=host, port=port, log_level="warning", access_log=False,
     ))
     task = asyncio.create_task(server.serve())
     try:
@@ -158,6 +164,7 @@ async def run(args) -> None:
                 await receive(receiver, args.poll_seconds)
                 return
             from pskit_compute.af3_compat import Af3ControlClient, Af3McpExecutor
+            from pskit_compute.af3_entry import Af3ReceiverLane
             from pskit_compute.af3_spool import Af3Spool
 
             spool = Af3Spool(args.af3_spool_dir)
@@ -166,17 +173,42 @@ async def run(args) -> None:
             af3_control = Af3ControlClient(
                 client, base_url=args.af3_backend_url,
                 key=os.environ["RESEARCH_AGENT_COMPUTE_CALLBACK_KEY"], spool=spool,
-                endpoint_url=f"http://127.0.0.1:{args.af3_mcp_port}/mcp",
+                endpoint_url=f"http://{args.af3_mcp_host}:{args.af3_mcp_port}/mcp",
                 gpu_memory_mb=args.af3_gpu_memory_mb,
+                mcp_credential_ref="af3-mcp-key" if os.environ.get("PSKIT_AF3_MCP_TOKEN") else None,
             )
             af3_receiver = Receiver(
                 Af3McpExecutor(endpoint, credential, spool=spool), af3_control, af3_journal,
                 ComputeClaimRequest(service_id="af3-mcp", worker_id=args.af3_worker_id),
             )
-            async with local_af3_mcp(spool, args.af3_mcp_port), asyncio.TaskGroup() as group:
+            af3_lane = af3_receiver
+            cleanup = af3_control.cleanup
+            if generic_key := os.environ.get("PSKIT_AF3_COMPUTE_SERVICE_KEY"):
+                if not args.af3_gpu_uuid:
+                    raise ValueError("AF3_GPU_UUID_REQUIRED")
+                product_journal = Journal(str(Path(args.journal).with_name("af3-product.sqlite3")))
+                stack.callback(product_journal.close)
+                product_control = ControlClient(client, base_url=args.backend_url,
+                    service_id="af3-mcp", service_key=generic_key)
+                product_receiver = Receiver(Af3McpExecutor(endpoint, credential, spool=spool),
+                    product_control, product_journal,
+                    ComputeClaimRequest(service_id="af3-mcp", worker_id="a6000-af3-product-1",
+                                        resources=WorkerResources(gpu_uuids=args.af3_gpu_uuid)))
+
+                def product_cleanup(job_id):
+                    import shutil
+                    directory = spool.directory(job_id)
+                    if directory.exists():
+                        shutil.rmtree(directory)
+
+                af3_lane = Af3ReceiverLane(product_receiver, af3_receiver,
+                    generic_cleanup=product_cleanup, compatibility_cleanup=cleanup)
+                cleanup = None
+            async with local_af3_mcp(spool, args.af3_mcp_port, host=args.af3_mcp_host,
+                                    token=os.environ.get("PSKIT_AF3_MCP_TOKEN", "")), asyncio.TaskGroup() as group:
                 group.create_task(receive(receiver, args.poll_seconds, isolate_failures=True))
-                group.create_task(receive(af3_receiver, args.poll_seconds,
-                                          cleanup=af3_control.cleanup, isolate_failures=True))
+                group.create_task(receive(af3_lane, args.poll_seconds,
+                                          cleanup=cleanup, isolate_failures=True))
 
 
 def argument_parser():
@@ -190,6 +222,8 @@ def argument_parser():
     parser.add_argument("--af3-spool-dir")
     parser.add_argument("--af3-journal")
     parser.add_argument("--af3-mcp-port", type=int, default=18187)
+    parser.add_argument("--af3-mcp-host", default="127.0.0.1")
+    parser.add_argument("--af3-gpu-uuid", action="append", default=[])
     parser.add_argument("--af3-gpu-memory-mb", type=int, default=49140)
     return parser
 

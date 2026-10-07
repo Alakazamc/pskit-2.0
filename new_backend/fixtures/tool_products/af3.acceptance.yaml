@@ -1,0 +1,34 @@
+suite_id: suite-af3-structure
+revision: 1
+cases:
+- case_id: af3-tiny-protein
+  action_id: af3-predict
+  arguments:
+    fold_input: &id001
+      name: pskit-af3-product-acceptance
+      modelSeeds:
+      - 1
+      sequences:
+      - protein:
+          id: A
+          sequence: ACDEFGHIKL
+          unpairedMsa: ''
+          pairedMsa: ''
+          templates: []
+      dialect: alphafold3
+      version: 1
+  invalid_arguments:
+  - fold_input:
+      name: empty
+  - fold_input: *id001
+    task_id: untrusted
+  check_idempotency: true
+  check_cancellation: false
+  required_progress_types: []
+  result_assertions:
+  - pointer: /simulation
+    predicate: equals
+    value: false
+  - pointer: /actual_gpu_minutes
+    predicate: minimum
+    value: 1

@@ -131,6 +131,42 @@ async def test_direct_qualification_executor_calls_approved_binding_once_per_key
     assert [call[0] for call in transport.calls].count("call") == 1
 
 
+@pytest.mark.asyncio
+async def test_job_mcp_qualification_waits_for_real_terminal_result_and_keeps_job_identity():
+    endpoint = ApprovedEndpointPolicy(
+        {}, resolver=resolver({"public.example": ["93.184.216.34"]})
+    ).resolve("https://public.example/mcp", "public")
+    submitted = []
+    observed = []
+
+    class JobTransport(QualificationTransport):
+        async def call_tool(self, name, arguments):
+            if name == "af3.submit":
+                submitted.append(arguments)
+                return {"status": "pending", "job_id": arguments["task_id"]}
+            observed.append(arguments["job_id"])
+            await asyncio.sleep(0.05)  # Total wait exceeds the per-call timeout setting.
+            return {"status": "completed", "job_id": arguments["job_id"], "result": {},
+                    "usage": {"source": "estimated", "gpu_device_ms": 60000}, "artifacts": []}
+
+    executor = DirectMcpQualificationExecutor(
+        lambda binding: (endpoint, "streamable_http", "credential"),
+        transport_factory=lambda _transport: JobTransport(), timeout_seconds=0.01,
+    )
+    binding = qualification_draft().bindings[0].model_copy(update={
+        "adapter": "job_mcp", "submit_tool": "af3.submit", "status_tool": "af3.status",
+        "submit_job_id_argument": "task_id",
+        "max_execution_seconds": 1,
+    })
+    first = await executor.execute(binding, {"fold_input": {"name": "test"}}, "same-key")
+    repeated = await executor.execute(binding, {"fold_input": {"name": "test"}}, "same-key")
+    assert first["report"]["status"] == "completed"
+    assert first == repeated
+    assert len(submitted) == 1
+    assert observed == [submitted[0]["task_id"]]
+    assert first["remote_execution_id"] == submitted[0]["task_id"]
+
+
 def test_direct_qualification_executor_rejects_non_object_reports_with_stable_error():
     with pytest.raises(ValueError, match="MCP_REPORT_REQUIRED"):
         DirectMcpQualificationExecutor._report(["unexpected"])
@@ -307,6 +343,18 @@ async def test_separate_qualification_runs_do_not_reuse_execution_idempotency_ke
     assert executor.calls[0][2] == executor.calls[1][2]
     assert executor.calls[2][2] == executor.calls[3][2]
     assert executor.calls[0][2] != executor.calls[2][2]
+
+
+@pytest.mark.asyncio
+async def test_idempotent_job_qualification_retries_reuse_the_exact_submission_key():
+    executor = QualificationExecutor(completed_execution())
+    evaluator = QualificationEvaluator(executor)
+    draft = qualification_draft()
+    draft.bindings[0].submit_job_id_argument = "task_id"
+    draft.bindings[0].adapter = "job_mcp"
+    await evaluator.evaluate(draft, acceptance_suite())
+    await evaluator.evaluate(draft, acceptance_suite())
+    assert executor.calls[0][2] == executor.calls[2][2]
 
 
 @pytest.mark.asyncio
