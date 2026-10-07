@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { ArtifactRef, ResearchApi, ToolProductRun } from "../../api/types";
 import { useLanguage } from "../../i18n/LanguageProvider";
+import { errorTranslationKey } from "../../i18n/errors";
 import { personalSessionPath } from "../mono/sessionPaths";
 import { ToolPageHeader } from "../mono/ToolPageHeader";
 import { ToolUiRenderer } from "./ToolUiRenderer";
@@ -119,7 +120,7 @@ export function ToolProductPage({ api, slug, userId, theme, onBack }: {
       setRun(created); setEvents([]);
       setParams((previous) => { const next = new URLSearchParams(previous); next.set("run", created.run_id); next.delete("tab"); return next; }, { replace: true });
       void cache.invalidateQueries({ queryKey: ["tool-product-runs", userId, slug] });
-    } catch { setError(t("toolProduct.startFailed")); }
+    } catch (error) { setError(t(errorTranslationKey(error) ?? "toolProduct.startFailed")); }
     finally { setBusy(false); }
   };
 

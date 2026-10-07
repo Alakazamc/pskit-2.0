@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
 import type { PublishedToolProduct, ToolRunEvent, ToolRunSnapshot } from "../../api/generated";
 import type { ResearchApi } from "../../api/types";
+import { ApiError } from "../../api/http";
 import { App } from "../../app/App";
 import { LanguageProvider } from "../../i18n/LanguageProvider";
 import { ToolProductPage } from "./ToolProductPage";
@@ -150,6 +151,39 @@ it("recovers a refreshed run from cursor zero and scopes history to the exact pr
   await userEvent.click(screen.getByRole("tab", { name: "Run history" }));
   expect(await screen.findByRole("button", { name: /run-1/ })).toBeInTheDocument();
   expect(api.getToolProductRuns).toHaveBeenCalledWith("flex-design");
+});
+
+it("explains a CPU quota rejection and preserves the entered inputs for retry", async () => {
+  localStorage.setItem("research_language", "en");
+  const api = apiFixture({ startToolProductRun: vi.fn(async () => {
+    throw new ApiError(429, { code: "CPU_QUOTA_EXCEEDED" });
+  }) });
+  renderPage(api);
+  const actor = userEvent.setup();
+  const input = await screen.findByRole("textbox", { name: "Protein target" });
+  await actor.type(input, "1A9N");
+  await actor.click(screen.getByRole("button", { name: "Run design" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Your daily CPU quota is insufficient. Check your usage or contact an administrator.");
+  expect(screen.queryByText("The run could not start. Check the inputs and quota, then try again.")).not.toBeInTheDocument();
+  expect(input).toHaveValue("1A9N");
+  expect(screen.getByRole("button", { name: "Run design" })).toBeEnabled();
+  expect(api.getToolProductRun).not.toHaveBeenCalled();
+});
+
+it.each([
+  { language: "zh", code: "CPU_QUOTA_EXCEEDED", message: "今日 CPU 额度不足，请检查用量或联系管理员调整额度。" },
+  { language: "en", code: "GPU_QUOTA_EXCEEDED", message: "Your daily GPU quota is exhausted." },
+])("shows the resource-specific rejection ($language, $code)", async ({ language, code, message }) => {
+  localStorage.setItem("research_language", language);
+  const api = apiFixture({ startToolProductRun: vi.fn(async () => {
+    throw new ApiError(429, { code, message: "Private upstream diagnostic" });
+  }) });
+  renderPage(api);
+  const actor = userEvent.setup();
+  await actor.type(await screen.findByRole("textbox", { name: language === "en" ? "Protein target" : "蛋白质目标" }), "1A9N");
+  await actor.click(screen.getByRole("button", { name: language === "en" ? "Run design" : "运行设计" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(message);
+  expect(screen.queryByText("Private upstream diagnostic")).not.toBeInTheDocument();
 });
 
 it("hands off only the immutable run context returned by Python", async () => {

@@ -4,6 +4,8 @@ import type { TranslationKey } from "./translations";
 const codeKeys: Record<string, TranslationKey> = {
   TOKEN_QUOTA_EXCEEDED: "error.tokenQuota",
   GPU_DAILY_QUOTA_EXCEEDED: "error.gpuQuota",
+  GPU_QUOTA_EXCEEDED: "error.gpuQuota",
+  CPU_QUOTA_EXCEEDED: "error.cpuQuota",
   MODEL_NOT_CONFIGURED: "error.modelMissing",
   MODEL_UNAVAILABLE: "error.modelUnavailable",
   MODEL_REASONING_UNAVAILABLE: "error.modelReasoningUnavailable",
