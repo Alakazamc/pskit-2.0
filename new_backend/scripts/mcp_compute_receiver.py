@@ -17,6 +17,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import httpx
 
 from app.contracts.compute import ComputeClaimRequest, WorkerResources
+from app.domain.errors import ErrorCode
+from app.services.structured_logging import compute_logger
 from pskit_compute.dynamic_mcp import DynamicMcpExecutor
 from pskit_compute.journal import Journal
 from pskit_compute.receiver import ControlClient, Receiver
@@ -88,14 +90,26 @@ async def receive(receiver, poll_seconds, *, cleanup=None, isolate_failures=Fals
         except (httpx.HTTPError, OSError) as error:
             LOG.warning("%s: control unavailable (%s); journal retained",
                         receiver.identity.service_id, type(error).__name__)
+            compute_logger.warning(
+                "Control server unavailable, retaining journal",
+                service_id=receiver.identity.service_id,
+                error_type=type(error).__name__
+            )
             await asyncio.sleep(max(1, poll_seconds))
             continue
         except Exception as error:
             # Isolate services while retaining the journal and the original failure state.
             if not isolate_failures:
                 raise
+            error_code = _safe_error_code(error)
             LOG.error("%s: requires reconciliation (%s); other services continue",
-                      receiver.identity.service_id, _safe_error_code(error))
+                      receiver.identity.service_id, error_code)
+            compute_logger.error(
+                "Service requires reconciliation, other services continue",
+                service_id=receiver.identity.service_id,
+                error_code=error_code,
+                exc_info=True
+            )
             await asyncio.sleep(30)
             continue
         if outcome.status == "unknown":

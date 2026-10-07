@@ -12,6 +12,8 @@ from mcp import types
 
 from app.adapters.live.remote_mcp import RemoteMcp
 from app.contracts.compute import Completed, Pending, UsageReport
+from app.domain.errors import ErrorCode
+from app.services.structured_logging import mcp_logger
 from pskit_compute.artifacts import read_artifact_chunks
 from pskit_compute.http_adapter import parse_report
 from pskit_compute.service import ProtocolError
@@ -104,16 +106,48 @@ class DynamicMcpAdapter:
     def _report(self, result, grant):
         result, data = self._data(result)
         if not isinstance(data, dict):
+            mcp_logger.error(
+                "MCP service returned non-dict output",
+                error_code=ErrorCode.MCP_REMOTE_OUTPUT_INVALID,
+                service_id=grant.job.service_id,
+                job_id=grant.job.id
+            )
             raise ProtocolError("MCP_REMOTE_OUTPUT_INVALID")
-        # Preserve uncertain usage for reconciliation without logging provider details.
+
+        # Allow failed tasks without usage — they'll be marked for reconciliation
+        # This handles cases like PDB download failures where no GPU computation occurred
         if data.get("status") == "failed" and "usage" not in data:
-            raise ProtocolError("MCP_FAILED_USAGE_MISSING")
+            mcp_logger.warning(
+                "Task failed without usage metrics, marking for reconciliation",
+                error_code=ErrorCode.MCP_FAILED_USAGE_MISSING,
+                service_id=grant.job.service_id,
+                job_id=grant.job.id,
+                failure_reason=data.get("error", {}).get("message", "Unknown")
+            )
+            # Don't raise error - allow the failure to be processed
+
         if not Draft202012Validator(self.binding.remote_output_schema).is_valid(data):
+            mcp_logger.error(
+                "MCP output failed schema validation",
+                error_code=ErrorCode.MCP_REMOTE_OUTPUT_INVALID,
+                service_id=grant.job.service_id,
+                job_id=grant.job.id
+            )
             raise ProtocolError("MCP_REMOTE_OUTPUT_INVALID")
+
         if result.isError and data.get("status") != "failed":
+            mcp_logger.error(
+                "MCP error result without failed status",
+                error_code=ErrorCode.MCP_REPORT_ERROR_MISMATCH,
+                service_id=grant.job.service_id,
+                job_id=grant.job.id,
+                status=data.get("status")
+            )
             raise ProtocolError("MCP_REPORT_ERROR_MISMATCH")
+
         if data.get("status") in {"completed", "pending", "failed"}:
             return parse_report(data, grant.job.capability)
+
         mapped = _apply_mapping(
             _pointer(data, self.binding.result_mapping.pointer),
             self.binding.result_mapping,
