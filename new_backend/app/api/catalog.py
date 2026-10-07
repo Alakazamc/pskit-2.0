@@ -152,8 +152,17 @@ def _workspace_artifacts(request: Request):
     return transfer.artifacts if transfer is not None else None
 
 
+def _compute_artifacts(request: Request):
+    jobs = getattr(request.app.state, "compute_jobs", None)
+    return jobs.artifacts if jobs is not None else None
+
+
 def _artifact_metadata(request: Request, user_id: str, af3, session_id: str | None = None):
     items = af3.artifacts_for(user_id) if session_id is None else af3.artifacts_for(user_id, session_id)
+    items = [item for item in items if not item["id"].startswith("artifact-compute-")]
+    compute = _compute_artifacts(request)
+    if compute is not None:
+        items = items + [item.model_dump() for item in compute.list(user_id, session_id)]
     workspace = _workspace_artifacts(request)
     if workspace is None:
         return items
@@ -163,7 +172,12 @@ def _artifact_metadata(request: Request, user_id: str, af3, session_id: str | No
 
 
 def _artifact_bytes(request: Request, user_id: str, artifact_id: str, af3):
+    compute = _compute_artifacts(request)
+    if artifact_id.startswith("artifact-compute-"):
+        return compute.read(user_id, artifact_id) if compute else None
     existing = af3.artifact_bytes_for(user_id, artifact_id)
+    if existing is None and compute is not None:
+        existing = compute.read(user_id, artifact_id)
     workspace = _workspace_artifacts(request)
     return existing or (workspace.read(user_id, artifact_id) if workspace else None)
 

@@ -12,6 +12,7 @@ from mcp import types
 
 from app.adapters.live.remote_mcp import RemoteMcp
 from app.contracts.compute import Completed, Pending, UsageReport
+from pskit_compute.artifacts import read_artifact_chunks
 from pskit_compute.http_adapter import parse_report
 from pskit_compute.service import ProtocolError
 
@@ -74,13 +75,15 @@ class DynamicMcpAdapter:
                     binding.submit_tool,
                     binding.status_tool,
                     binding.cancel_tool,
+                    binding.artifact_tool,
                 ) if tool
             },
             bearer_token=credential,
             timeout_seconds=timeout_seconds,
         )
 
-    def _report(self, result, grant):
+    @staticmethod
+    def _data(result):
         if not isinstance(result, types.CallToolResult):
             payload = result.model_dump(mode="python")
             payload.pop("_meta", None)
@@ -96,6 +99,10 @@ class DynamicMcpAdapter:
                 raise ProtocolError("MCP_REPORT_REQUIRED") from exc
         if len(json.dumps(data, ensure_ascii=False).encode()) > MAX_REPORT_BYTES:
             raise ProtocolError("MCP_REPORT_TOO_LARGE")
+        return result, data
+
+    def _report(self, result, grant):
+        result, data = self._data(result)
         if not Draft202012Validator(self.binding.remote_output_schema).is_valid(data):
             raise ProtocolError("MCP_REMOTE_OUTPUT_INVALID")
         if result.isError and data.get("status") != "failed":
@@ -114,6 +121,20 @@ class DynamicMcpAdapter:
         )
         return parse_report(report.model_dump(mode="json"), grant.job.capability)
 
+    async def read_artifact(self, grant, artifact):
+        if not self.binding.artifact_tool:
+            raise ProtocolError("ARTIFACT_TOOL_REQUIRED")
+        async with asyncio.timeout(120):
+            async with self.remote._session() as session:
+                async def call(arguments):
+                    response, data = self._data(await session.call_tool(
+                        self.binding.artifact_tool, arguments
+                    ))
+                    if response.isError:
+                        raise ProtocolError("ARTIFACT_READ_FAILED")
+                    return data
+                return await read_artifact_chunks(call, artifact, grant.job.id)
+
     async def _call_tool(self, name, arguments, grant):
         if not name:
             raise ProtocolError("MCP_STATUS_TOOL_REQUIRED")
@@ -131,6 +152,11 @@ class DynamicMcpAdapter:
 
     async def execute(self, grant, *, context=None):
         del context
+        arguments = dict(grant.job.arguments)
+        if argument := self.binding.submit_job_id_argument:
+            if argument in arguments and arguments[argument] != grant.job.id:
+                raise ProtocolError("MCP_JOB_ID_OVERRIDE")
+            arguments[argument] = grant.job.id
         if self.binding.adapter == "mcp_tasks":
             async with asyncio.timeout(self.remote.timeout_seconds):
                 async with self.remote._session() as session:
@@ -142,7 +168,7 @@ class DynamicMcpAdapter:
                         types.ClientRequest(types.CallToolRequest(
                             params=types.CallToolRequestParams(
                                 name=self.binding.submit_tool,
-                                arguments=grant.job.arguments,
+                                arguments=arguments,
                                 task=types.TaskMetadata(),
                             )
                         )),
@@ -150,7 +176,7 @@ class DynamicMcpAdapter:
                     )
             return Pending(job_id=created.task.taskId)
         report = await self._call_tool(
-            self.binding.submit_tool, grant.job.arguments, grant
+            self.binding.submit_tool, arguments, grant
         )
         if self.binding.adapter == "immediate_mcp" and isinstance(report, Pending):
             raise ProtocolError("MCP_IMMEDIATE_PENDING")
@@ -247,6 +273,23 @@ class DynamicMcpExecutor:
 
     async def execute(self, grant, *, context=None):
         return await self._adapter(grant).execute(grant, context=context)
+
+    async def transfer_artifacts(self, grant, report, control):
+        if isinstance(report, Pending) or not grant.execution_binding.artifact_tool:
+            return
+        if len(report.artifacts) > 128:
+            raise ProtocolError("ARTIFACT_COUNT_EXCEEDED")
+        adapter = self._adapter(grant)
+        # Final transfer is after inference: an expired execution budget must not
+        # turn recovery into repeated one-second transport failures.
+        adapter.remote.timeout_seconds = 120
+        for artifact in report.artifacts:
+            if not artifact.available:
+                continue
+            if await control.artifact_uploaded(grant, artifact):
+                continue
+            raw = await adapter.read_artifact(grant, artifact)
+            await control.upload_artifact(grant, artifact, raw)
 
     async def poll(self, grant, pending):
         return await self._adapter(grant).poll(grant, pending)

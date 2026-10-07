@@ -15,6 +15,16 @@
 		handle @callbacks {
 			reverse_proxy backend:8000
 		}
+		@artifacts {
+			method GET PUT
+			path_regexp artifacts ^/internal/compute/jobs/[A-Za-z0-9-]+/artifacts/[A-Za-z0-9_.-]+$
+		}
+		handle @artifacts {
+			request_body {
+				max_size 67108864
+			}
+			reverse_proxy backend:8000
+		}
 		handle /health/ready {
 			respond "ready" 200
 		}

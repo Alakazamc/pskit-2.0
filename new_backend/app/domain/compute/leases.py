@@ -205,6 +205,31 @@ class ComputeLeases:
             if window.start < start-timedelta(seconds=5) or window.end > utcnow()+timedelta(seconds=5):
                 raise ValueError("INVALID_USAGE_WINDOW")
 
+    def put_artifact(self, service_id, job_id, identity, artifact, raw):
+        with self.database.transaction() as connection:
+            admission_lock(connection)
+            job = self._owned(connection, service_id, job_id, identity)
+            existing = connection.execute(
+                "SELECT 1 FROM agent_artifact_blobs WHERE id=%s AND job_id=%s",
+                (self.jobs.artifacts.owned_id(job_id, artifact.id), job_id),
+            ).fetchone()
+            if job.status not in {"running", "cancelling"} and not existing:
+                raise ValueError("JOB_ALREADY_FINAL")
+            return self.jobs.artifacts.put(connection, job.user_id, job_id, artifact, raw)
+
+    def artifact_uploaded(self, service_id, job_id, identity, artifact):
+        with self.database.transaction() as connection:
+            self._owned(connection, service_id, job_id, identity)
+            row = connection.execute(
+                "SELECT name,kind,size,sha256 FROM agent_artifact_blobs WHERE id=%s AND job_id=%s",
+                (self.jobs.artifacts.owned_id(job_id, artifact.id), job_id),
+            ).fetchone()
+            if row is None:
+                raise LookupError("ARTIFACT_NOT_FOUND")
+            if row != (artifact.name, artifact.kind, artifact.size, artifact.sha256):
+                raise ValueError("ARTIFACT_CONFLICT")
+            return artifact
+
     def complete(self, service_id, job_id, payload):
         data = payload.model_dump(mode="json")
         digest = payload_hash(data)
@@ -233,6 +258,8 @@ class ComputeLeases:
             if not isinstance(payload.report, Pending):
                 if not payload.stopped:
                     raise ValueError("STOP_NOT_CONFIRMED")
+                if grant.execution_binding and grant.execution_binding.artifact_tool:
+                    self.jobs.artifacts.validate_report(connection, job_id, payload.report.artifacts)
                 self.ledger.accept_usage(connection, job_id, payload.seq, payload.report.usage,
                                          window=payload.window, terminal=True)
                 status = "cancelled" if job.status == "cancelling" else payload.report.status
@@ -243,10 +270,11 @@ class ComputeLeases:
                                    "ON CONFLICT(job_id) DO NOTHING", (job_id, job.run_id))
                 if self.events is not None:
                     for artifact in payload.report.artifacts:
+                        owned = self.jobs.artifacts.available_refs(connection, job_id, [artifact])[0]
                         self.events.append(
                             job_id,
                             "artifact.created",
-                            {"job_id": job_id, "artifact": artifact.model_dump(mode="json")},
+                            {"job_id": job_id, "artifact": owned.model_dump(mode="json")},
                             connection=connection,
                             key=f"result:{payload.seq}:artifact:{artifact.id}",
                         )

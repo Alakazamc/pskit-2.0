@@ -1,5 +1,7 @@
 """A generic receiver executes only immutable MCP bindings supplied by PSKit."""
 
+import base64
+import hashlib
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
@@ -7,6 +9,7 @@ import pytest
 from mcp import types
 from test_compute_sdk import grant_for
 
+from app.contracts.catalog import ArtifactRef
 from app.contracts.compute import (
     Completed,
     ComputeClaimRequest,
@@ -71,6 +74,88 @@ def adapter_for(grant):
     assert credentials == ["coral-key"]
     assert adapter.remote.bearer_token == "local-secret"
     return adapter
+
+
+@pytest.mark.asyncio
+async def test_artifact_transport_reads_verified_chunks_without_provider_paths():
+    raw = b"ACGU\n" * 150000
+    artifact = ArtifactRef(id="provider-output", name="candidates.csv", kind="data", available=True,
+                           size=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+    calls = []
+
+    class Session:
+        async def call_tool(self, name, arguments):
+            calls.append((name, arguments))
+            offset = arguments["offset"]
+            chunk = raw[offset:offset + arguments["length"]]
+            return types.CallToolResult(content=[], structuredContent={
+                "artifact_id": artifact.id, "offset": offset, "size": len(raw),
+                "sha256": artifact.sha256, "data_base64": base64.b64encode(chunk).decode(),
+                "eof": offset + len(chunk) == len(raw),
+            })
+
+    @asynccontextmanager
+    async def session():
+        yield Session()
+
+    grant = dynamic_grant(execution_binding=binding(artifact_tool="pskit.artifacts.read"))
+    adapter = adapter_for(grant)
+    adapter.remote._session = session
+    assert await adapter.read_artifact(grant, artifact) == raw
+    assert len(calls) == 2
+    assert calls[0][1] == {"job_id": grant.job.id, "artifact_id": "provider-output",
+                           "offset": 0, "length": 524288}
+    assert all(name == "pskit.artifacts.read" for name, _args in calls)
+
+
+@pytest.mark.asyncio
+async def test_artifact_transport_rejects_changed_content_and_wrong_offsets():
+    artifact = ArtifactRef(id="output", name="output.csv", kind="data", available=True,
+                           size=3, sha256=hashlib.sha256(b"ACG").hexdigest())
+    response = {"artifact_id": "output", "offset": 1, "size": 3,
+                "sha256": artifact.sha256, "data_base64": "QUNH", "eof": True}
+
+    class Session:
+        async def call_tool(self, *_args):
+            return types.CallToolResult(content=[], structuredContent=response)
+
+    @asynccontextmanager
+    async def session():
+        yield Session()
+
+    grant = dynamic_grant(execution_binding=binding(artifact_tool="read"))
+    adapter = adapter_for(grant)
+    adapter.remote._session = session
+    with pytest.raises(ProtocolError, match="ARTIFACT_CHUNK_INVALID"):
+        await adapter.read_artifact(grant, artifact)
+    response.update(offset=0, data_base64="VEFH")
+    with pytest.raises(ProtocolError, match="ARTIFACT_DIGEST_MISMATCH"):
+        await adapter.read_artifact(grant, artifact)
+
+
+@pytest.mark.asyncio
+async def test_job_binding_supplies_server_job_id_without_accepting_user_override():
+    calls = []
+
+    class Session:
+        async def call_tool(self, name, arguments):
+            calls.append((name, arguments))
+            return types.CallToolResult(content=[], structuredContent={
+                "status": "pending", "job_id": arguments["task_id"],
+            })
+
+    @asynccontextmanager
+    async def session():
+        yield Session()
+
+    grant = dynamic_grant(execution_binding=binding("job_mcp", submit_job_id_argument="task_id"))
+    adapter = adapter_for(grant)
+    adapter.remote._session = session
+    assert await adapter.execute(grant) == Pending(job_id=grant.job.id)
+    assert calls == [("generate", {"sequence": "ACG", "task_id": grant.job.id})]
+    grant.job.arguments["task_id"] = "someone-elses-job"
+    with pytest.raises(ProtocolError, match="MCP_JOB_ID_OVERRIDE"):
+        await adapter.execute(grant)
 
 
 def test_receiver_resolvers_use_exact_endpoint_overrides_and_local_secret_names():

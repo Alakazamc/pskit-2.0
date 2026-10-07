@@ -54,6 +54,8 @@ class ToolRunGateway:
             submit_tool=binding["submit_tool"],
             status_tool=binding.get("status_tool"),
             cancel_tool=binding.get("cancel_tool"),
+            artifact_tool=binding.get("artifact_tool"),
+            submit_job_id_argument=binding.get("submit_job_id_argument"),
             remote_output_schema=binding["remote_output_schema"],
             result_mapping=binding["result_mapping"],
         )
@@ -68,6 +70,7 @@ class ToolRunGateway:
             input_schema=input_schema,
             output_schema=binding["result_schema"],
             required_usage=binding.get("required_usage", []),
+            accepted_sources=binding.get("accepted_sources", ["service_reported", "measured"]),
             visibility="published",
             gpu_count=binding.get("gpu_count", 0),
             max_budget=binding.get("max_budget", {}),

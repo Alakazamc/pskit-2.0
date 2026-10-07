@@ -25,6 +25,7 @@ COPY skills ./skills
 COPY scripts/af3_callback_proxy.py ./scripts/af3_callback_proxy.py
 COPY scripts/compute_receiver.py ./scripts/compute_receiver.py
 COPY scripts/mcp_compute_receiver.py ./scripts/mcp_compute_receiver.py
+COPY scripts/backfill_compute_artifacts.py ./scripts/backfill_compute_artifacts.py
 COPY scripts/agent_data_migrate.py ./scripts/agent_data_migrate.py
 RUN install -d -o agent -g agent -m 0750 /var/lib/pskit-mcp
 USER agent

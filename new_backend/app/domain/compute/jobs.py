@@ -6,7 +6,8 @@ import uuid
 from jsonschema import Draft202012Validator
 from psycopg.types.json import Jsonb
 
-from app.contracts.compute import ComputeJob, ComputeJobSummary
+from app.contracts.compute import Completed, ComputeJob, ComputeJobSummary, Failed
+from app.domain.compute.artifacts import ComputeArtifacts
 from app.domain.compute.catalog import ComputeCatalog
 from app.domain.compute.common import admission_lock, payload_hash, utcnow
 
@@ -15,6 +16,7 @@ class ComputeJobs:
     def __init__(self, database, ledger=None):
         self.database = database
         self.catalog = ComputeCatalog(database)
+        self.artifacts = ComputeArtifacts(database)
         self.ledger = ledger
         self.events = None
 
@@ -125,9 +127,12 @@ class ComputeJobs:
         ).fetchone()
         if row is None:
             return None
-        return ComputeJob(**dict(zip(("id", "user_id", "service_id", "capability", "arguments",
+        job = ComputeJob(**dict(zip(("id", "user_id", "service_id", "capability", "arguments",
                                       "budget", "status", "accounting_status", "progress", "run_id",
                                       "tool_call_id", "report"), row)))
+        if isinstance(job.report, (Completed, Failed)):
+            job.report.artifacts = self.artifacts.available_refs(connection, job.id, job.report.artifacts)
+        return job
 
     def cancel(self, user_id, job_id, *, connection=None):
         if connection is None:

@@ -16,6 +16,7 @@ FieldComponent = Literal[
     "text-input",
     "number-input",
     "textarea",
+    "json-input",
     "select",
     "segmented-control",
     "checkbox",
@@ -242,6 +243,11 @@ class CapabilityBinding(ToolProductContract):
     submit_tool: str = Field(min_length=1, max_length=200)
     status_tool: str | None = Field(default=None, max_length=200)
     cancel_tool: str | None = Field(default=None, max_length=200)
+    artifact_tool: str | None = Field(default=None, min_length=1, max_length=200)
+    submit_job_id_argument: str | None = Field(default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,119}$")
+    accepted_sources: list[Literal["service_reported", "measured", "estimated", "unknown"]] = Field(
+        default_factory=lambda: ["service_reported", "measured"], min_length=1,
+    )
     remote_output_schema: JsonSchema
     result_schema: JsonSchema
     result_mapping: ResultMapping

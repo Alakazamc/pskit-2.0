@@ -1,6 +1,8 @@
 """Run and recover one service worker, retaining receipts until central commit."""
 
 import asyncio
+import json
+from urllib.parse import quote
 
 import httpx
 
@@ -40,6 +42,32 @@ class ControlClient:
         response.raise_for_status()
         return GrantUpdate.model_validate(response.json())
 
+    def _artifact_request(self, grant, artifact):
+        url = (f"{self.base_url}/internal/compute/jobs/{grant.job.id}/artifacts/"
+               + quote(artifact.id, safe=""))
+        headers = {**self.headers, "X-Compute-Worker": grant.worker_id,
+                   "X-Compute-Attempt": str(grant.attempt),
+                   "X-Compute-Fence": grant.fencing_token,
+                   "X-Compute-Artifact": json.dumps(artifact.model_dump(mode="json"))}
+        return url, headers
+
+    async def artifact_uploaded(self, grant, artifact):
+        url, headers = self._artifact_request(grant, artifact)
+        response = await self.client.get(url, headers=headers)
+        if response.status_code == 404:
+            return False
+        response.raise_for_status()
+        if response.json() != artifact.model_dump(mode="json"):
+            raise ValueError("ARTIFACT_RECEIPT_MISMATCH")
+        return True
+
+    async def upload_artifact(self, grant, artifact, raw):
+        url, headers = self._artifact_request(grant, artifact)
+        response = await self.client.put(url, headers=headers, content=raw)
+        response.raise_for_status()
+        if response.json() != artifact.model_dump(mode="json"):
+            raise ValueError("ARTIFACT_RECEIPT_MISMATCH")
+
 
 class Receiver:
     def __init__(self, executor, control, journal, identity, *, heartbeat_seconds=10):
@@ -47,6 +75,9 @@ class Receiver:
         self.identity, self.heartbeat_seconds = identity, heartbeat_seconds
 
     async def _send(self, grant, payload):
+        transfer = getattr(self.executor, "transfer_artifacts", None)
+        if transfer is not None:
+            await transfer(grant, payload.report, self.control)
         receipt = await self.control.complete(grant, payload)
         self.journal.acknowledge(receipt)
         return ReceiverOutcome(status="pending" if receipt.status == "pending" else "acknowledged",
@@ -91,14 +122,23 @@ class Receiver:
             if grant is None:
                 return ReceiverOutcome(status="idle")
             self.journal.begin(grant)
-            if grant.recovered:
+            recover = getattr(self.executor, "recover", None)
+            if grant.recovered and recover is None:
                 return ReceiverOutcome(status="unknown", job_id=grant.job.id)
             seq, cancelled, progress = 0, False, 0
+            if grant.recovered:
+                seq += 1
+                update = await self._heartbeat(grant, seq, progress)
+                if update.cancel_requested:
+                    recover = getattr(self.executor, "recover_detached", None)
+                    if recover is None:
+                        return ReceiverOutcome(status="unknown", job_id=grant.job.id)
             def on_progress(value):
                 nonlocal progress
                 progress = max(progress, value)
             context = ExecutionContext(grant, cancelled=lambda: cancelled, progress=on_progress)
-            task = asyncio.create_task(self.executor.execute(grant, context=context))
+            task = asyncio.create_task(recover(grant) if grant.recovered
+                                       else self.executor.execute(grant, context=context))
             try:
                 while not task.done():
                     done, _ = await asyncio.wait({task}, timeout=self.heartbeat_seconds)

@@ -197,6 +197,7 @@ bindings:
     capability_version: 1.0.0
     adapter: immediate_mcp
     submit_tool: coral.generate.one_shot
+    artifact_tool: pskit.artifacts.read
     remote_output_schema: &execution_report
       type: object
       properties:
@@ -248,6 +249,7 @@ bindings:
     capability_version: 1.0.0
     adapter: immediate_mcp
     submit_tool: coral.generate.iterative
+    artifact_tool: pskit.artifacts.read
     remote_output_schema: *execution_report
     result_schema: &candidate_count_result
       type: object
@@ -272,6 +274,7 @@ bindings:
     capability_version: 1.0.0
     adapter: immediate_mcp
     submit_tool: coral.analyze.pocket
+    artifact_tool: pskit.artifacts.read
     remote_output_schema: *execution_report
     result_schema: *candidate_count_result
     result_mapping: {kind: json_pointer, pointer: /result}
@@ -291,6 +294,7 @@ bindings:
     capability_version: 1.0.0
     adapter: immediate_mcp
     submit_tool: coral.optimize.two_dimensional
+    artifact_tool: pskit.artifacts.read
     remote_output_schema: *execution_report
     result_schema:
       type: object

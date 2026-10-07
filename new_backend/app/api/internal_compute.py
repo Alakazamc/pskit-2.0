@@ -2,11 +2,14 @@
 
 import json
 import secrets
+from types import SimpleNamespace
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Request
+from pydantic import ValidationError
 
 from app.api.compute import compute_error, jobs_for
+from app.contracts.catalog import ArtifactRef
 from app.contracts.compute import (
     ComputeClaimRequest,
     ComputeHeartbeatRequest,
@@ -19,6 +22,7 @@ from app.contracts.compute import (
     InternalComputeSubmit,
     UsageReceipt,
 )
+from app.domain.compute.artifacts import MAX_ARTIFACT_BYTES, ComputeArtifacts
 
 router = APIRouter(prefix="/internal/compute", tags=["compute-worker"])
 
@@ -57,6 +61,38 @@ def result(job_id: str, payload: ComputeResultRequest, request: Request,
            key: Annotated[str | None, Header(alias="X-Compute-Key")] = None) -> UsageReceipt:
     try:
         return authorized_service(request, service_id, key).complete(service_id, job_id, payload)
+    except (ValueError, LookupError) as exc:
+        raise compute_error(exc) from exc
+
+
+@router.get("/jobs/{job_id}/artifacts/{artifact_id}")
+@router.put("/jobs/{job_id}/artifacts/{artifact_id}")
+async def upload_artifact(
+    job_id: str, artifact_id: str, request: Request,
+    service_id: Annotated[str, Header(alias="X-Compute-Service")],
+    worker_id: Annotated[str, Header(alias="X-Compute-Worker", min_length=1, max_length=120)],
+    attempt: Annotated[int, Header(alias="X-Compute-Attempt", ge=1)],
+    fencing_token: Annotated[str, Header(alias="X-Compute-Fence", min_length=1, max_length=200)],
+    metadata: Annotated[str, Header(alias="X-Compute-Artifact", max_length=4096)],
+    key: Annotated[str | None, Header(alias="X-Compute-Key")] = None,
+) -> ArtifactRef:
+    leases = authorized_service(request, service_id, key)
+    try:
+        artifact = ArtifactRef.model_validate_json(metadata)
+        if artifact.id != artifact_id:
+            raise ValueError("INVALID_ARTIFACT_ID")
+        ComputeArtifacts.validate_metadata(artifact)
+        identity = SimpleNamespace(worker_id=worker_id, attempt=attempt, fencing_token=fencing_token)
+        if request.method == "GET":
+            return leases.artifact_uploaded(service_id, job_id, identity, artifact)
+        raw = bytearray()
+        async for chunk in request.stream():
+            if len(raw) + len(chunk) > min(artifact.size, MAX_ARTIFACT_BYTES):
+                raise ValueError("INVALID_ARTIFACT_CONTENT")
+            raw.extend(chunk)
+        return leases.put_artifact(service_id, job_id, identity, artifact, bytes(raw))
+    except ValidationError as exc:
+        raise HTTPException(422, detail={"code": "INVALID_ARTIFACT_METADATA"}) from exc
     except (ValueError, LookupError) as exc:
         raise compute_error(exc) from exc
 

@@ -29,6 +29,73 @@ class Control:
 
 
 @pytest.mark.asyncio
+async def test_reclaimed_grant_with_lost_journal_uses_only_idempotent_recovery(tmp_path):
+    from app.contracts.compute import Pending
+
+    service = ComputeService("lab", "v1")
+
+    @service.compute_tool(name="inspect")
+    def inspect(sequence: str):
+        return {}
+
+    grant = grant_for(service, {"sequence": "ACG"}).model_copy(update={"recovered": True})
+    recovered = []
+
+    class Idempotent:
+        async def execute(self, grant, context=None):
+            pytest.fail("Recovered claim must not invoke a fresh model")
+
+        async def recover(self, persisted):
+            recovered.append(persisted.job.id)
+            return Pending(job_id="existing-job")
+
+    control = Control(grant)
+    control.fail_ack = False
+    async def heartbeat(persisted, payload):
+        from types import SimpleNamespace
+        return SimpleNamespace(cancel_requested=False)
+    control.heartbeat = heartbeat
+    journal = Journal(tmp_path / "empty-journal.sqlite3")
+    try:
+        receiver = Receiver(Idempotent(), control, journal,
+                            ComputeClaimRequest(service_id="lab", worker_id="w1"))
+        assert (await receiver.run_once()).status == "pending"
+        assert recovered == [grant.job.id]
+    finally:
+        journal.close()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_reclaimed_grant_never_publishes_a_fresh_input(tmp_path):
+    from types import SimpleNamespace
+
+    service = ComputeService("lab", "v1")
+
+    @service.compute_tool(name="inspect")
+    def inspect(sequence: str):
+        return {}
+
+    grant = grant_for(service, {"sequence": "ACG"}).model_copy(update={"recovered": True})
+
+    class Idempotent:
+        async def recover(self, persisted):
+            pytest.fail("Cancelled reclaimed job cannot authorize a fresh submission")
+
+    control = Control(grant)
+    async def heartbeat(persisted, payload):
+        return SimpleNamespace(cancel_requested=True)
+    control.heartbeat = heartbeat
+    journal = Journal(tmp_path / "cancelled-journal.sqlite3")
+    try:
+        receiver = Receiver(Idempotent(), control, journal,
+                            ComputeClaimRequest(service_id="lab", worker_id="w1"))
+        assert (await receiver.run_once()).status == "unknown"
+        assert journal.recover()[0]["state"] == "executing"
+    finally:
+        journal.close()
+
+
+@pytest.mark.asyncio
 async def test_explicitly_idempotent_model_recovers_an_interrupted_submission(tmp_path):
     from app.contracts.compute import Pending
 

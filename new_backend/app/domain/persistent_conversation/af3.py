@@ -1020,8 +1020,9 @@ class Af3Mixin:
         row = self.db.execute(
             "SELECT blob.name,blob.content FROM agent_artifact_blobs blob "
             "JOIN agent_jobs job ON job.id=blob.job_id "
-            "WHERE blob.id=? AND blob.user_id=? AND job.user_id=? AND job.status='completed'",
-            (artifact_id, user_id, user_id),
+            "WHERE blob.id=? AND blob.user_id=? AND job.user_id=? AND job.status='completed' "
+            "AND blob.id NOT LIKE ?",
+            (artifact_id, user_id, user_id, "artifact-compute-%"),
         ).fetchone()
         return (row[0], row[1]) if row else None
 
