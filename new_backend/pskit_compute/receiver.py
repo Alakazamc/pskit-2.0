@@ -74,7 +74,9 @@ class Receiver:
                 seq = record["seq"] + 1
                 update = await self._heartbeat(grant, seq, record["progress"])
                 if update.cancel_requested:
-                    return ReceiverOutcome(status="unknown", job_id=grant.job.id)
+                    recover = getattr(self.executor, "recover_detached", None)
+                    if recover is None:
+                        return ReceiverOutcome(status="unknown", job_id=grant.job.id)
                 report = await recover(grant)
             else:
                 seq = record["seq"]+1

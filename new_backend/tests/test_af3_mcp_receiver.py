@@ -101,13 +101,14 @@ async def test_af3_uses_real_streamable_http_mcp_with_the_dynamic_executor(tmp_p
             control = Af3ControlClient(client, base_url="http://compute", key="key", spool=spool,
                                        endpoint_url=f"http://127.0.0.1:{port}/mcp")
             grant = await control.claim(ComputeClaimRequest(service_id="af3-mcp", worker_id="w1"))
-        executor = Af3McpExecutor(lambda uri: uri, lambda reference: "")
+        executor = Af3McpExecutor(lambda uri: uri, lambda reference: "", spool=spool)
         pending = await executor.execute(grant)
         assert pending.status == "pending"
         assert pending.job_id == JOB
         directory = spool.directory(JOB)
         modified = (directory / "input.json").stat().st_mtime_ns
         assert (await executor.recover(grant)).status == "pending"
+        assert (await executor.recover_detached(grant)).status == "pending"
         assert (directory / "input.json").stat().st_mtime_ns == modified
         (directory / "outcome.json").write_text(json.dumps({
             "status": "completed", "actual_gpu_minutes": 1, "simulation": False,
@@ -123,7 +124,8 @@ async def test_af3_uses_real_streamable_http_mcp_with_the_dynamic_executor(tmp_p
 
 
 @pytest.mark.asyncio
-async def test_one_process_receives_generic_and_af3_jobs_and_closes_its_local_mcp(tmp_path, monkeypatch):
+@pytest.mark.parametrize("uncertain_coral", [False, True])
+async def test_one_process_receives_generic_and_af3_jobs_and_closes_its_local_mcp(tmp_path, monkeypatch, uncertain_coral):
     import uvicorn
     from fastapi import FastAPI, Request
 
@@ -137,6 +139,20 @@ async def test_one_process_receives_generic_and_af3_jobs_and_closes_its_local_mc
     calls = []
     claimed = False
     committed = asyncio.Event()
+    if uncertain_coral:
+        from test_compute_sdk import grant_for
+
+        from pskit_compute import ComputeService
+
+        service = ComputeService("coral-mcp", "v1")
+
+        @service.compute_tool(name="inspect")
+        def inspect(sequence: str):
+            return {}
+
+        journal = Journal(tmp_path / "coral.sqlite3")
+        journal.begin(grant_for(service, {"sequence": "ACG"}))
+        journal.close()
 
     @backend.api_route("/{path:path}", methods=["GET", "POST", "PUT"])
     async def callback(path: str, request: Request):
@@ -193,7 +209,8 @@ async def test_one_process_receives_generic_and_af3_jobs_and_closes_its_local_mc
             await committed.wait()
             while directory.exists():
                 await asyncio.sleep(0.01)
-        assert "internal/compute/jobs/claim" in calls
+        if not uncertain_coral:
+            assert "internal/compute/jobs/claim" in calls
         assert "internal/compute/af3/jobs/claim" in calls
     finally:
         if worker_task is not None:
@@ -203,13 +220,18 @@ async def test_one_process_receives_generic_and_af3_jobs_and_closes_its_local_mc
         server.should_exit = True
         await asyncio.wait_for(backend_task, 5)
         sock.close()
+    if uncertain_coral:
+        journal = Journal(tmp_path / "coral.sqlite3")
+        assert journal.recover()[0]["state"] == "executing"
+        journal.close()
     async with httpx.AsyncClient(timeout=1) as client:
         with pytest.raises(httpx.ConnectError):
             await client.post(f"http://127.0.0.1:{mcp_port}/mcp")
 
 
 @pytest.mark.asyncio
-async def test_lost_result_ack_retries_artifact_upload_against_existing_af3_api(tmp_path):
+@pytest.mark.parametrize("close_stage", [None, "waiting", "pending_ack"])
+async def test_lost_result_ack_retries_artifact_upload_against_existing_af3_api(tmp_path, close_stage):
     from app.config import Settings
     from app.main import create_app
 
@@ -245,14 +267,22 @@ async def test_lost_result_ack_retries_artifact_upload_against_existing_af3_api(
 
         class Model:
             async def execute(self, grant, *, context=None):
-                return Pending.model_validate(spool.submit(**grant.job.arguments))
+                result = Pending.model_validate(spool.submit(**grant.job.arguments))
+                if close_stage == "pending_ack":
+                    assert (await client.delete("/api/v1/af3/jobs/" + job_id, headers=user_headers)).status_code == 200
+                return result
 
             async def poll(self, grant, pending):
                 return parse_report(spool.status(pending.job_id), grant.job.capability)
 
+            async def cancel(self, grant, pending):
+                return False  # AF3 does not advertise physical cancellation.
+
         worker = Receiver(Model(), control, journal,
                           ComputeClaimRequest(service_id="af3-mcp", worker_id="af3-worker"))
         assert (await worker.run_once()).status == "pending"
+        if close_stage == "waiting":
+            assert (await client.delete("/api/v1/af3/jobs/" + job_id, headers=user_headers)).status_code == 200
         directory = spool.directory(job_id)
         (directory / "output").mkdir()
         (directory / "output/model.cif").write_text("data_test\n#\n")
@@ -262,7 +292,12 @@ async def test_lost_result_ack_retries_artifact_upload_against_existing_af3_api(
         with pytest.raises(httpx.ReadError):
             await worker.run_once()
         assert journal.recover()[0]["state"] == "outbox"
-        assert (await client.get("/api/v1/af3/jobs/" + job_id, headers=user_headers)).json()["status"] == "completed"
+        state = (await client.get("/api/v1/af3/jobs/" + job_id, headers=user_headers)).json()
+        assert state["status"] == ("cancelled" if close_stage else "completed")
+        assert state["actual_gpu_minutes"] == 1
+        if close_stage:
+            assert state["gpu_accounting_status"] == "reconciled"
+            assert state["artifacts"] == []
         assert (await worker.run_once()).status == "acknowledged"
         assert journal.recover() == []
         control.cleanup(job_id)

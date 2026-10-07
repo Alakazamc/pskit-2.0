@@ -9,6 +9,8 @@ import math
 import shutil
 from datetime import UTC, datetime, timedelta
 
+import httpx
+
 from app.contracts.compute import (
     CapabilityVersion,
     ComputeBudget,
@@ -24,11 +26,22 @@ from pskit_compute.dynamic_mcp import DynamicMcpExecutor
 
 
 class Af3McpExecutor(DynamicMcpExecutor):
+    def __init__(self, endpoint_resolver, credential_resolver, *, spool=None):
+        super().__init__(endpoint_resolver, credential_resolver)
+        self.spool = spool
+
     async def recover(self, grant):
         if grant.job.service_id != "af3-mcp" or grant.job.arguments.get("task_id") != grant.job.id:
             raise ValueError("AF3_RECOVERY_IDENTITY_MISMATCH")
         # The local AF3 MCP service locks and compares input.json before publishing it.
         return await self.execute(grant)
+
+    async def recover_detached(self, grant):
+        if (grant.job.service_id != "af3-mcp" or self.spool is None
+                or not (self.spool.directory(grant.job.id) / "input.json").exists()):
+            raise ValueError("AF3_DETACHED_OUTCOME_UNKNOWN")
+        # Observation of a previously published input never authorizes a new submission.
+        return await self.poll(grant, Pending(job_id=grant.job.id))
 
 
 class Af3ControlClient:
@@ -83,31 +96,80 @@ class Af3ControlClient:
         )
 
     async def heartbeat(self, grant, payload):
-        await self.request("POST", f"/internal/compute/af3/jobs/{grant.job.id}/heartbeat", json={
-            "worker_id": grant.worker_id, "lease_token": grant.fencing_token, "lease_seconds": 60,
-        })
-        await self.request("POST", f"/internal/compute/af3/jobs/{grant.job.id}/progress", json={
-            "worker_id": grant.worker_id, "lease_token": grant.fencing_token,
-            "attempt": grant.attempt, "progress": payload.progress,
-        })
+        try:
+            await self.request("POST", f"/internal/compute/af3/jobs/{grant.job.id}/heartbeat", json={
+                "worker_id": grant.worker_id, "lease_token": grant.fencing_token, "lease_seconds": 60,
+            })
+            await self.request("POST", f"/internal/compute/af3/jobs/{grant.job.id}/progress", json={
+                "worker_id": grant.worker_id, "lease_token": grant.fencing_token,
+                "attempt": grant.attempt, "progress": payload.progress,
+            })
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code != 409 or not self.is_late(await self.central_job(grant)):
+                raise
+            # A closed server job still needs the independently running model's final usage.
+            return GrantUpdate(stop_at=grant.stop_at,
+                               lease_expires_at=datetime.now(UTC), cancel_requested=True)
         return GrantUpdate(stop_at=grant.stop_at,
                            lease_expires_at=datetime.now(UTC) + timedelta(seconds=60),
                            cancel_requested=False)
+
+    async def central_job(self, grant):
+        result = await self.request("GET", f"/internal/compute/af3/jobs/{grant.job.id}")
+        if result.get("id") != grant.job.id:
+            raise ValueError("AF3_CALLBACK_ACK_MISMATCH")
+        return result
+
+    @staticmethod
+    def is_late(job):
+        return job.get("status") in {"cancelled", "failed"} and job.get("gpu_accounting_status") in {
+            "pending_reconciliation", "reconciled",
+        }
+
+    async def reconcile(self, grant, payload, closed):
+        report = payload.report
+        minutes = math.ceil(report.usage.gpu_device_ms / 60000)
+        result = await self.request("POST", f"/internal/af3/jobs/{grant.job.id}/result", json={
+            "status": report.status, "actual_gpu_minutes": minutes,
+            "attempt": grant.attempt, "lease_token": grant.fencing_token, "artifacts": [],
+        })
+        if (result.get("id") != grant.job.id or result.get("status") != closed["status"]
+                or result.get("actual_gpu_minutes") != minutes
+                or result.get("gpu_accounting_status") != "reconciled"
+                or result.get("artifacts", []) != closed.get("artifacts", [])):
+            raise ValueError("AF3_RECONCILIATION_ACK_MISMATCH")
+        self.acknowledged.add(grant.job.id)
+        return self.receipt(grant, payload, result["status"])
+
+    @staticmethod
+    def receipt(grant, payload, status):
+        return UsageReceipt(receipt_id=f"af3:{grant.job.id}:{payload.seq}", job_id=grant.job.id,
+                            accepted_seq=payload.seq, status=status,
+                            payload_hash=payload_hash(payload.model_dump(mode="json")))
 
     async def complete(self, grant, payload):
         report = payload.report
         if isinstance(report, Pending):
             if report.job_id != grant.job.id:
                 raise ValueError("AF3_REMOTE_JOB_CONFLICT")
-            acknowledgement = await self.request(
-                "POST", f"/internal/compute/af3/jobs/{grant.job.id}/progress", json={
-                    "worker_id": grant.worker_id, "lease_token": grant.fencing_token,
-                    "attempt": grant.attempt, "progress": 5,
-                })
+            try:
+                acknowledgement = await self.request(
+                    "POST", f"/internal/compute/af3/jobs/{grant.job.id}/progress", json={
+                        "worker_id": grant.worker_id, "lease_token": grant.fencing_token,
+                        "attempt": grant.attempt, "progress": 5,
+                    })
+            except httpx.HTTPStatusError as error:
+                if error.response.status_code != 409 or not self.is_late(await self.central_job(grant)):
+                    raise
+                # Persist detached waiting; keep journal/spool until final accounting commits.
+                return self.receipt(grant, payload, "pending")
             if acknowledgement.get("id") != grant.job.id or acknowledgement.get("status") != "running":
                 raise ValueError("AF3_CALLBACK_ACK_MISMATCH")
             status = "pending"
         else:
+            state = await self.central_job(grant)
+            if self.is_late(state):
+                return await self.reconcile(grant, payload, state)
             directory = self.spool.directory(grant.job.id)
             paths = {hashlib.sha256((grant.job.id + "/" + p.relative_to(directory / "output")
                                     .as_posix()).encode()).hexdigest()[:32]: p
@@ -120,11 +182,17 @@ class Af3ControlClient:
                 content = path.read_bytes()
                 if artifact.sha256 and hashlib.sha256(content).hexdigest() != artifact.sha256:
                     raise ValueError("AF3_ARTIFACT_CHANGED")
-                await self.request("PUT", f"/internal/af3/jobs/{grant.job.id}/artifacts/{artifact.id}",
-                                   params={"name": artifact.name, "kind": artifact.kind,
-                                           "attempt": grant.attempt}, content=content,
-                                   headers={"X-Compute-Lease": grant.fencing_token,
-                                            "Content-Type": "application/octet-stream"})
+                try:
+                    await self.request("PUT", f"/internal/af3/jobs/{grant.job.id}/artifacts/{artifact.id}",
+                                       params={"name": artifact.name, "kind": artifact.kind,
+                                               "attempt": grant.attempt}, content=content,
+                                       headers={"X-Compute-Lease": grant.fencing_token,
+                                                "Content-Type": "application/octet-stream"})
+                except httpx.HTTPStatusError as error:
+                    state = await self.central_job(grant)
+                    if error.response.status_code == 409 and self.is_late(state):
+                        return await self.reconcile(grant, payload, state)
+                    raise
                 artifacts.append({"id": artifact.id, "name": artifact.name, "kind": artifact.kind})
             minutes = math.ceil(report.usage.gpu_device_ms / 60000)
             result = await self.request("POST", f"/internal/af3/jobs/{grant.job.id}/result", json={
@@ -140,9 +208,7 @@ class Af3ControlClient:
             status = report.status
             self.acknowledged.add(grant.job.id)
         # Translate only a successful, matching durable legacy server ACK.
-        return UsageReceipt(receipt_id=f"af3:{grant.job.id}:{payload.seq}", job_id=grant.job.id,
-                            accepted_seq=payload.seq, status=status,
-                            payload_hash=payload_hash(payload.model_dump(mode="json")))
+        return self.receipt(grant, payload, status)
 
     def cleanup(self, job_id):
         if job_id not in self.acknowledged:

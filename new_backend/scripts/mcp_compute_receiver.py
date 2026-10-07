@@ -64,7 +64,7 @@ def configured_resolvers(environ=None):
     return endpoint, credential
 
 
-async def receive(receiver, poll_seconds, *, cleanup=None):
+async def receive(receiver, poll_seconds, *, cleanup=None, isolate_failures=False):
     """Run one shared receiver without removing unacknowledged model outcomes."""
     last_status = None
     while True:
@@ -75,8 +75,23 @@ async def receive(receiver, poll_seconds, *, cleanup=None):
                         receiver.identity.service_id, type(error).__name__)
             await asyncio.sleep(max(1, poll_seconds))
             continue
+        except Exception as error:
+            # Isolate services while retaining the journal and the original failure state.
+            if not isolate_failures:
+                raise
+            LOG.error("%s: requires reconciliation (%s); other services continue",
+                      receiver.identity.service_id, type(error).__name__)
+            await asyncio.sleep(30)
+            continue
         if outcome.status == "unknown":
-            raise RuntimeError("Execution outcome unknown; retain journal for operator reconciliation")
+            if not isolate_failures:
+                raise RuntimeError("Execution outcome unknown; retain journal for operator reconciliation")
+            if last_status != "unknown":
+                LOG.error("%s: execution unknown; journal retained, other services continue",
+                          receiver.identity.service_id)
+            last_status = "unknown"
+            await asyncio.sleep(max(1, poll_seconds))
+            continue
         if outcome.status == "acknowledged" and cleanup is not None:
             # Receiver.run_once has already verified and committed the journal ACK.
             try:
@@ -155,12 +170,13 @@ async def run(args) -> None:
                 gpu_memory_mb=args.af3_gpu_memory_mb,
             )
             af3_receiver = Receiver(
-                Af3McpExecutor(endpoint, credential), af3_control, af3_journal,
+                Af3McpExecutor(endpoint, credential, spool=spool), af3_control, af3_journal,
                 ComputeClaimRequest(service_id="af3-mcp", worker_id=args.af3_worker_id),
             )
             async with local_af3_mcp(spool, args.af3_mcp_port), asyncio.TaskGroup() as group:
-                group.create_task(receive(receiver, args.poll_seconds))
-                group.create_task(receive(af3_receiver, args.poll_seconds, cleanup=af3_control.cleanup))
+                group.create_task(receive(receiver, args.poll_seconds, isolate_failures=True))
+                group.create_task(receive(af3_receiver, args.poll_seconds,
+                                          cleanup=af3_control.cleanup, isolate_failures=True))
 
 
 def argument_parser():
