@@ -15,6 +15,7 @@
 | 阿里云 WireGuard | AF3 私网 Nginx | `10.9.8.1:18184`，只允许 A6000 `10.9.8.2` |
 | 阿里云 WireGuard | 通用计算私网 Caddy | `10.9.8.1:18186`，只允许 A6000 `10.9.8.2` |
 | A6000 | 一个通用 MCP/AF3 接收器、一个独立 AF3 计算容器 | 接收器主动连接阿里云；CORAL 调用 4090 MCP |
+| A6000 WireGuard | 已审核的 AF3 MCP | `10.9.8.2:18187/mcp`，必须使用服务端 Bearer 凭据 |
 | 4090 | CORAL MCP 模型服务 | 由已审核的服务绑定选择，不向浏览器暴露服务端凭据 |
 | 阿里云 Staging | 独立数据库、模型替身、AF3 替身、前端 `dist` | `10.9.8.1:18132`，仅私网 |
 
@@ -69,6 +70,8 @@ VITE_TURNSTILE_SITE_KEY='<public-site-key>' npm run build
 
 产物是 `new_frontend/dist`。由有权限的运维进程把本次**完整且已核对**的产物发布到 `/var/www/agent.bioailab.net`。生产 Nginx 使用 [`host-nginx-agent-aliyun.conf`](host-nginx-agent-aliyun.conf)：`/api/v1/` 转到本机 Python，`/internal/` 返回 404，其余路径由 SPA 处理。发布静态文件时无需启动 `web` 容器。
 
+生产构建必须显式使用阿里云 `cloud.env` 中现有的公共 `TURNSTILE_SITE_KEY`，不能沿用本地 `.env.local` 的测试站点 key。发布前比较 key 的 SHA256 与制品 manifest，并检查它确实存在于本次 JS assets 中。Cloudflare `1x000…`、`2x000…`、`3x000…` 测试 key 只用于本地或 Staging。校验失败时保留原生产 `index.html`，先重新构建静态制品，不重建后端或数据库。
+
 首次安装或修改 Nginx 配置时，在阿里云 root 会话切换到部署仓库根目录，再运行：
 
 ```bash
@@ -96,7 +99,7 @@ A6000 使用一个 `pskit-mcp-receiver-a6000` 容器、一个 Python 进程接�
 
 ### 阿里云私网控制入口
 
-既有 AF3 兼容入口 `10.9.8.1:18184` 保留历史任务、GPU 结算和 Pi 唤醒。通用计算入口 `10.9.8.1:18186` 由固定版本 Caddy 提供，只允许源地址 `10.9.8.2` 的 claim、heartbeat、result。后端仍验证服务密钥和执行租约。该入口没有公网或通用管理 API 路由。
+既有 AF3 兼容入口 `10.9.8.1:18184` 保留历史任务、GPU 结算和 Pi 唤醒。通用计算入口 `10.9.8.1:18186` 由固定版本 Caddy 提供，只允许源地址 `10.9.8.2` 的 claim、heartbeat、result 和产物 GET/PUT。后端仍验证服务密钥和执行租约。该入口没有公网或通用管理 API 路由。
 
 AF3 私网代理还需放行带密钥的 `GET /internal/compute/af3/jobs/:jobId`，用于确认终态与晚到用量结算；不能将全部 internal API 开放。云端 Compose 将 `AGENT_AF3_PROXY_SCRIPT` 指向本次已校验的不可变代理源码，默认使用仓库脚本，只读挂载到代理容器。修改白名单时只更新代理；无需重启后端或模型容器。
 
@@ -125,7 +128,7 @@ AGENT_MCP_RECEIVER_GID=1006
 AGENT_AF3_RECEIVER_SPOOL=/data/jhli/pskit-af3-receiver-test-20261002/spool
 ```
 
-UID/GID 必须匹配既有 AF3 spool。通用和 AF3 journal 分别使用 `coral.sqlite3`、`af3.sqlite3`；任何未确认记录都保留。切换前核对服务端活动任务及旧 journal，停止旧 AF3 接收器，保留模型计算容器，再运行：
+UID/GID 必须匹配既有 AF3 spool。CORAL、兼容 AF3、Tools AF3 journal 分别使用 `coral.sqlite3`、`af3.sqlite3`、`af3-product.sqlite3`；任何未确认记录都保留。升级到受保护的 WireGuard MCP 端点前，必须确认旧 journal 已排空；仍有记录则先用旧接收器完成回执，不能删除或修改旧 grant。切换前核对服务端活动任务及旧 journal，停止旧 AF3 接收器，保留模型计算容器，再运行：
 
 ```bash
 docker compose --env-file /path/to/compose.env \
@@ -133,7 +136,17 @@ docker compose --env-file /path/to/compose.env \
 docker logs --tail 30 pskit-mcp-receiver-a6000
 ```
 
-必须确认两个循环均正常工作，且只有一个接收器领取生产 AF3。旧 [`compose.a6000-receiver.yaml`](compose.a6000-receiver.yaml) 只供经过 journal/owned 核对后的恢复使用，不能与通用接收器同时领任务。
+必须确认 CORAL、兼容 AF3、Tools AF3 三个入口均正常工作，且只有一个接收器领取生产 AF3。两个 AF3 入口共享串行执行通道。旧 [`compose.a6000-receiver.yaml`](compose.a6000-receiver.yaml) 只供经过 journal/owned 核对后的恢复使用，不能与通用接收器同时领任务。
+
+Tools AF3 使用独立的 `af3-mcp` 服务密钥和 `af3-mcp-key` 凭据引用；MCP Bearer 凭据留在阿里云后端与 A6000 接收器私有配置。通用 `compute-*` Job 映射到 UUID spool 目录，公开报告保留原 Job ID，以兼容原生 AF3 计算器。
+
+### CORAL 与 AF3 下载
+
+服务绑定通过 `artifact_tool` 明确选择 `pskit.artifacts.read`。接收器按至多 512 KiB 的块读取文件，校验大小和 SHA256，将完整文件存入既有 PostgreSQL blob 表；文件提交和结果提交都收到回执后才清理 outbox。限制为每文件 64 MiB、每 Job 256 MiB、128 个文件。拥有者只能下载终态报告声明且实际存储匹配的文件。
+
+CORAL 的提供端安装器位于 `new_backend/integrations/coral/install_artifacts.py`。重启提供端时使用同目录的 `launch_artifact_server.py`，显式提供 Python 和 Foldseek 路径；保留 `.pskit-mcp.runtime.env` 中的原有模块路径，并将 workspace 规范为绝对路径。确认没有模型调用执行中，再重启本项目的 MCP PID。不要替换其他人的服务或模型实现。
+
+管理员批准历史产物恢复后，在后端容器运行 `python -m scripts.backfill_compute_artifacts --service-id coral-mcp --actor <operator>`。此操作读取已发布历史绑定和终态 Job，校验文件后补存并写审计，不调用推理工具。
 
 AF3 计算完成后，结果与产物先进入 outbox；收到且验证服务端提交回执后才清理 journal，再删除已确认的 spool。用户取消或任务超时后，已开始的计算继续报告晚到用量，确认 `reconciled` 后才清理，不重新打开任务。CORAL 的不确定结果保留为 `unknown`，只暂停该服务，AF3 循环继续运行。
 
