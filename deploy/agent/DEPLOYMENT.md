@@ -59,6 +59,28 @@ bash deploy/agent/stack.sh logs litellm
 bash deploy/agent/stack.sh logs agent
 ```
 
+### 后端镜像构建源
+
+后端 Dockerfile 的 Node 与 Python 基础镜像仍默认锁定版本和 digest。网络正常时直接构建：
+
+```bash
+docker build --label org.opencontainers.image.revision="$COMMIT" \
+  -f deploy/agent/backend.Dockerfile -t "$IMAGE" new_backend
+```
+
+WSL NAT 访问 Docker Hub、PyPI 或 npm 较慢时，可以只替换下载入口，不改变依赖版本：
+
+```bash
+docker build --label org.opencontainers.image.revision="$COMMIT" \
+  --build-arg PYPI_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+  --build-arg NPM_REGISTRY=https://registry.npmmirror.com \
+  --build-arg NODE_BASE_IMAGE="$PSKIT_NODE_BASE_IMAGE" \
+  --build-arg PYTHON_BASE_IMAGE="$PSKIT_PYTHON_BASE_IMAGE" \
+  -f deploy/agent/backend.Dockerfile -t "$IMAGE" new_backend
+```
+
+两个基础镜像参数必须指向已经核对过 image ID 的固定镜像引用，不能使用 `latest`。未配置可信基础镜像缓存时省略这两个参数，继续使用 Dockerfile 中的官方 digest。PyPI 与 npm 参数只接受不含账号、Token 或密码的公开 HTTPS 镜像地址；构建参数会进入镜像历史。构建后记录 image ID、完整 revision label，并与上一生产镜像比较 `pip freeze`；镜像源变化不能作为依赖版本变化的理由。
+
 ## 3. 前端和 Nginx
 
 执行主机：阿里云。执行条件：`new_frontend` 的依赖已锁定；`agent.bioailab.net` 的 TLS 证书可用。

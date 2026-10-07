@@ -1,9 +1,16 @@
-FROM node:22.21.1-bookworm-slim@sha256:25b3eb23a00590b7499f2a2ce939322727fcce1b15fdd69754fcd09536a3ae2c AS pi-build
+ARG NODE_BASE_IMAGE=node:22.21.1-bookworm-slim@sha256:25b3eb23a00590b7499f2a2ce939322727fcce1b15fdd69754fcd09536a3ae2c
+ARG PYTHON_BASE_IMAGE=python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
+
+FROM ${NODE_BASE_IMAGE} AS pi-build
+ARG NPM_REGISTRY=https://registry.npmjs.org
 WORKDIR /opt/pi
 COPY pi/package.json pi/package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts && test -x node_modules/.bin/pi
+RUN npm config set registry "${NPM_REGISTRY}" --location=project && \
+    npm config set replace-registry-host always --location=project && \
+    npm ci --omit=dev --ignore-scripts && test -x node_modules/.bin/pi
 
-FROM python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
+FROM ${PYTHON_BASE_IMAGE}
+ARG PYPI_INDEX_URL=https://pypi.org/simple
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH=/app/pi/node_modules/.bin:${PATH} \
@@ -15,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 && \
     groupadd --gid 10001 agent && useradd --uid 10001 --gid 10001 --home-dir /home/agent --create-home agent && \
     mkdir -p /data /workspace && chown agent:agent /data /workspace
 COPY pyproject.toml ./
-RUN python -c "import subprocess,sys,tomllib; dependencies=tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']; subprocess.check_call([sys.executable,'-m','pip','install','--no-cache-dir',*dependencies])"
+RUN PIP_INDEX_URL="${PYPI_INDEX_URL}" python -c "import subprocess,sys,tomllib; dependencies=tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']; subprocess.check_call([sys.executable,'-m','pip','install','--no-cache-dir',*dependencies])"
 COPY app ./app
 COPY pskit_compute ./pskit_compute
 COPY --from=pi-build /usr/local/bin/node /usr/local/bin/node
