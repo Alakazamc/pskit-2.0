@@ -73,13 +73,10 @@ User=root
 Group=root
 UMask=0177
 NoNewPrivileges=true
-PrivateTmp=true
-ProtectHome=true
-ProtectSystem=strict
-ReadWritePaths=$root /run/docker/plugins
 CapabilityBoundingSet=CAP_SYS_ADMIN
 AmbientCapabilities=CAP_SYS_ADMIN
 RestrictAddressFamilies=AF_UNIX
+PrivateMounts=false
 
 [Install]
 WantedBy=multi-user.target

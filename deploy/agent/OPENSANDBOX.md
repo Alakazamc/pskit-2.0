@@ -66,6 +66,9 @@ Docker 通过 `/run/docker/plugins/pskit-quota.sock` 发现驱动，且不需要
 Docker。生产配置固定 `OPENSANDBOX_VOLUME_DRIVER=pskit-quota`。不要手工删除
 `images/`、`mounts/` 或 `state/`；OpenSandbox 停止用户实例时使用
 `delete_on_sandbox_termination=false`，因此用户卷会跨实例保留。
+卷插件作为受信任的 root 宿主组件运行在宿主 mount namespace；不要给它增加
+`PrivateMounts`、`ProtectSystem` 或其它会创建私有 mount namespace 的 systemd
+选项，否则 Docker 看不到插件返回的 ext4 mountpoint。
 
 实际宿主启用时使用 `activate_opensandbox_host.sh` 统一执行上述两个已预览的
 安装步骤。该脚本显式 `reload` Docker，运行无网络 `runsc` 探针，并比较
