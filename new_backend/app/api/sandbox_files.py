@@ -11,6 +11,7 @@ from app.api.auth import CurrentUserDep
 from app.contracts.catalog import ArtifactRef
 from app.contracts.sandbox import WorkspaceFileRef
 from app.domain.catalog import ContextNotFound
+from app.ports.workspace_sandbox import WorkspaceProviderError
 
 router = APIRouter(prefix="/api/v1/sandbox", tags=["sandbox files"])
 
@@ -34,6 +35,11 @@ async def prepare(session_id: str, payload: PrepareFiles, user: CurrentUserDep, 
         raise HTTPException(status_code=404, detail="Session or file not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid workspace transfer") from exc
+    except WorkspaceProviderError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": exc.code.value, "retryable": exc.retryable},
+        ) from exc
 
 
 @router.get("/artifacts", response_model=list[ArtifactRef])

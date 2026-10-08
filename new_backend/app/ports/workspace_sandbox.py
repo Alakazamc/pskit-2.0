@@ -21,6 +21,7 @@ class WorkspaceErrorCode(StrEnum):
     CONFLICT = "WORKSPACE_CONFLICT"
     TIMEOUT = "WORKSPACE_TIMEOUT"
     CAPACITY = "WORKSPACE_CAPACITY"
+    NOT_FOUND = "WORKSPACE_NOT_FOUND"
     INVALID_PATH = "WORKSPACE_INVALID_PATH"
     CANCEL_UNCONFIRMED = "WORKSPACE_CANCEL_UNCONFIRMED"
 
@@ -75,6 +76,13 @@ class WorkspaceCapacityExceeded(WorkspaceProviderError):
 
     def __init__(self, message: str = "Workspace capacity is exhausted") -> None:
         super().__init__(WorkspaceErrorCode.CAPACITY, message, retryable=True)
+
+
+class WorkspaceNotFound(WorkspaceProviderError):
+    """The requested regular workspace object does not exist."""
+
+    def __init__(self, message: str = "Workspace object was not found") -> None:
+        super().__init__(WorkspaceErrorCode.NOT_FOUND, message)
 
 
 class WorkspaceInvalidPath(WorkspaceProviderError):

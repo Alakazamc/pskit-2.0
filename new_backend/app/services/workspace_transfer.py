@@ -11,6 +11,8 @@ from pathlib import Path, PurePosixPath
 
 from app.contracts.sandbox import WorkspaceFileRef
 from app.domain.catalog import ContextNotFound
+from app.domain.workspace_paths import WorkspacePathPolicy
+from app.services.workspace_files import WorkspaceFiles, WorkspaceOperationContext
 
 MAX_WORKSPACE_FILE_BYTES = 20 * 1024 * 1024
 MAX_WORKSPACE_EXPORT_BYTES = 100 * 1024 * 1024
@@ -157,16 +159,17 @@ class LocalWorkspace:
 
 
 class WorkspaceTransfer:
-    """Resolve catalog IDs before forwarding bytes; register only scoped output artifacts."""
+    """Resolve catalog IDs before provider transfer and collect scoped artifacts."""
 
-    def __init__(self, catalog, runner, artifacts, *, conversations=None):
+    def __init__(self, catalog, provider, artifacts, *, conversations=None):
         self.catalog = catalog
-        self.runner = runner
+        self.provider = provider
+        self.files = WorkspaceFiles(provider)
         self.artifacts = artifacts
         self.conversations = conversations
 
     def _owns_session(self, user_id, session_id):
-        LocalWorkspace._identity(session_id)
+        WorkspacePathPolicy.identifier(session_id, "session ID")
         if (
             self.conversations is not None
             and self.conversations.project_id_for_session(user_id, session_id) is None
@@ -185,62 +188,55 @@ class WorkspaceTransfer:
             if len(raw) > MAX_WORKSPACE_FILE_BYTES:
                 raise ValueError("Workspace file exceeds limit")
             digest = hashlib.sha256(raw).hexdigest()
-            # Display names never determine filesystem paths.
-            suffix = Path(file.name).suffix
-            safe_id = hashlib.sha256(file_id.encode()).hexdigest()[:24]
-            suffix = suffix if re.fullmatch(r"\.[A-Za-z0-9]{1,12}", suffix) else ""
+            target = WorkspacePathPolicy.upload(session_id, file_id, file.name, digest)
             ref = WorkspaceFileRef(
                 id=file_id,
                 name=file.name,
-                relative_path=f"files/{safe_id}-{digest[:16]}{suffix}",
+                relative_path=target.logical,
                 sha256=digest,
                 size=len(raw),
             )
             payloads.append((ref, raw))
+        context = WorkspaceOperationContext(
+            user_id=user_id, session_id=session_id, attempt_id="transfer"
+        )
         for ref, raw in payloads:
-            await self.runner.workspace_request(
-                user_id,
-                "POST",
-                "/v1/workspace/files",
-                json={
-                    "session_id": session_id,
-                    "relative_path": ref.relative_path,
-                    "sha256": ref.sha256,
-                    "content_b64": base64.b64encode(raw).decode(),
-                },
+            await self.files.put_upload(
+                context,
+                file_id=ref.id,
+                name=ref.name,
+                content=raw,
+                digest=ref.sha256,
             )
         return [ref for ref, _ in payloads]
 
     async def collect(self, user_id, session_id, attempt_id):
         self._owns_session(user_id, session_id)
-        LocalWorkspace._identity(attempt_id)
-        data = await self.runner.workspace_request(
-            user_id,
-            "GET",
-            "/v1/workspace/artifacts",
-            params={"session_id": session_id, "attempt_id": attempt_id},
-            continuation_attempt_id=attempt_id,
+        WorkspacePathPolicy.identifier(attempt_id, "attempt ID")
+        context = WorkspaceOperationContext(
+            user_id=user_id, session_id=session_id, attempt_id=attempt_id
         )
-        entries = data["files"]
+        directory = WorkspacePathPolicy.artifact(session_id, attempt_id).logical
+        entries = await self.files.list(context, directory, max_depth=1, max_entries=100)
         if len(entries) > 100:
             raise ValueError("Too many workspace artifacts")
         verified = []
         total = 0
         for item in entries:
-            name = item["name"]
-            if (
-                len(LocalWorkspace._parts(name)) != 1
-                or item["relative_path"] != f"artifacts/{attempt_id}/{name}"
-            ):
+            if item.kind != "file":
+                raise ValueError("Workspace artifact is not a regular file")
+            prefix = f"artifacts/{attempt_id}/"
+            if not item.path.startswith(prefix) or "/" in item.path[len(prefix) :]:
                 raise ValueError("Invalid artifact path")
-            if len(item["content_b64"]) > MAX_WORKSPACE_FILE_BYTES * 4 // 3 + 8:
+            name = item.path[len(prefix) :]
+            if len(LocalWorkspace._parts(name)) != 1 or item.size > MAX_WORKSPACE_FILE_BYTES:
                 raise ValueError("Workspace artifact exceeds limit")
-            raw = base64.b64decode(item["content_b64"], validate=True)
+            raw = await self.files.read_all(context, item.path, max_bytes=MAX_WORKSPACE_FILE_BYTES)
             total += len(raw)
             if (
                 len(raw) > MAX_WORKSPACE_FILE_BYTES
                 or total > MAX_WORKSPACE_EXPORT_BYTES
-                or (hashlib.sha256(raw).hexdigest() != item["sha256"] or len(raw) != item["size"])
+                or len(raw) != item.size
             ):
                 raise ValueError("Invalid workspace artifact")
             verified.append((name, raw))

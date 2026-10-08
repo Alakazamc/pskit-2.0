@@ -21,6 +21,7 @@ import httpx
 
 from app.ports.workspace_sandbox import (
     WorkspaceCapacityExceeded,
+    WorkspaceNotFound,
     WorkspaceProviderError,
     WorkspaceTimeout,
     WorkspaceUnavailable,
@@ -643,4 +644,6 @@ class OpenSandboxCompat:
             return WorkspaceTimeout(f"Workspace {operation} timed out")
         if status == 429 or "ratelimit" in name or "poolempty" in name:
             return WorkspaceCapacityExceeded()
+        if status == 404 or "notfound" in name or "filenotfound" in name:
+            return WorkspaceNotFound()
         return WorkspaceUnavailable(f"Workspace {operation} is unavailable")
