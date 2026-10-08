@@ -144,8 +144,7 @@ class ModelCatalog:
                     id=model_id,
                     supports_images=(
                         model_id in self.image_model_ids
-                        or bool(info.get(model_id))
-                        and all(info[model_id])
+                        or any(info.get(model_id, []))
                     ),
                     reasoning_levels=_reasoning_levels(
                         deployment_info.get(model_id, reasoning_info.get(model_id, []))
