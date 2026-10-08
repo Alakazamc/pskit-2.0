@@ -77,11 +77,17 @@ function ComposerInput({ draftScope, onSend, onUpload, onLoadAttachmentImage, on
     if (userId && conversationId && defaultModelId && !useDraftStore.getState().model) setModel(defaultModelId);
   }, [userId, conversationId, defaultModelId, useDraftStore, setModel]);
   const [stopping, setStopping] = useState(false);
-  const picker = content.endsWith("/") ? "skill" : content.endsWith("@") ? "resource" : null;
+  const mentionMatch = content.match(/@([^@\s]*)$/);
+  const mentionStart = mentionMatch?.index ?? -1;
+  const mentionActive = mentionStart >= 0 && (mentionStart === 0 || /\s/.test(content[mentionStart - 1] ?? ""));
+  const picker = mentionActive ? "mention" : content.endsWith("/") ? "skill" : null;
+  const pickerQuery = (mentionActive ? mentionMatch?.[1] ?? "" : "").toLocaleLowerCase();
+  const visibleSkills = skills.filter((skill) => skill.available !== false && `${skill.name} ${skill.description ?? ""}`.toLocaleLowerCase().includes(pickerQuery));
+  const visibleResources = resources.filter((resource) => `${resource.name} ${resource.description ?? ""}`.toLocaleLowerCase().includes(pickerQuery));
   const projectSkillSet = new Set(projectSkillIds);
   const groupedSkills = [
-    { label: t("composer.projectSkills"), items: skills.filter((skill) => projectSkillSet.has(skill.id)) },
-    { label: t("composer.globalSkills"), items: skills.filter((skill) => !projectSkillSet.has(skill.id)) },
+    { label: t("composer.projectSkills"), items: visibleSkills.filter((skill) => projectSkillSet.has(skill.id)) },
+    { label: t("composer.globalSkills"), items: visibleSkills.filter((skill) => !projectSkillSet.has(skill.id)) },
   ];
   useEffect(() => () => {
     objectUrls.current.forEach((url) => URL.revokeObjectURL(url));
@@ -138,8 +144,9 @@ function ComposerInput({ draftScope, onSend, onUpload, onLoadAttachmentImage, on
       }));
     },
   });
-  const selectSkill = (ref: CatalogItem) => { addSkill(ref); setText(content.slice(0, -1)); };
-  const selectResource = (ref: CatalogItem) => { addResource(ref); setText(content.slice(0, -1)); };
+  const clearPickerTrigger = () => setText(mentionActive ? content.slice(0, mentionStart) : content.slice(0, -1));
+  const selectSkill = (ref: CatalogItem) => { addSkill(ref); clearPickerTrigger(); };
+  const selectResource = (ref: CatalogItem) => { addResource(ref); clearPickerTrigger(); };
   const send = async () => {
     if (!content.trim() || disabled || runActive || modelUnavailable || uploadTiles.some((tile) => tile.status === "uploading")) return;
     if (attachments.some((item) => fileKind(item.name) === "image") && !selectedModel?.supports_images) {
@@ -184,11 +191,10 @@ function ComposerInput({ draftScope, onSend, onUpload, onLoadAttachmentImage, on
       <div className="composer-input-area">
         <textarea aria-label={t("composer.messageLabel")} value={content} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} placeholder={t("composer.placeholder")} rows={3} />
         {picker && <div className="inline-picker" role="listbox">
-          <div className="picker-heading">{t(picker === "skill" ? "composer.pickSkill" : "composer.addResource")}</div>
-          {(picker === "skill" ? skills : resources).length === 0
-            ? <div className="picker-empty">{t(picker === "skill" ? "composer.noSkills" : "composer.noResources")}</div>
-            : picker === "skill" ? groupedSkills.filter((group) => group.items.length).map((group) => <div className="mono-picker-group" key={group.label}><div className="mono-picker-group-label">{group.label}</div>{group.items.map((ref) => <button key={ref.id} type="button" onClick={() => selectSkill(ref)}><Sparkles size={15} />{ref.name}</button>)}</div>)
-              : resources.map((ref) => <button key={ref.id} type="button" onClick={() => selectResource(ref)}><AtSign size={15} />{ref.name}</button>)}
+          <div className="picker-heading">{t(picker === "mention" ? "composer.addMention" : "composer.pickSkill")}</div>
+          {groupedSkills.filter((group) => group.items.length).map((group) => <div className="mono-picker-group" key={group.label}><div className="mono-picker-group-label">{group.label}</div>{group.items.map((ref) => <button key={ref.id} type="button" onClick={() => selectSkill(ref)}><Sparkles size={15} /><span><strong>{ref.name}</strong>{ref.owned_by_me && <small>{t("catalog.privateSkill")}</small>}</span></button>)}</div>)}
+          {picker === "mention" && visibleResources.length > 0 && <div className="mono-picker-group"><div className="mono-picker-group-label">{t("composer.resources")}</div>{visibleResources.map((ref) => <button key={ref.id} type="button" onClick={() => selectResource(ref)}><AtSign size={15} /><span><strong>{ref.name}</strong></span></button>)}</div>}
+          {!visibleSkills.length && (picker !== "mention" || !visibleResources.length) && <div className="picker-empty">{t("composer.noMatchingContext")}</div>}
         </div>}
       </div>
       <div className="composer-toolbar">
@@ -198,7 +204,7 @@ function ComposerInput({ draftScope, onSend, onUpload, onLoadAttachmentImage, on
             <DropdownMenu.Label>{t("composer.addContext")}</DropdownMenu.Label>
             <DropdownMenu.Item onSelect={() => open()}><FilePlus2 size={16} /> {t("composer.addFile")}</DropdownMenu.Item>
             <DropdownMenu.Separator />
-            <DropdownMenu.Item onSelect={() => setText(`${content}/`)}><Sparkles size={16} /> {t("composer.skills")}</DropdownMenu.Item>
+            <DropdownMenu.Item onSelect={() => setText(`${content}@`)}><Sparkles size={16} /> {t("composer.skills")}</DropdownMenu.Item>
             <DropdownMenu.Item onSelect={() => setText(`${content}@`)}><AtSign size={16} /> {t("composer.resources")}</DropdownMenu.Item>
           </DropdownMenu.Content></DropdownMenu.Portal>
         </DropdownMenu.Root>

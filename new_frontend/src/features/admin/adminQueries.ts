@@ -10,6 +10,7 @@ export const adminSections = [
   ["models", "models:read", "admin.models"],
   ["services", "services:read", "admin.services"],
   ["tool-products", "services:read", "admin.toolProducts"],
+  ["skills", "services:read", "admin.skills"],
   ["users", "quotas:read", "admin.users"],
   ["jobs", "jobs:read", "admin.jobs"],
   ["sandboxes", "sandboxes:read", "admin.sandboxes"],

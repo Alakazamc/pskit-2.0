@@ -1,5 +1,6 @@
 /** API contracts generated from the backend OpenAPI document. */
 import type * as Generated from "./generated/types.gen";
+import type { CatalogItem, SkillDetail } from "./types";
 
 export type AdminMe = Generated.AdminMe;
 export type AdminPage<T> = Omit<Required<Generated.AdminPageAdminModel>, "items"> & { items: T[] };
@@ -63,6 +64,8 @@ export interface AdminApi {
   publishToolProduct(reportId: string, request: PublishProductRequest): Promise<PublishedToolProduct>;
   suspendToolProduct(releaseId: string, request: ReleaseActionRequest): Promise<PublishedToolProduct>;
   rollbackToolProduct(releaseId: string, request: ReleaseActionRequest): Promise<PublishedToolProduct>;
+  listSkillReviews(): Promise<SkillDetail[]>;
+  reviewSkill(id: string, version: number, decision: "approve" | "reject", reason: string): Promise<CatalogItem>;
 }
 
 export type AdminRequest = <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -100,5 +103,7 @@ export function createAdminApi(request: AdminRequest): AdminApi {
     publishToolProduct: (reportId, payload) => change(`tool-product-releases/${encodeURIComponent(reportId)}/publish`, payload),
     suspendToolProduct: (releaseId, payload) => change(`tool-product-releases/${encodeURIComponent(releaseId)}/suspend`, payload),
     rollbackToolProduct: (releaseId, payload) => change(`tool-product-releases/${encodeURIComponent(releaseId)}/rollback`, payload),
+    listSkillReviews: () => request("/admin/skills/reviews"),
+    reviewSkill: (id, version, decision, reason) => change(`skills/${encodeURIComponent(id)}/versions/${version}/review`, { decision, reason }),
   };
 }

@@ -301,7 +301,9 @@
   position:absolute;
   bottom:100%;
   left:12px;
-  width:265px
+  width:min(340px,calc(100vw - 48px));
+  max-height:360px;
+  overflow:auto
 }
 .picker-heading,.add-menu [role=menuitem],.add-menu [role=menu] label {
   font-size:11px
@@ -330,6 +332,7 @@
   font-size:12px;
   outline:none
 }
+.inline-picker button>span{display:flex;min-width:0;flex:1;align-items:center;justify-content:space-between;gap:8px}.inline-picker button strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:inherit;font-weight:600}.inline-picker button small{flex:none;color:var(--muted);font-size:9px}
 .inline-picker button:hover,.add-menu [role=menuitem]:hover,.add-menu [data-highlighted] {
   background:var(--soft);
   color:var(--primary)

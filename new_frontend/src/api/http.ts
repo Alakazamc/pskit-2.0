@@ -133,6 +133,11 @@ export function createHttpApi({ baseUrl = "/api/v1", token, fetcher = fetch, onU
     moveSession: (id, targetProjectId, sourceProjectId) => request(`${chatPath(id, sourceProjectId)}/project`, { method: "PATCH", body: JSON.stringify({ project_id: targetProjectId }) }),
     getMessages: (sessionId, projectId) => request(`${chatPath(sessionId, projectId)}/messages`),
     getSkills: () => request("/skills"),
+    getSkill: (id) => request(`/skills/${encodeURIComponent(id)}`),
+    uploadSkill: (file, visibility) => request(
+      `/skills/packages?visibility=${encodeURIComponent(visibility)}`,
+      { method: "POST", body: file, headers: { "Content-Type": "application/zip" } },
+    ),
     getResources: () => request("/resources"),
     getModels: () => request("/models"),
     getFiles: () => request("/files"),

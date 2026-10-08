@@ -25,7 +25,21 @@ export type ProjectSkillSettings = Required<Api.ProjectSkillSettings>;
 export type Session = Api.Session;
 export type RunStatus = Api.RunStatus;
 export type ContextRef = Api.ContextRef;
-export type CatalogItem = Api.CatalogItem;
+export type SkillVisibility = "private" | "review_pending" | "public" | "rejected" | "disabled";
+export type CatalogItem = Api.CatalogItem & {
+  visibility?: SkillVisibility;
+  owned_by_me?: boolean;
+  source?: "builtin" | "upstream" | "user";
+  available?: boolean;
+};
+export type SkillFile = { path: string; size: number; content?: string | null };
+export type SkillDetail = CatalogItem & {
+  files: SkillFile[];
+  license_name?: string | null;
+  source_url?: string | null;
+  source_commit?: string | null;
+  review_reason?: string | null;
+};
 export type FileRef = Api.FileRef;
 export type ArtifactRef = Api.ArtifactRef;
 export type ArtifactPreview = Api.ArtifactPreview;
@@ -105,6 +119,8 @@ export interface ResearchApi extends AdminApi {
   moveSession(id: string, targetProjectId: string, sourceProjectId?: string | null): Promise<Session>;
   getMessages(sessionId: string, projectId?: string | null): Promise<Message[]>;
   getSkills(): Promise<CatalogItem[]>;
+  getSkill(id: string): Promise<SkillDetail>;
+  uploadSkill(file: File, visibility: "private" | "public"): Promise<CatalogItem>;
   getResources(): Promise<CatalogItem[]>;
   getModels(): Promise<ModelOption[]>;
   getFiles(): Promise<FileRef[]>;
