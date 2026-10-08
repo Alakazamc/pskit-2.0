@@ -67,6 +67,11 @@ Docker。生产配置固定 `OPENSANDBOX_VOLUME_DRIVER=pskit-quota`。不要手�
 `images/`、`mounts/` 或 `state/`；OpenSandbox 停止用户实例时使用
 `delete_on_sandbox_termination=false`，因此用户卷会跨实例保留。
 
+实际宿主启用时使用 `activate_opensandbox_host.sh` 统一执行上述两个已预览的
+安装步骤。该脚本显式 `reload` Docker，运行无网络 `runsc` 探针，并比较
+reload 前后的容器名称与 ID；任何既有容器发生变化都会返回失败。脚本不会
+调用 `restart`、`compose down` 或删除卷。
+
 ## 构建与私有配置
 
 ```bash
