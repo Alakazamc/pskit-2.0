@@ -68,6 +68,13 @@
 - Show the submitted user message immediately and keep it visible while POST/history refresh is pending; roll it back on rejection while retaining the composer draft. Place the waiting indicator at the assistant body's top-left content origin only until the first nonempty text arrives. Stream text at that same origin, replacing the indicator; use the same body layout for saved replies. Show reply copy actions only when the run completes, fails, or is cancelled, while keeping historical replies copyable. Keep each run's display isolated when switching runs or sessions.
 - Keep the composer stop action active until the run ends. Verify streamed Markdown growth follows the bottom automatically while preserving the position of a reader who scrolls upward, in both themes at desktop and mobile widths.
 
+## Conversation Rich UI
+
+- Render assistant prose through the shared safe Markdown component, with raw HTML disabled. Render files, artifacts, tool calls, tool results, citations, progress and errors from discriminated `MessagePart` values through `messagePartRegistry.tsx`; do not infer product components from arbitrary prose or allow model-authored HTML/JavaScript.
+- Treat resource IDs as the authority. File and artifact cards use authenticated API methods for open, preview and download, and never resolve model-authored local paths such as `sandbox:/...`. Missing actions or unknown future part types retain a readable, noninteractive fallback.
+- Reuse `ResourceCard.tsx` for conversation files and outputs. Keep the card compact with format, full filename access, explicit open/download controls and local error feedback. Tool-specific result UI registers by tool name; the generic result stays compact and reveals structured JSON only on request.
+- Project live Run events into the same typed parts used by saved messages so text, tools, progress and artifacts do not change component families after persistence. Keep live Markdown streaming and saved-message replacement behavior intact to avoid duplicate replies.
+
 ## Sidebar
 
 - Align section labels and personal chat titles on one left edge. Put the add-project action in the project section heading, keep chat actions available on hover and keyboard focus, and use a full-row gray selected state.

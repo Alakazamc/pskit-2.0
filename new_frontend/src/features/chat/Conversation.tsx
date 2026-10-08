@@ -1,15 +1,15 @@
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import { Check, ChevronDown, ChevronUp, Circle, FlaskConical, LoaderCircle } from "lucide-react";
-import type { Message } from "../../api/types";
+import type { Message, MessagePart } from "../../api/types";
 import type { RunView } from "./events";
 import { MessageParts } from "./MessageParts";
-import { LazyMarkdownContent } from "./LazyMarkdownContent";
 import { ReplyCopyButton } from "./ReplyCopyButton";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { localizedRunError } from "./runErrors";
 import { RunControls } from "../mono/RunControls";
 import { useChatAutoscroll } from "./useChatAutoscroll";
 import { MessageImageAttachment } from "./MessageImageAttachment";
+import type { MessageResourceActions } from "./messagePartRegistry";
 
 type AttachmentImages = { userId: string; loadImage: (id: string) => Promise<Blob> };
 
@@ -20,7 +20,7 @@ function AssistantWaitingIndicator() {
   </div>;
 }
 
-function UserMessage({ message, attachmentImages }: { message: Message; attachmentImages?: AttachmentImages }) {
+function UserMessage({ message, attachmentImages, resourceActions }: { message: Message; attachmentImages?: AttachmentImages; resourceActions?: MessageResourceActions }) {
   const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
   const [canCollapse, setCanCollapse] = useState(false);
@@ -69,7 +69,7 @@ function UserMessage({ message, attachmentImages }: { message: Message; attachme
       </div>}
       {(textParts.length > 0 || otherParts.length > 0) && <div className="message-body">
       {textParts.length > 0 && <div id={textId} ref={textRef} className={`user-message-text${expanded ? "" : " is-collapsed"}`}><MessageParts parts={textParts} /></div>}
-      <MessageParts parts={otherParts} />
+      <MessageParts parts={otherParts} resourceActions={resourceActions} />
       {canCollapse && <button ref={toggleRef} className="user-message-toggle" type="button" aria-expanded={expanded} aria-controls={textId} onClick={toggle}>
         {expanded ? t("conversation.collapseMessage") : t("conversation.expandMessage")}
         {expanded ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
@@ -79,7 +79,7 @@ function UserMessage({ message, attachmentImages }: { message: Message; attachme
   </article>;
 }
 
-export function Conversation({ messages, run, runId, awaitingEvents = false, onCancel, onApproval, attachmentImages }: { messages: Message[]; run: RunView; runId?: string | null; awaitingEvents?: boolean; onCancel?: () => Promise<void>; onApproval?: (approvalId: string, decision: "approved" | "rejected") => Promise<void>; attachmentImages?: AttachmentImages }) {
+export function Conversation({ messages, run, runId, awaitingEvents = false, onCancel, onApproval, attachmentImages, resourceActions }: { messages: Message[]; run: RunView; runId?: string | null; awaitingEvents?: boolean; onCancel?: () => Promise<void>; onApproval?: (approvalId: string, decision: "approved" | "rejected") => Promise<void>; attachmentImages?: AttachmentImages; resourceActions?: MessageResourceActions }) {
   const { t } = useLanguage();
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -95,6 +95,15 @@ export function Conversation({ messages, run, runId, awaitingEvents = false, onC
     && (!runStartedAt || Date.parse(message.created_at) >= Date.parse(runStartedAt)));
   const showRunReply = (run.status !== "idle" || awaitingEvents) && (run.status !== "completed"
     || (run.text.length > 0 && !savedReplyAvailable));
+  const liveParts: MessagePart[] = [
+    ...(runError ? [{ type: "error" as const, code: "RUN_FAILED", message: runError }]
+      : run.text ? [{ type: "text" as const, text: run.text }] : []),
+    ...run.tools.map((tool) => ({ type: "tool_call" as const, tool_call_id: tool.id, tool: tool.name, status: tool.status, summary: tool.summary })),
+    ...(run.jobId && !["completed", "failed", "cancelled"].includes(run.status)
+      ? [{ type: "progress" as const, label: run.jobLabel || t("conversation.backgroundTask"), value: Number.isFinite(run.progress) ? Math.round(run.progress) : 0 }]
+      : []),
+    ...run.artifacts.map((artifact) => ({ type: "artifact" as const, ...artifact })),
+  ];
   return <div className="conversation-scroll" ref={scrollRef}>
     {messages.length === 0 && run.status === "idle" && !awaitingEvents ? <div className="empty-chat">
       <div className="empty-icon"><FlaskConical size={28} /></div>
@@ -111,20 +120,18 @@ export function Conversation({ messages, run, runId, awaitingEvents = false, onC
           <span>{step.title}</span>
         </li>)}</ol>
       </section>}
-      {messages.map((message, index) => message.role === "user" ? <UserMessage message={message} attachmentImages={attachmentImages} key={message.id} />
+      {messages.map((message, index) => message.role === "user" ? <UserMessage message={message} attachmentImages={attachmentImages} resourceActions={resourceActions} key={message.id} />
         : message.role === "assistant" && index > lastUserIndex && showRunReply && !runFinished ? null
         : <article className={`message-row ${message.role}`} key={message.id}>
         <div className="message-body">
-          <MessageParts parts={message.parts} markdown={message.role === "assistant"} />
+          <MessageParts parts={message.parts} markdown={message.role === "assistant"} resourceActions={resourceActions} />
           {message.role === "assistant" && <div className="message-actions"><ReplyCopyButton text={message.parts.filter((part) => part.type === "text").map((part) => part.text).join("\n\n")} /></div>}
         </div>
       </article>)}
       {showRunReply && <article className="message-row assistant">
         <div className="message-body">
-          {runActive && !run.text.trim() && <AssistantWaitingIndicator />}
-          {runError ? <p className="message-text">{runError}</p> : run.text && <LazyMarkdownContent text={run.text} streaming={runActive} />}
-          {run.tools.filter((tool) => tool.status === "running").map((tool) => <div className="task-pill" key={tool.id}><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {tool.name}</div>)}
-          {run.jobId && !["failed", "cancelled"].includes(run.status) && <div className="task-pill"><LoaderCircle className="message-spinner" size={15} aria-hidden="true" /> {run.jobLabel || t("conversation.backgroundTask")}{Number.isFinite(run.progress) && ` · ${Math.round(run.progress)}%`}</div>}
+          {runActive && liveParts.length === 0 && <AssistantWaitingIndicator />}
+          <MessageParts parts={liveParts} markdown streaming={runActive} resourceActions={resourceActions} />
           {run.approval && onCancel && onApproval && <RunControls key={runId ?? "approval"} run={run} onCancel={onCancel} onApproval={onApproval} />}
           {runFinished && (runError || run.text.trim()) && <div className="message-actions"><ReplyCopyButton text={runError ?? run.text} /></div>}
         </div>

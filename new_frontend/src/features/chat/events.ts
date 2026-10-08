@@ -1,6 +1,6 @@
 import type { PlanStep, RunEvent } from "../../api/types";
 
-export type RunView = { events: RunEvent[]; cursor?: string; status: "idle" | "running" | "waiting" | "completed" | "failed" | "cancelled"; jobId?: string; jobLabel?: string; progress: number; text: string; error?: string; retry?: { attempt: number; maxAttempts: number }; approval?: { id: string; capability: string; estimatedMinutes: number }; artifacts: { id: string; name: string; kind: string }[]; tools: { id: string; name: string; status: string }[]; plan: PlanStep[] };
+export type RunView = { events: RunEvent[]; cursor?: string; status: "idle" | "running" | "waiting" | "completed" | "failed" | "cancelled"; jobId?: string; jobLabel?: string; progress: number; text: string; error?: string; retry?: { attempt: number; maxAttempts: number }; approval?: { id: string; capability: string; estimatedMinutes: number }; artifacts: { id: string; name: string; kind: string }[]; tools: { id: string; name: string; status: string; summary: string }[]; plan: PlanStep[] };
 export const emptyRun: RunView = { events: [], status: "idle", progress: 0, text: "", artifacts: [], tools: [], plan: [] };
 
 export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView {
@@ -22,7 +22,7 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
   // Accumulate changes before creating new objects
   const eventsToAdd: RunEvent[] = [];
   const newArtifacts: typeof previous.artifacts = [];
-  const toolUpdates = new Map<string, { id: string; name: string; status: string }>();
+  const toolUpdates = new Map<string, { id: string; name: string; status: string; summary: string }>();
   let newPlan: PlanStep[] | undefined;
   let statusChange: RunView["status"] | undefined;
   let textDelta = "";
@@ -48,7 +48,8 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
         toolUpdates.set(event.data.tool_call_id, {
           id: event.data.tool_call_id,
           name: event.data.tool,
-          status: "running"
+          status: "running",
+          summary: "Tool running"
         });
         toolsChanged = true;
         break;
@@ -58,7 +59,8 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
         toolUpdates.set(event.data.tool_call_id, {
           id: event.data.tool_call_id,
           name: event.data.tool,
-          status: event.data.status
+          status: event.data.status,
+          summary: event.data.summary
         });
         toolsChanged = true;
         break;
