@@ -7,6 +7,7 @@ import type { PublishedToolProduct, ToolRunSnapshot } from "../../api/generated"
 import type { ResearchApi } from "../../api/types";
 import { LanguageProvider } from "../../i18n/LanguageProvider";
 import { ToolProductPage } from "./ToolProductPage";
+import { conversationDraftScope, readComposerDraft } from "../chat/composerDrafts";
 
 const text = (en: string, zh: string) => ({ en, "zh-CN": zh });
 const coralProduct = {
@@ -83,6 +84,7 @@ function apiFixture(overrides: Partial<ResearchApi> = {}): ResearchApi {
     createSession: vi.fn(async () => ({ id: "session-coral", project_id: null, title: "CORAL" })),
     sendMessage: vi.fn(async () => ({ run_id: "agent-run" })),
     downloadArtifact: vi.fn(async () => new Blob(["artifact"])),
+    uploadFile: vi.fn(async (file: File) => ({ id: `file-${file.name}`, name: file.name })),
     ...overrides,
   } as unknown as ResearchApi;
 }
@@ -127,7 +129,7 @@ it("renders true progress and keeps cancellation on the owned run", async () => 
   expect(screen.getByRole("button", { name: "Stopping…" })).toBeDisabled();
 });
 
-it("keeps every owned output downloadable and hands off only immutable run context", async () => {
+it("keeps every owned output downloadable and prepares an editable Agent draft", async () => {
   localStorage.setItem("research_language", "en");
   const api = apiFixture();
   renderPage(api, "/tools/coral?run=run-coral");
@@ -140,10 +142,11 @@ it("keeps every owned output downloadable and hands off only immutable run conte
   await actor.click(screen.getByRole("button", { name: "Continue with Agent" }));
   expect(await screen.findByText("Agent conversation")).toBeInTheDocument();
   expect(api.handoffToolProductRun).toHaveBeenCalledWith("run-coral", "continue");
-  const message = vi.mocked(api.sendMessage).mock.calls[0][1];
-  expect(message.attachments).toEqual(completedRun.artifacts.map(({ id, name }) => ({ id, name })));
-  expect(message.content).toContain("run-coral");
-  expect(message.content).toContain("One reviewed candidate");
+  expect(api.sendMessage).not.toHaveBeenCalled();
+  const draft = readComposerDraft(conversationDraftScope("alice", "session-coral"));
+  expect(draft.attachments).toEqual(completedRun.artifacts.map(({ name }) => ({ id: `file-${name}`, name })));
+  expect(draft.content).toContain("run-coral");
+  expect(draft.content).toContain("One reviewed candidate");
 });
 
 it("requests history for the exact published product", async () => {

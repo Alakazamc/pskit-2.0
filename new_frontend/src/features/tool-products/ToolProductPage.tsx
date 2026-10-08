@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import type { ArtifactRef, ContextRef, ResearchApi, ToolProductHandoff, ToolProductRun } from "../../api/types";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { errorTranslationKey } from "../../i18n/errors";
+import { conversationDraftScope, emptyComposerDraft, writeComposerDraft } from "../chat/composerDrafts";
 import { personalSessionPath } from "../mono/sessionPaths";
 import { ToolPageHeader } from "../mono/ToolPageHeader";
 import { PageLoading, PageLoadError } from "../../components/PageLoading";
@@ -56,7 +57,6 @@ export function ToolProductPage({ api, slug, userId, theme, onBack }: {
   const pendingHandoff = useRef<{
     id: string;
     runId: string;
-    key: string;
     sessionId?: string;
     context?: ToolProductHandoff;
     attachments?: ContextRef[];
@@ -141,7 +141,7 @@ export function ToolProductPage({ api, slug, userId, theme, onBack }: {
     if (!run || run.status !== "completed" || busy) return;
     setBusy(true); setError("");
     if (pendingHandoff.current?.id !== handoffId || pendingHandoff.current.runId !== run.run_id) {
-      pendingHandoff.current = { id: handoffId, runId: run.run_id, key: crypto.randomUUID() };
+      pendingHandoff.current = { id: handoffId, runId: run.run_id };
     }
     try {
       const pending = pendingHandoff.current;
@@ -158,14 +158,31 @@ export function ToolProductPage({ api, slug, userId, theme, onBack }: {
         pending.attachments = attachments;
       }
       const title = localized(product.data?.title, language) || slug;
-      const sessionId = pending.sessionId ?? (await api.createSession(null, `${title} · Agent`, true)).id;
+      const createdSession = pending.sessionId
+        ? null
+        : await api.createSession(null, `${title} · Agent`, true);
+      const sessionId = pending.sessionId ?? createdSession!.id;
       pending.sessionId = sessionId;
+      if (createdSession) {
+        cache.setQueryData(["session", userId, sessionId], createdSession);
+        cache.setQueryData<Awaited<ReturnType<ResearchApi["getSessions"]>>>(
+          ["sessions", userId, createdSession.project_id],
+          (previous = []) => previous.some((item) => item.id === sessionId)
+            ? previous
+            : [createdSession, ...previous],
+        );
+      }
       const summary = context.summary.slice(0, 4_000);
       const inputs = JSON.stringify(run.arguments ?? {}).slice(0, 1_000);
       const content = language === "en"
         ? `Continue from Tool Run ${context.run_id}.\n\nRun inputs:\n${inputs}\n\nResult summary:\n${summary}`
         : `继续分析工具运行 ${context.run_id}。\n\n本次运行参数：\n${inputs}\n\n结果摘要：\n${summary}`;
-      await api.sendMessage(sessionId, { content, attachments: pending.attachments, skills: [], resources: [] }, pending.key, null);
+      const persisted = writeComposerDraft(conversationDraftScope(userId, sessionId), {
+        ...emptyComposerDraft(),
+        content,
+        attachments: pending.attachments,
+      });
+      if (!persisted) throw new Error("COMPOSER_DRAFT_UNAVAILABLE");
       pendingHandoff.current = null;
       navigate(personalSessionPath(sessionId));
     } catch (cause) { setError(t(errorTranslationKey(cause) ?? "toolProduct.handoffFailed")); }

@@ -10,6 +10,7 @@ import { App } from "../../app/App";
 import { LanguageProvider } from "../../i18n/LanguageProvider";
 import { ToolProductPage } from "./ToolProductPage";
 import { ToolDirectory } from "../mono/ToolPages";
+import { conversationDraftScope, readComposerDraft } from "../chat/composerDrafts";
 
 vi.mock("../mono/MolstarCanvas", () => ({ default: () => <div data-testid="molstar" /> }));
 
@@ -61,7 +62,8 @@ function apiFixture(overrides: Partial<ResearchApi> = {}): ResearchApi {
     handoffToolProductRun: vi.fn(async () => ({ run_id: "run-1", handoff_id: "analyze", summary: "Bounded server summary", artifacts: baseRun.artifacts })),
     createSession: vi.fn(async () => ({ id: "session-agent", project_id: "project-alice", title: "Flexible Design" })),
     sendMessage: vi.fn(async () => ({ run_id: "agent-run" })),
-    uploadFile: vi.fn(),
+    downloadArtifact: vi.fn(async () => new Blob(["artifact"])),
+    uploadFile: vi.fn(async (file: File) => ({ id: `file-${file.name}`, name: file.name })),
     ...overrides,
   } as unknown as ResearchApi;
 }
@@ -218,7 +220,7 @@ it.each([
   expect(screen.queryByText("Private upstream diagnostic")).not.toBeInTheDocument();
 });
 
-it("hands off only the immutable run context returned by Python", async () => {
+it("prepares a new Agent conversation draft from immutable run context without sending it", async () => {
   localStorage.setItem("research_language", "en");
   const api = apiFixture();
   renderPage(api, "/tools/flex-design?run=run-1");
@@ -226,10 +228,11 @@ it("hands off only the immutable run context returned by Python", async () => {
   await actor.click(await screen.findByRole("button", { name: "Analyze with Agent" }));
   expect(await screen.findByText("Agent conversation")).toBeInTheDocument();
   expect(api.handoffToolProductRun).toHaveBeenCalledWith("run-1", "analyze");
-  const message = vi.mocked(api.sendMessage).mock.calls[0][1];
-  expect(message.attachments).toEqual([{ id: "artifact-1", name: "all-candidates.csv" }]);
-  expect(message.content).toContain("run-1");
-  expect(message.content).toContain("Bounded server summary");
-  expect(message.content).not.toContain("do-not-forward");
-  expect(message.content.length).toBeLessThan(5_000);
+  expect(api.sendMessage).not.toHaveBeenCalled();
+  const draft = readComposerDraft(conversationDraftScope("alice", "session-agent"));
+  expect(draft.attachments).toEqual([{ id: "file-all-candidates.csv", name: "all-candidates.csv" }]);
+  expect(draft.content).toContain("run-1");
+  expect(draft.content).toContain("Bounded server summary");
+  expect(draft.content).not.toContain("do-not-forward");
+  expect(draft.content.length).toBeLessThan(5_000);
 });

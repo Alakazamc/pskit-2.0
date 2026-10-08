@@ -838,7 +838,7 @@ it("uses a published MCP tool schema to invoke a newly listed tool", async () =>
   expect(invoked).toEqual([{ accession: "P12345" }]);
 }, 10_000);
 
-it("starts a metered Pi chat from a tool result", async () => {
+it("creates an editable conversation draft from a tool result without sending it", async () => {
   loggedIn("/tools/run/fetch_uniprot");
   const messages: unknown[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -869,8 +869,9 @@ it("starts a metered Pi chat from a tool result", async () => {
   await actor.click(screen.getByRole("button", { name: "运行工具" }));
   await actor.click(await screen.findByRole("button", { name: "交给 Agent 分析" }));
 
-  await waitFor(() => expect(messages).toHaveLength(1));
-  expect(JSON.stringify(messages[0])).toContain("P12345");
+  await waitFor(() => expect(window.location.pathname).toBe("/session/session-from-tool"));
+  expect(messages).toHaveLength(0);
+  expect(localStorage.getItem("pskit.composer.v1:alice:session%3Asession-from-tool")).toContain("P12345");
   expect(window.location.pathname).toBe("/session/session-from-tool");
 }, 10_000);
 
