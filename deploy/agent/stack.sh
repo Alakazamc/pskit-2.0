@@ -30,6 +30,7 @@ admin_env=${STACK_ADMIN_ENV_FILE:-$agent_dir/.env.stack-admin}
 cloud_env=${STACK_CLOUD_ENV_FILE:-$agent_dir/cloud.env}
 proxy_env=${STACK_PROXY_ENV_FILE:-$agent_dir/cloud.proxy.env}
 supabase_network=${STACK_SUPABASE_NETWORK:-pskit-agent-supabase_default}
+opensandbox_enabled=${STACK_OPENSANDBOX_ENABLED:-false}
 
 value_in_file() {
   local key=$2 line
@@ -60,6 +61,17 @@ agent=(docker compose --env-file "$cloud_env"
   -f "$agent_dir/compose.cloud.yaml"
   -f "$agent_dir/compose.postgres.yaml"
   -p pskit-agent-cloud)
+if [[ "$opensandbox_enabled" == true ]]; then
+  agent=(docker compose --env-file "$cloud_env"
+    -f "$agent_dir/compose.yaml"
+    -f "$agent_dir/compose.cloud.yaml"
+    -f "$agent_dir/compose.postgres.yaml"
+    -f "$agent_dir/compose.opensandbox.yaml"
+    -f "$agent_dir/compose.opensandbox.production.yaml"
+    -p pskit-agent-cloud)
+elif [[ "$opensandbox_enabled" != false ]]; then
+  die "STACK_OPENSANDBOX_ENABLED must be true or false"
+fi
 
 backend_image=${STACK_BACKEND_IMAGE:-}
 
@@ -85,6 +97,16 @@ preflight() {
   require_value "$litellm_env" LITELLM_MASTER_KEY
   require_value "$litellm_env" LITELLM_SALT_KEY
   require_value "$proxy_env" RESEARCH_AGENT_COMPUTE_CALLBACK_KEY
+  if [[ "$opensandbox_enabled" == true ]]; then
+    for key in OPENSANDBOX_SERVER_IMAGE OPENSANDBOX_SANDBOX_IMAGE \
+      OPENSANDBOX_CONFIG_FILE OPENSANDBOX_RUNTIME_NETWORK \
+      OPENSANDBOX_STATE_VOLUME OPENSANDBOX_VOLUME_DRIVER \
+      OPENSANDBOX_API_KEY OPENSANDBOX_NAMESPACE OPENSANDBOX_ROLLOUT_DIR; do
+      require_value "$cloud_env" "$key"
+    done
+    [[ $(value_in_file "$backend_env" RESEARCH_AGENT_PI_EXECUTION 2>/dev/null || printf local) != sandbox ]] ||
+      die "The retired sandbox manager and OpenSandbox cannot be enabled together"
+  fi
   auth_mode=$(value_in_file "$backend_env" RESEARCH_AGENT_AUTH_ABUSE_MODE)
   [[ "$auth_mode" == observe || "$auth_mode" == enforce ]] ||
     die "RESEARCH_AGENT_AUTH_ABUSE_MODE must be observe or enforce"
@@ -151,7 +173,9 @@ case "$command_name" in
       --read-only --cap-drop ALL --security-opt no-new-privileges \
       --entrypoint python "$backend_image" -c \
       'import os; from app.db.postgres_migrations import migrate_postgres; migrate_postgres(os.environ["SHARED_POSTGRES_ADMIN_DSN"])'
-    if ! "${agent[@]}" up -d --wait backend af3-callback-proxy; then
+    agent_services=(backend af3-callback-proxy)
+    [[ "$opensandbox_enabled" != true ]] || agent_services=(opensandbox-server "${agent_services[@]}")
+    if ! "${agent[@]}" up -d --wait "${agent_services[@]}"; then
       "${agent[@]}" stop af3-callback-proxy backend || true
       die "Agent startup failed; databases and volumes were retained"
     fi
@@ -175,7 +199,13 @@ case "$command_name" in
     case "${2:-}" in
       supabase) "${supabase[@]}" logs --tail=100 ;;
       litellm) "${litellm[@]}" logs --tail=100 ;;
-      agent) "${agent[@]}" logs --tail=100 backend af3-callback-proxy ;;
+      agent)
+        if [[ "$opensandbox_enabled" == true ]]; then
+          "${agent[@]}" logs --tail=100 backend af3-callback-proxy opensandbox-server
+        else
+          "${agent[@]}" logs --tail=100 backend af3-callback-proxy
+        fi
+        ;;
       *) die "Usage: stack.sh logs supabase|litellm|agent" ;;
     esac
     ;;

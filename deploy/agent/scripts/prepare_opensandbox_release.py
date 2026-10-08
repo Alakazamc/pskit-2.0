@@ -277,6 +277,7 @@ def prepare(args: argparse.Namespace) -> dict[str, object]:
             "namespace": namespace,
             "runtime_network": runtime_network,
             "state_volume": state_volume,
+            "api_key_sha256": _sha(api_key.encode()),
             "capability_hash": capability_hash,
         },
         "frontend_dist_sha256": base_manifest["frontend_dist_sha256"],

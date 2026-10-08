@@ -19,6 +19,42 @@
 | A6000 | 一个通用 MCP/AF3 接收器、一个独立 AF3 计算容器 | 接收器主动连接阿里云；CORAL 调用 4090 MCP |
 | A6000 WireGuard | 已审核的 AF3 MCP | `10.9.8.2:18187/mcp`，必须使用服务端 Bearer 凭据 |
 | 4090 | CORAL MCP 模型服务 | 由已审核的服务绑定选择，不向浏览器暴露服务端凭据 |
+
+## OpenSandbox 生产灰度
+
+生产只接受 Staging 生成的 `status=qualified` 私有 manifest。生产
+`cloud.env` 使用相同 backend、OpenSandbox Server 和 workspace 镜像 digest，
+但必须配置不同的 namespace、API key、runtime network、state volume 和 rollout
+目录。`opensandbox.private.toml` 的 execd/egress digest 与 Staging manifest 保持
+一致。首次只对一个明确的管理员 user ID 开文件能力：
+
+```bash
+bash deploy/agent/scripts/deploy_opensandbox_release.sh \
+  --manifest /home/ecs-user/pskit-agent-staging-private/opensandbox-release.json \
+  --allow-user '<Supabase user UUID>'
+```
+
+脚本依次执行静态预检、兼容数据库迁移、unknown/active attempt 检查、启动私有
+OpenSandbox Server、真实 gVisor capability probe、哈希核对、原子写入 files-only
+rollout，再只重建 backend。它不会重建 Supabase、LiteLLM、AF3 proxy、CORAL
+receiver 或前端。命令和 Python 仍保持关闭；确认文件工具稳定后，运维人员才用
+`set_workspace_rollout.py` 写入同一 capability hash 并显式增加
+`--commands-enabled`。
+
+常规 `stack.sh` 要沿用 OpenSandbox overlay 时，在权限 0600 的 `.env.stack`
+设置 `STACK_OPENSANDBOX_ENABLED=true`。该开关只决定 Compose 叠加；真正用户
+授权仍来自服务端 rollout `policy.json`，浏览器不能开启。
+
+回退先关闭新调用并等待活动 attempt 排空，再让 backend 回到 provider disabled
+配置，最后停止 Server：
+
+```bash
+bash deploy/agent/scripts/rollback_opensandbox_release.sh --drain-seconds 120
+```
+
+发现 `unknown` attempt 时脚本拒绝停止 provider，必须先人工确认进程终止并结算。
+回退不使用 `down -v`，不删除 OpenSandbox state、用户卷、Artifact、对话或数据库
+记录，也不恢复 raw Pi built-ins。AF3/CORAL 不受该脚本影响。
 | 阿里云 Staging | 独立数据库、模型替身、AF3 替身、前端 `dist` | `10.9.8.1:18132`，仅私网 |
 
 生产前端由 Nginx 提供静态文件。生产 Agent 没有前端容器。`stack.sh` 是统一操作入口；它调用 Supabase、LiteLLM 和 Agent 三个 Compose 项目。三个项目共享一台 PostgreSQL 17 容器，但使用不同的逻辑库或 schema 与账号。
