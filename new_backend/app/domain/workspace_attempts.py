@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from app.db.postgres import PostgresDatabase, PostgresStatements
@@ -13,6 +14,10 @@ from app.ports.workspace_sandbox import WorkspaceConflict
 AttemptStatus = Literal[
     "queued", "running", "cancelling", "completed", "failed", "cancelled", "unknown"
 ]
+
+
+class WorkspaceCpuQuotaExceeded(RuntimeError):
+    """A command reservation exceeds the user's daily CPU allowance."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +89,68 @@ class WorkspaceAttemptStore:
                     now,
                     now,
                 ),
+            )
+        return self._required(attempt_id)
+
+    def reserve_cpu(
+        self,
+        attempt_id: str,
+        fencing_token: int,
+        requested_cpu_core_ms: int,
+        default_daily_limit_ms: int,
+    ) -> WorkspaceAttempt:
+        """Atomically reserve one command budget against settled and active attempts."""
+        if requested_cpu_core_ms <= 0 or default_daily_limit_ms < 0:
+            raise ValueError("Workspace CPU reservation is invalid")
+        now = datetime.now(UTC)
+        day_start = datetime.combine(now.date(), datetime.min.time(), UTC).timestamp()
+        day_end = (datetime.fromtimestamp(day_start, UTC) + timedelta(days=1)).timestamp()
+        with self.db:
+            current = self.db.execute(
+                "SELECT " + ",".join(_COLUMNS) + " FROM workspace_attempts "
+                "WHERE attempt_id=? FOR UPDATE",
+                (attempt_id,),
+            ).fetchone()
+            if current is None:
+                raise WorkspaceConflict("Workspace attempt is unavailable")
+            attempt = WorkspaceAttempt(*current)
+            self.db.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(?,0))",
+                (f"workspace-cpu:{attempt.user_id}",),
+            )
+            if attempt.fencing_token != fencing_token or attempt.status != "queued":
+                raise WorkspaceConflict("Workspace CPU reservation is stale")
+            if attempt.reserved_cpu_core_ms:
+                if attempt.reserved_cpu_core_ms != requested_cpu_core_ms:
+                    raise WorkspaceConflict("Workspace CPU reservation changed")
+                return attempt
+            explicit = self.db.execute(
+                "SELECT limit_ms FROM compute_cpu_limits WHERE user_id=?",
+                (attempt.user_id,),
+            ).fetchone()
+            limit = int(explicit[0]) if explicit else default_daily_limit_ms
+            used = int(
+                self.db.execute(
+                    "SELECT COALESCE(SUM(cpu_core_ms),0) FROM workspace_attempts "
+                    "WHERE user_id=? AND created_at>=? AND created_at<? "
+                    "AND status IN ('completed','failed','cancelled')",
+                    (attempt.user_id, day_start, day_end),
+                ).fetchone()[0]
+            )
+            held = int(
+                self.db.execute(
+                    "SELECT COALESCE(SUM(reserved_cpu_core_ms),0) FROM workspace_attempts "
+                    "WHERE user_id=? AND attempt_id<>? "
+                    "AND status IN ('queued','running','cancelling','unknown')",
+                    (attempt.user_id, attempt_id),
+                ).fetchone()[0]
+            )
+            if requested_cpu_core_ms > max(0, limit - used - held):
+                raise WorkspaceCpuQuotaExceeded
+            self.db.execute(
+                "UPDATE workspace_attempts SET reserved_cpu_core_ms=?,updated_at=? "
+                "WHERE attempt_id=?",
+                (requested_cpu_core_ms, self.clock(), attempt_id),
             )
         return self._required(attempt_id)
 

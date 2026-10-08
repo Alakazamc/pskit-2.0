@@ -54,6 +54,17 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
         toolsChanged = true;
         break;
       case "tool.updated":
+        {
+          const current = toolUpdates.get(event.data.tool_call_id)
+            ?? previous.tools.find(tool => tool.id === event.data.tool_call_id);
+          toolUpdates.set(event.data.tool_call_id, {
+            id: event.data.tool_call_id,
+            name: event.data.tool,
+            status: current?.status ?? "running",
+            summary: event.data.summary ?? current?.summary ?? "Tool running"
+          });
+          toolsChanged = true;
+        }
         break;
       case "tool.finished":
         toolUpdates.set(event.data.tool_call_id, {

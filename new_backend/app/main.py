@@ -97,6 +97,7 @@ from app.services.sandbox_operations import (
     WorkspaceLeaseReconciler,
 )
 from app.services.session_titles import SessionTitleService
+from app.services.workspace_commands import WorkspaceCommands
 from app.services.workspace_files import WorkspaceFiles
 from app.services.workspace_transfer import WorkspaceTransfer
 
@@ -505,6 +506,17 @@ def create_app(
         if settings.workspace_provider == "opensandbox"
         else None
     )
+    app.state.workspace_commands = (
+        WorkspaceCommands(
+            workspace_sandbox_provider,
+            app.state.workspace_attempts,
+            cpu_daily_limit_ms=settings.compute_cpu_daily_limit_ms,
+            cpu_millicores=settings.workspace_cpu_millicores,
+        )
+        if settings.workspace_provider == "opensandbox"
+        and app.state.workspace_attempts is not None
+        else None
+    )
     app.state.tool_product_repository = (
         ToolProductRepository(database) if database is not None else None
     )
@@ -790,6 +802,9 @@ def create_app(
     if app.state.agent_service is not None:
         app.state.agent_service.compute_jobs = app.state.compute_jobs
         app.state.agent_service.compute_leases = app.state.compute_leases
+        app.state.agent_service.workspace_sandbox_provider = workspace_sandbox_provider
+        app.state.agent_service.workspace_sandbox_store = workspace_sandbox_store
+        app.state.agent_service.workspace_attempts = app.state.workspace_attempts
     app.state.af3 = (
         DisabledAf3()
         if af3_executor == "disabled"

@@ -203,9 +203,13 @@ class ToolStartedEvent(EventBase):
     data: ToolStartedData
 
 
+class ToolUpdatedData(ToolStartedData):
+    summary: str | None = Field(default=None, max_length=500)
+
+
 class ToolUpdatedEvent(EventBase):
     type: Literal["tool.updated"] = "tool.updated"
-    data: ToolStartedData
+    data: ToolUpdatedData
 
 
 class ToolFinishedData(ToolStartedData):

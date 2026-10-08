@@ -12,6 +12,7 @@ from pathlib import Path, PurePosixPath
 from app.contracts.sandbox import WorkspaceFileRef
 from app.domain.catalog import ContextNotFound
 from app.domain.workspace_paths import WorkspacePathPolicy
+from app.ports.workspace_sandbox import WorkspaceNotFound
 from app.services.workspace_files import WorkspaceFiles, WorkspaceOperationContext
 
 MAX_WORKSPACE_FILE_BYTES = 20 * 1024 * 1024
@@ -217,7 +218,10 @@ class WorkspaceTransfer:
             user_id=user_id, session_id=session_id, attempt_id=attempt_id
         )
         directory = WorkspacePathPolicy.artifact(session_id, attempt_id).logical
-        entries = await self.files.list(context, directory, max_depth=1, max_entries=100)
+        try:
+            entries = await self.files.list(context, directory, max_depth=1, max_entries=100)
+        except WorkspaceNotFound:
+            return []
         if len(entries) > 100:
             raise ValueError("Too many workspace artifacts")
         verified = []

@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import base64
+import json
 from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Request
+from starlette.responses import StreamingResponse
 
 from app.contracts.workspace_tools import (
+    CommandControlRequest,
+    CommandStartRequest,
+    CommandStartResponse,
+    CommandStatusResponse,
     FileEditRequest,
     FileEntryResponse,
     FileFindRequest,
@@ -21,14 +27,17 @@ from app.contracts.workspace_tools import (
     FileSearchResponse,
     FileWriteRequest,
     FileWriteResponse,
+    PythonStartRequest,
     WorkspaceRequest,
 )
 from app.domain.internal_auth import WorkspaceToolClaims
+from app.domain.workspace_attempts import WorkspaceCpuQuotaExceeded
 from app.ports.workspace_sandbox import (
     WorkspaceCapabilities,
     WorkspaceErrorCode,
     WorkspaceProviderError,
 )
+from app.services.workspace_commands import WorkspaceCommands
 from app.services.workspace_files import WorkspaceFiles, WorkspaceOperationContext
 
 router = APIRouter(
@@ -66,6 +75,8 @@ async def _authorize(
     payload: WorkspaceRequest,
     request: Request,
     authorization: str | None,
+    *,
+    allow_terminal: bool = False,
 ) -> AuthorizedWorkspace:
     service = request.app.state.agent_service
     token = authorization.removeprefix("Bearer ") if authorization else ""
@@ -93,7 +104,10 @@ async def _authorize(
         or attempt.user_id != claims.user_id
         or attempt.run_id != claims.run_id
         or attempt.session_id != claims.session_id
-        or attempt.status not in {"queued", "running", "cancelling"}
+        or (
+            not allow_terminal
+            and attempt.status not in {"queued", "running", "cancelling"}
+        )
     ):
         raise HTTPException(status_code=409, detail={"code": "WORKSPACE_ATTEMPT_NOT_ACTIVE"})
 
@@ -120,6 +134,13 @@ async def _authorize(
 
 def _files(request: Request) -> WorkspaceFiles:
     service = request.app.state.workspace_files
+    if service is None:
+        raise HTTPException(status_code=503, detail={"code": "WORKSPACE_UNAVAILABLE"})
+    return service
+
+
+def _commands(request: Request) -> WorkspaceCommands:
+    service = request.app.state.workspace_commands
     if service is None:
         raise HTTPException(status_code=503, detail={"code": "WORKSPACE_UNAVAILABLE"})
     return service
@@ -278,6 +299,121 @@ async def grep_files(
                 FileSearchMatchResponse(path=item.path, line=item.line, text=item.text)
                 for item in matches
             ]
+        )
+    except WorkspaceProviderError as exc:
+        raise _provider_error(exc) from exc
+
+
+async def _start_command(
+    payload: CommandStartRequest | PythonStartRequest,
+    request: Request,
+    authorization: str | None,
+    argv: tuple[str, ...],
+    cwd: str | None,
+) -> CommandStartResponse:
+    authorized = await _authorize(payload, request, authorization)
+    try:
+        process_id = await _commands(request).start(
+            authorized.context,
+            run_id=payload.run_id,
+            argv=argv,
+            cwd=cwd,
+            timeout_seconds=payload.timeout_seconds,
+            max_output_bytes=payload.max_output_bytes,
+        )
+        return CommandStartResponse(process_id=process_id)
+    except WorkspaceCpuQuotaExceeded as exc:
+        raise HTTPException(429, detail={"code": "CPU_QUOTA_EXCEEDED"}) from exc
+    except WorkspaceProviderError as exc:
+        raise _provider_error(exc) from exc
+
+
+@router.post("/commands/start")
+async def start_command(
+    payload: CommandStartRequest,
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+) -> CommandStartResponse:
+    argv = tuple(payload.argv or ("/bin/sh", "-c", payload.shell or ""))
+    return await _start_command(payload, request, authorization, argv, payload.cwd)
+
+
+@router.post("/python/start")
+async def start_python(
+    payload: PythonStartRequest,
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+) -> CommandStartResponse:
+    argv = ("/usr/bin/python3", "-c", payload.code, *payload.argv)
+    return await _start_command(payload, request, authorization, argv, None)
+
+
+@router.post("/commands/events")
+async def command_events(
+    payload: CommandControlRequest,
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+) -> StreamingResponse:
+    authorized = await _authorize(payload, request, authorization)
+
+    async def records():
+        try:
+            async for event in _commands(request).stream(
+                authorized.context,
+                run_id=payload.run_id,
+                process_id=payload.process_id,
+            ):
+                yield event.model_dump_json().encode() + b"\n"
+        except WorkspaceProviderError as exc:
+            yield json.dumps(
+                {"type": "error", "data": exc.code.value, "retryable": exc.retryable},
+                separators=(",", ":"),
+            ).encode() + b"\n"
+
+    return StreamingResponse(records(), media_type="application/x-ndjson")
+
+
+@router.post("/commands/status")
+async def command_status(
+    payload: CommandControlRequest,
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+) -> CommandStatusResponse:
+    authorized = await _authorize(payload, request, authorization, allow_terminal=True)
+    try:
+        status, exit_code, confirmed = await _commands(request).status(
+            authorized.context,
+            run_id=payload.run_id,
+            process_id=payload.process_id,
+        )
+        return CommandStatusResponse(
+            process_id=payload.process_id,
+            status=status,
+            exit_code=exit_code,
+            termination_confirmed=confirmed,
+        )
+    except WorkspaceProviderError as exc:
+        raise _provider_error(exc) from exc
+
+
+@router.post("/commands/cancel")
+async def cancel_command(
+    payload: CommandControlRequest,
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+) -> CommandStatusResponse:
+    authorized = await _authorize(payload, request, authorization)
+    try:
+        status, exit_code, confirmed = await _commands(request).cancel(
+            authorized.context,
+            run_id=payload.run_id,
+            process_id=payload.process_id,
+        )
+        return CommandStatusResponse(
+            process_id=payload.process_id,
+            status=status,
+            exit_code=exit_code,
+            termination_confirmed=confirmed,
         )
     except WorkspaceProviderError as exc:
         raise _provider_error(exc) from exc

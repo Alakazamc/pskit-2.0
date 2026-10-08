@@ -23,6 +23,7 @@ from app.contracts.conversation import (
     ToolResultPart,
     ToolStartedData,
     ToolStartedEvent,
+    ToolUpdatedData,
     ToolUpdatedEvent,
 )
 from app.domain.catalog import image_mime_type
@@ -30,6 +31,7 @@ from app.domain.internal_auth import WorkspaceToolClaims, WorkspaceToolTokenCode
 from app.domain.mcp_tool_calls import McpToolCallStore
 from app.domain.persistent_conversation import PersistentConversationStore
 from app.domain.quota import TokenQuotaExceeded
+from app.ports.workspace_sandbox import WorkspaceCapabilities, WorkspaceProviderError
 
 
 class AgentService:
@@ -100,6 +102,9 @@ class AgentService:
         self.mcp_tool_calls = mcp_tool_calls
         self.catalog = None
         self.workspace_transfer = None
+        self.workspace_sandbox_provider = None
+        self.workspace_sandbox_store = None
+        self.workspace_attempts = None
         self.compute_leases = None
         self._instance_id = uuid.uuid4().hex
         self._locks: dict[str, asyncio.Lock] = {}
@@ -189,7 +194,15 @@ class AgentService:
         """Check service-level gateway credentials when live Pi requires them."""
         return not self.requires_gateway_key or bool(self.model_gateway_api_key)
 
-    def _environment(self, user_id: str, run_id: str) -> dict[str, str]:
+    def _environment(
+        self,
+        user_id: str,
+        run_id: str,
+        *,
+        session_id: str | None = None,
+        attempt_id: str | None = None,
+        workspace_capabilities: WorkspaceCapabilities | None = None,
+    ) -> dict[str, str]:
         """Build Pi extension variables with tier-filtered tools and scoped auth.
 
         Args:
@@ -215,6 +228,32 @@ class AgentService:
                 tool.model_dump() for tool in self.mcp_tools if tool.name in allowed
             ]),
         }
+        if session_id and attempt_id and workspace_capabilities is not None:
+            environment.update(
+                {
+                    "PSKIT_SESSION_ID": session_id,
+                    "PSKIT_ATTEMPT_ID": attempt_id,
+                    "PSKIT_WORKSPACE_TOOL_TOKEN": self.workspace_tool_token(
+                        user_id=user_id,
+                        run_id=run_id,
+                        session_id=session_id,
+                        attempt_id=attempt_id,
+                    ),
+                    "PSKIT_WORKSPACE_CAPABILITIES_JSON": json.dumps(
+                        {
+                            "file_access": workspace_capabilities.file_access,
+                            "command_execution": workspace_capabilities.command_execution,
+                            "command_events": workspace_capabilities.command_events,
+                            "cancellation": workspace_capabilities.cancellation,
+                            "runtime": workspace_capabilities.runtime,
+                            "session_mount_namespace": (
+                                workspace_capabilities.session_mount_namespace
+                            ),
+                        },
+                        separators=(",", ":"),
+                    ),
+                }
+            )
         compute = getattr(self, "compute_jobs", None)
         member = capabilities is None or capabilities.identities.tier_for(user_id) == "member"
         environment["PSKIT_COMPUTE_CAPABILITIES_JSON"] = json.dumps([
@@ -305,12 +344,32 @@ class AgentService:
             if event["type"] == "tool_execution_start":
                 projected = ToolStartedEvent(run_id=run_id, data=common)
             elif event["type"] == "tool_execution_update":
-                projected = ToolUpdatedEvent(run_id=run_id, data=common)
+                partial = event.get("partialResult") or {}
+                blocks = partial.get("content") if isinstance(partial, dict) else None
+                text = "\n".join(
+                    block.get("text", "")
+                    for block in blocks or []
+                    if isinstance(block, dict) and block.get("type") == "text"
+                ).strip()
+                summary = text.splitlines()[-1][-500:] if text else None
+                projected = ToolUpdatedEvent(
+                    run_id=run_id,
+                    data=ToolUpdatedData(
+                        tool_call_id=tool_call_id,
+                        tool=tool,
+                        summary=summary,
+                    ),
+                )
             else:
                 details = (event.get("result") or {}).get("details") or {}
                 state = details.get("status") if isinstance(details, dict) else None
-                status = ("failed" if event.get("isError") else
-                          state if state in {"pending", "approval_required"} else "completed")
+                status = (
+                    "failed"
+                    if event.get("isError") or state == "failed"
+                    else state
+                    if state in {"pending", "approval_required"}
+                    else "completed"
+                )
                 summary = {
                     "failed": "Tool failed", "pending": "Background task submitted",
                     "approval_required": "Waiting for approval", "completed": "Tool completed",
@@ -336,6 +395,118 @@ class AgentService:
                     ),
                 ),
             )
+
+    async def _open_workspace_attempt(
+        self,
+        user_id: str,
+        session_id: str,
+        run_id: str,
+        *,
+        required: bool,
+    ) -> tuple[str, WorkspaceCapabilities] | None:
+        """Prepare one fenced Pi-turn workspace without blocking plain chat outages."""
+        if (
+            self.workspace_sandbox_provider is None
+            or self.workspace_sandbox_store is None
+            or self.workspace_attempts is None
+        ):
+            return None
+        try:
+            capabilities = await self.workspace_sandbox_provider.capabilities()
+            if not capabilities.file_access:
+                if required:
+                    raise PiRpcError(
+                        "Workspace file access is unavailable",
+                        code="WORKSPACE_UNAVAILABLE",
+                    )
+                return None
+            await self.workspace_sandbox_provider.ensure_user(user_id)
+            attempt_id = "workspace-" + uuid.uuid4().hex
+            lease = self.workspace_sandbox_store.acquire_lease(
+                attempt_id=attempt_id,
+                user_id=user_id,
+                session_id=session_id,
+                run_id=run_id,
+                lease_seconds=900,
+            )
+            self.workspace_attempts.create(
+                attempt_id=attempt_id,
+                run_id=run_id,
+                session_id=session_id,
+                user_id=user_id,
+                fencing_token=lease.fencing_token,
+                reserved_cpu_core_ms=0,
+            )
+            return attempt_id, capabilities
+        except WorkspaceProviderError as exc:
+            if required:
+                raise PiRpcError(str(exc), code=exc.code.value, retryable=exc.retryable) from exc
+            return None
+
+    async def _close_workspace_attempt(
+        self,
+        user_id: str,
+        session_id: str,
+        run_id: str,
+        attempt_id: str,
+        *,
+        succeeded: bool,
+    ) -> None:
+        """Release an idle attempt or preserve unconfirmed command state."""
+        attempt = self.workspace_attempts.get(attempt_id) if self.workspace_attempts else None
+        if attempt is None:
+            return
+        if attempt.status == "queued":
+            status = "completed" if succeeded else "failed"
+            self.workspace_attempts.finish(
+                attempt_id,
+                attempt.fencing_token,
+                status=status,
+                wall_ms=0,
+                cpu_core_ms=0,
+                peak_memory_bytes=0,
+                exit_code=0 if succeeded else None,
+                output_truncated=False,
+            )
+            self.workspace_sandbox_store.release_after_exit(
+                attempt_id,
+                attempt.fencing_token,
+                terminal_state=status,
+                exit_code=0 if succeeded else None,
+            )
+            attempt = self.workspace_attempts.get(attempt_id)
+        elif attempt.status in {"running", "cancelling"}:
+            self.workspace_attempts.mark_unknown(
+                attempt_id,
+                attempt.fencing_token,
+                "WORKSPACE_PROCESS_UNCONFIRMED",
+            )
+            return
+        if attempt is not None and attempt.status in {"completed", "failed", "cancelled"}:
+            await self._collect_workspace(user_id, session_id, run_id, attempt_id)
+
+    async def _close_workspace_attempt_safely(
+        self,
+        user_id: str,
+        session_id: str,
+        run_id: str,
+        workspace_turn: tuple[str, WorkspaceCapabilities] | None,
+        *,
+        succeeded: bool,
+    ) -> None:
+        """Best-effort cleanup which never masks the original Pi outcome."""
+        if workspace_turn is None:
+            return
+        try:
+            await self._close_workspace_attempt(
+                user_id,
+                session_id,
+                run_id,
+                workspace_turn[0],
+                succeeded=succeeded,
+            )
+        except Exception:  # noqa: BLE001 - cleanup must not replace the Pi failure.
+            return
 
     async def _execute(self, user_id: str, session_id: str, run_id: str, content: str) -> None:
         """Run an initial Pi turn under its session lock and durable lease.
@@ -365,7 +536,14 @@ class AgentService:
                     self.store.record_unreported_model_call(user_id, run_id)
                 self._record_progress_event(user_id, run_id, event)
 
+            workspace_turn = None
             try:
+                workspace_turn = await self._open_workspace_attempt(
+                    user_id,
+                    session_id,
+                    run_id,
+                    required=bool(self.store.run_context(run_id).get("file_ids", [])),
+                )
                 workspace_refs = []
                 if self.workspace_transfer is not None:
                     workspace_refs = await self.workspace_transfer.prepare(
@@ -389,23 +567,27 @@ class AgentService:
                 result = await self.runner.prompt(
                     session_id, content, on_event,
                     session_file=self.store.session_file_for(user_id, session_id),
-                    environment=self._environment(user_id, run_id),
+                    environment=self._environment(
+                        user_id,
+                        run_id,
+                        session_id=session_id if workspace_turn else None,
+                        attempt_id=workspace_turn[0] if workspace_turn else None,
+                        workspace_capabilities=workspace_turn[1] if workspace_turn else None,
+                    ),
                     system_prompt_suffix=instructions + (
                         "\nWorkspace uploads:\n" + "\n".join(
                             f"{ref.name}: {ref.relative_path}" for ref in workspace_refs
                         )
                         if workspace_refs else ""
-                    ),
-                    **(
-                        {
-                            "include_attempt_id": True,
-                            "after_attempt": lambda completed: self._collect_workspace(
-                                user_id, session_id, run_id, completed["attempt_id"],
-                            ),
-                        }
-                        if self.workspace_transfer is not None else {}
+                    ) + (
+                        f"\nCurrent workspace attempt: {workspace_turn[0]}. "
+                        f"Write downloadable files under artifacts/{workspace_turn[0]}/."
+                        if workspace_turn else ""
                     ),
                     **({"images": images} if images else {}),
+                )
+                await self._close_workspace_attempt_safely(
+                    user_id, session_id, run_id, workspace_turn, succeeded=True
                 )
                 if not self.store.owns_lease(run_id, self._instance_id):
                     return
@@ -420,6 +602,9 @@ class AgentService:
                     tool_results=[] if waiting else self._mcp_tool_result_parts(run_id),
                 )
             except Exception as exc:  # noqa: BLE001 - Persist external Pi failures.
+                await self._close_workspace_attempt_safely(
+                    user_id, session_id, run_id, workspace_turn, succeeded=False
+                )
                 if not self.store.owns_lease(run_id, self._instance_id):
                     return
                 self.store.settle_current_tokens(
@@ -499,22 +684,33 @@ class AgentService:
                     self.store.record_unreported_model_call(user_id, run_id)
                 self._record_progress_event(user_id, run_id, event)
 
+            workspace_turn = None
             try:
+                workspace_turn = await self._open_workspace_attempt(
+                    user_id,
+                    session_id,
+                    run_id,
+                    required=False,
+                )
                 result = await self.runner.prompt(
                     session_id, f"/pskit_resume {job_id}", on_event,
                     session_file=self.store.session_file_for(user_id, session_id),
-                    environment=self._environment(user_id, run_id),
-                    system_prompt_suffix=instructions,
-                    allow_handled=True,
-                    **(
-                        {
-                            "include_attempt_id": True,
-                            "after_attempt": lambda completed: self._collect_workspace(
-                                user_id, session_id, run_id, completed["attempt_id"],
-                            ),
-                        }
-                        if self.workspace_transfer is not None else {}
+                    environment=self._environment(
+                        user_id,
+                        run_id,
+                        session_id=session_id if workspace_turn else None,
+                        attempt_id=workspace_turn[0] if workspace_turn else None,
+                        workspace_capabilities=workspace_turn[1] if workspace_turn else None,
                     ),
+                    system_prompt_suffix=instructions + (
+                        f"\nCurrent workspace attempt: {workspace_turn[0]}. "
+                        f"Write downloadable files under artifacts/{workspace_turn[0]}/."
+                        if workspace_turn else ""
+                    ),
+                    allow_handled=True,
+                )
+                await self._close_workspace_attempt_safely(
+                    user_id, session_id, run_id, workspace_turn, succeeded=True
                 )
                 if not self.store.owns_lease(run_id, self._instance_id):
                     return
@@ -530,6 +726,9 @@ class AgentService:
                     tool_results=[] if waiting else self._mcp_tool_result_parts(run_id),
                 )
             except Exception as exc:  # noqa: BLE001 - Retry recoverable Pi failures only.
+                await self._close_workspace_attempt_safely(
+                    user_id, session_id, run_id, workspace_turn, succeeded=False
+                )
                 if not self.store.owns_lease(run_id, self._instance_id):
                     return
                 self.store.settle_current_tokens(

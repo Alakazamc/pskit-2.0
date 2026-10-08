@@ -195,12 +195,18 @@ export type ToolStartedEvent = {
   "data": ToolStartedData;
 };
 
+export type ToolUpdatedData = {
+  "tool_call_id": string;
+  "tool": string;
+  "summary"?: string | null;
+};
+
 export type ToolUpdatedEvent = {
   "id": string;
   "run_id": string;
   "created_at"?: string;
   "type": "tool.updated";
-  "data": ToolStartedData;
+  "data": ToolUpdatedData;
 };
 
 export type UsageUpdatedData = {

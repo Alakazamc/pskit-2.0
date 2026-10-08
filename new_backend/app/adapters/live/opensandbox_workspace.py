@@ -71,6 +71,7 @@ class _Process:
     cursor: int = 0
     sequence: int = 0
     output_bytes: int = 0
+    output_truncated: bool = False
     peak_memory_bytes: int = 0
     terminal: WorkspaceCommandStatus | None = None
 
@@ -223,6 +224,9 @@ class _WorkspaceCommands:
         cwd = _logical_path(request.cwd)
         physical_session = f"/workspace/{session_id}"
         await self.compat.mkdir(sandbox.sandbox_id, physical_session)
+        for directory in ("files", "work", "attempts", "artifacts"):
+            await self.compat.mkdir(sandbox.sandbox_id, f"{physical_session}/{directory}")
+        await self.compat.mkdir(sandbox.sandbox_id, f"{physical_session}/work/.tmp")
         await self.compat.mkdir(sandbox.sandbox_id, f"{physical_session}/{cwd}")
         isolated = await self.compat.create_isolated_session(
             sandbox.sandbox_id,
@@ -230,6 +234,7 @@ class _WorkspaceCommands:
             uid=10001,
             gid=10001,
             idle_timeout_seconds=max(30, int(request.timeout_seconds) + 15),
+            readonly_paths=("files",),
         )
         if (
             isolated.workspace_path != physical_session
@@ -246,7 +251,7 @@ class _WorkspaceCommands:
                 attempt_id=request.attempt_id,
                 user_id=sandbox.user_id,
                 session_id=session_id,
-                run_id=request.attempt_id,
+                run_id=request.run_id,
                 lease_seconds=request.timeout_seconds + 30,
             )
         except Exception:
@@ -303,10 +308,17 @@ class _WorkspaceCommands:
             if logs.content:
                 remaining = state.request.max_output_bytes - state.output_bytes
                 chunk = logs.content[: max(remaining, 0)]
+                if len(logs.content) > len(chunk):
+                    state.output_truncated = True
                 state.output_bytes += len(chunk)
                 if chunk:
                     state.sequence += 1
-                    yield WorkspaceCommandEvent(sequence=state.sequence, type="output", data=chunk)
+                    yield WorkspaceCommandEvent(
+                        sequence=state.sequence,
+                        type="output",
+                        data=chunk,
+                        truncated=state.output_truncated,
+                    )
             status = await self.status(handle)
             if status.state != "running":
                 state.sequence += 1
@@ -614,15 +626,23 @@ PY
                     raise WorkspaceUnsafeRuntime("Workspace isolation behavior is unsafe")
                 await self.compat.delete_isolated_session(first_id, session.id)
 
+                await self.compat.mkdir(first_id, "/workspace/probe-session/files")
+                await self.compat.write(
+                    first_id, "/workspace/probe-session/files/immutable", b"unchanged"
+                )
                 event_session = await self.compat.create_isolated_session(
                     first_id,
                     physical_workspace="/workspace/probe-session",
                     uid=10001,
                     gid=10001,
                     idle_timeout_seconds=30,
+                    readonly_paths=("files",),
                 )
                 run = await self.compat.run_background(
-                    first_id, event_session.id, "printf pskit-probe", env={}
+                    first_id,
+                    event_session.id,
+                    "test ! -w /workspace/files && printf pskit-probe",
+                    env={},
                 )
                 event_ok = False
                 for _ in range(30):

@@ -80,6 +80,22 @@ class CommandControlRequest(WorkspaceRequest):
     process_id: str = Field(min_length=1, max_length=256)
 
 
+class CommandStartResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    process_id: str
+    status: Literal["running"] = "running"
+
+
+class CommandStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    process_id: str
+    status: Literal["queued", "running", "cancelling", "completed", "failed", "cancelled", "unknown"]
+    exit_code: int | None = None
+    termination_confirmed: bool = False
+
+
 class WorkspaceToolEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -77,6 +77,12 @@ RESEARCH_AGENT_COMPUTE_SERVICE_KEYS_JSON={}
 
 CORAL 的规范输入、结果预览和新对话交接见 [CORAL.md](CORAL.md)。
 
+### 用户工作区与远程科研计算的边界
+
+Pi 的 `read/write/edit/ls/find/grep/bash/python` 通过内部 workspace API 进入当前用户的 OpenSandbox/gVisor 工作区。命令只看到当前 Session 映射后的 `/workspace`，上传文件只读，正式输出必须写入本轮 `artifacts/<attempt_id>/`，再由 Python 校验并注册到现有 Artifact 下载接口。工作区命令按 CPU 核毫秒预占和结算，不获得 GPU、Docker socket、宿主路径或任意公网访问能力。
+
+AF3、CORAL 和其他已注册科研模型继续由通用计算队列、MCP 接收器及独立 worker 执行。它们的 GPU/CPU 用量由服务协议回报并进入计算账本，不能在用户工作区内直接启动，也不能把工作区进程指标伪装成远程模型用量。Pi 只提交结构化 Job、等待终态，并用 artifact/file ID 继续分析；任何一侧故障都不得回退到后端本机子进程。
+
 结果回执包含 receipt_id、job_id、accepted_seq、payload_hash、status、committed=true，事务提交后才返回。同 seq 同 payload 重发返回原回执；不同 payload 409。心跳用量是累计值，终态也是完整累计值。显式 UsageWindow 使用时区明确的 start/end；按窗口比例做 UTC 日归账，余数给最后一天，这只是归账政策。未给窗口时按预占日归账，不伪称逐日物理采样。跨日未结算 hold 不消失。
 
 ## 5. 长任务与接收器

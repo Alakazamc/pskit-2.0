@@ -393,13 +393,24 @@ class OpenSandboxCompat:
         uid: int,
         gid: int,
         idle_timeout_seconds: int,
+        readonly_paths: tuple[str, ...] = (),
     ) -> CompatIsolatedSession:
         handle = await self._handle(sandbox_id)
         sdk = self._sdk()
         request = sdk.CreateIsolatedSessionRequest(
             workspace=sdk.IsolatedWorkspaceSpec(path=physical_workspace, mode="rw"),
             profile="strict",
-            binds=[sdk.BindMount(source=physical_workspace, dest="/workspace", readonly=False)],
+            binds=[
+                sdk.BindMount(source=physical_workspace, dest="/workspace", readonly=False),
+                *[
+                    sdk.BindMount(
+                        source=f"{physical_workspace}/{path}",
+                        dest=f"/workspace/{path}",
+                        readonly=True,
+                    )
+                    for path in readonly_paths
+                ],
+            ],
             share_net=False,
             env_passthrough=sdk.EnvPassthroughSpec(mode="allow", keys=[]),
             uid=uid,

@@ -183,6 +183,7 @@ class WorkspaceCommandRequest:
 
     session_id: str
     attempt_id: str
+    run_id: str
     argv: tuple[str, ...]
     cwd: str = "attempts"
     env: Mapping[str, str] = field(default_factory=dict)
@@ -207,6 +208,7 @@ class WorkspaceCommandEvent:
     type: str
     data: bytes = b""
     exit_code: int | None = None
+    truncated: bool = False
 
 
 @dataclass(frozen=True, slots=True)
