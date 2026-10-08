@@ -185,16 +185,16 @@ A6000 升级或恢复前核对唯一接收器、活动任务、journal/outbox/sp
 
 ## 7. 当前交接与维护
 
-快照日期：2026-10-08（Asia/Shanghai）。流式性能发布、A6000 收尾和视觉能力合并修复均已完成；生产制品见 [流式发布记录](releases/2026-10-07-streaming-quality.md)与[视觉能力发布记录](releases/2026-10-08-vision-capability.md)，接收器、对账、镜像源与 CORAL provider 证据见 [A6000 收尾记录](releases/2026-10-08-a6000-runtime-mirrors.md)。
+快照日期：2026-10-08（Asia/Shanghai）。流式性能、A6000 收尾、视觉能力合并与 Tool Product 草稿交接均已发布；最新制品及回滚见 [Tool Product 草稿交接发布记录](releases/2026-10-08-tool-handoff-drafts.md)，前序证据见 [流式发布记录](releases/2026-10-07-streaming-quality.md)、[视觉能力发布记录](releases/2026-10-08-vision-capability.md)与 [A6000 收尾记录](releases/2026-10-08-a6000-runtime-mirrors.md)。
 
 - **已确认的用户偏好：** 本地前后端一起运行，完成开发与验证后部署云端。
-- **当前源码与部署：** 主仓库当前功能提交为 `8c5ce1d`，其前置工具结果与 API 契约提交为 `e06ed00`、`079de67`；阿里云生产与 Staging backend 仍使用 `pskit-agent-backend:20261008-vision-23f0efc`，配置 ID `sha256:3f7dab0c322545be70ca860499bab8ce4edf223626e15a67b12eb88125560726`。A6000 接收器继续使用 `e164dab` runtime。
-- **本地验证：** 前端既有 typecheck、lint、284 项测试和生产构建记录保持有效，Molstar 为 18 个延迟 chunk。后端既有 Ruff、对账/CORAL 回归和完整 suite 结果未因本次一行逻辑修复重新运行；新镜像与上一生产镜像的 `pip freeze` 完全一致，revision、导入和目标代码探针通过。未运行真实付费模型或 GPU。
-- **生产与 Staging：** 两环境前端均为 dist 哈希 `873ee9a5b06416dc6004f01f8bf7b3ae0ce561239fe19cccf9fdfa04269d975d`，生产 index SHA256 为 `50f8a895273f66cf232d42aa361d7072d38b78b03be515cc5cc188070a07eb48`。两环境 backend 均为 `pskit-agent-backend:20261008-vision-23f0efc`。Staging backend healthy、ready 200、私网登录 200、usage 401；生产 healthy、ready 200、HTTPS 200、usage 401、internal 404、公网管理入口 403。生产 LiteLLM 元数据目录的 21 个可见模型均返回 `supports_images=true`；没有执行模型调用。切换前后未完成 Run/Job 与待对账用量均为 0；数据库、基础设施和 Nginx 未重启。
+- **当前源码与部署：** 主仓库当前提交为 `807ad92`；阿里云生产与 Staging backend 均使用 `pskit-agent-backend:20261008-tool-handoff-807ad92`，阿里云镜像 ID `sha256:1a4cad73f0ae9b0f60f20de51ab139a02f6aeaa681cfc9fc5f427adea42eb3f3`。A6000 接收器继续使用 `e164dab` runtime。
+- **本地验证：** 本次前端 typecheck、生产构建与 Molstar 18 个延迟 chunk 检查通过；没有重新运行前端测试套件。新旧后端镜像的 `pip freeze` 完全一致，revision、应用导入和 `ToolRunSnapshot.arguments` 探针通过。未运行真实付费模型或 GPU。
+- **生产与 Staging：** 两环境前端均为 dist 哈希 `e9403377d351007cc48d68322006811b0cc1a94a3b95143c5077c3abb12083ab`，HTTP index SHA256 均为 `7fde1c37ad3cf4d27c6bd6e4d40919d023e090139672d34073da330f28bd191b`。Staging 完整 smoke 通过登录、文件、SSE、配额及模拟 AF3；生产 healthy、ready 200、HTTPS 200、usage 401、internal 404、公网管理入口 403、WireGuard 管理入口 200。切换前后活动 Agent Run、Job 与待对账用量均为 0；两条旧 Tool Product Run 状态未归一化但对应 Job 已终态且 settled，原记录保留。数据库、基础设施、Nginx 与 A6000 均未重启。
 - **A6000：** 唯一接收器已挂载 `runtime-e164dab`，三个 journal 均无未确认记录；原 AF3 计算容器 ID 和启动时间不变。两条旧 CORAL Job 已基于提供端证据完成管理员审计结算，中央无非终态或待对账 Job。4090 CORAL provider 已固化失败计量和产物读取修复到独立仓库提交 `25afdc0`；四个工具发现通过，修复后没有运行真实模型推理。
 - **发布性能结论：** 此次慢点是 WSL/Docker NAT 到 Docker Hub/PyPI；默认 PyPI 约 20 KB/s，清华镜像约 8–12 MB/s。`e164dab` 已给固定 Dockerfile 增加显式 PyPI/npm 镜像与已验证基础镜像参数；镜像源检查构建的 npm 层约 7 秒、pip 层约 20 秒，新旧 `pip freeze` 一致。生产依赖仍由锁文件和固定基础镜像 digest 决定。
 - **本地配置缺口：** 现有 live `.env` 未配置独立开发 PostgreSQL；日常开发使用第 3.1 节的独立 mock，真实联调补齐开发数据库后进行。
-- **待验证发布提交：** `079de67` 为 Tool Product 运行快照增加不可变 `arguments`，`e06ed00` 让 CORAL 等工具页在结果侧展示实际运行参数；`8c5ce1d` 让 Agent handoff 先把拥有的运行产物下载并重新登记为用户文件，再创建会话，将提示词与文件引用写入该会话的浏览器本地草稿后跳转，由用户确认或编辑后手动发送，修复把 artifact ID 误当 file ID 导致的 `CONTEXT_NOT_FOUND`。同时调整了完成状态、用量来源、结果操作和序列摘要的层级。当前提交尚未执行验证命令或部署。
+- **Tool Product 草稿交接已发布：** `079de67` 为运行快照增加不可变 `arguments`，`e06ed00` 调整结果展示并把 Artifact 转成用户文件，`8c5ce1d` 将提示词与文件引用写入新会话的浏览器本地草稿且不自动发送。制品、Staging/生产证据与回滚见 [发布记录](releases/2026-10-08-tool-handoff-drafts.md)。Staging 没有可见的历史 CORAL Run，因此本次未额外触发计算验证；用户可用已完成的正常工具运行检查新会话草稿、附件和手动发送流程。
 - **4090 外部数据：** CORAL 一次生成需要读取 RCSB mmCIF。该主机直连 RCSB 会被拒绝，私有 `.pskit-mcp.runtime.env` 使用已验收的本机 SOCKS HTTPS 代理；重启提供端时由 `launch_artifact_server.py` 传入进程。代理配置不进入 Git，升级或重启前先用 CORAL 实际 Python 环境验证公开 mmCIF 下载。
 - **2026-10-08 CORAL 修复发布：** 4090 provider PID `3496099` 已继承私有 RCSB 代理；实时 CORAL 环境读取 `6VXX.cif` 返回 200，A6000 仍发现四个 CORAL 工具，中央无活动或待对账计算任务。前端提交 `64ca5b1` 已发布到 Staging 和生产，结构化错误不再显示为 `[object Object]`；生产 index SHA256 为 `50f8a895273f66cf232d42aa361d7072d38b78b03be515cc5cc188070a07eb48`。验证及回滚见 [发布记录](releases/2026-10-08-coral-rcsb-error-ui.md)。本次没有重新执行真实 CORAL 推理。
 - **下一步：** 用户可在正常对话中选择支持图片的模型验证供应商端多模态调用；该操作会产生 Token 费用，本次发布没有代为调用。真实 CORAL/AF3 结果验收仍需另设明确输入及预算。下一次后端镜像发布继续比较 `pip freeze`、revision label 和最终 image ID。
