@@ -57,6 +57,8 @@ _POSTGRES_COMPUTE = {
     "compute_outbox",
 }
 _POSTGRES_CONTROL_PLANE = {
+    "workspace_sandboxes",
+    "workspace_sandbox_leases",
     "sandbox_owners",
     "sandbox_leases",
     "sandbox_operations",
