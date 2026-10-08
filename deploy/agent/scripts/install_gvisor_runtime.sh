@@ -87,14 +87,28 @@ destination.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
 PY
 
 echo "Validated gVisor $version ($actual_sha512)"
-if [[ -f "$daemon" ]]; then
-  diff -u "$daemon" "$candidate" || true
-else
-  diff -u /dev/null "$candidate" || true
-fi
+python3 - "$daemon" "$target" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+source, target = pathlib.Path(sys.argv[1]), sys.argv[2]
+if source.exists():
+    raw = source.read_bytes()
+    data = json.loads(raw)
+    print(f"Existing daemon configuration sha256: {hashlib.sha256(raw).hexdigest()}")
+else:
+    data = {}
+    print("Existing daemon configuration: absent")
+runtime = (data.get("runtimes") or {}).get("runsc")
+print("Existing runsc registration: " + ("present" if runtime else "absent"))
+print(f"Requested runsc path: {target}")
+print("All unrelated Docker daemon keys will be preserved without display.")
+PY
 
 if [[ "$apply" != true ]]; then
-  echo "Preview only. Re-run as root with --apply after reviewing the diff."
+  echo "Preview only. Re-run as root with --apply after reviewing the summary."
   exit 0
 fi
 [[ $EUID -eq 0 ]] || { echo "--apply requires root" >&2; exit 2; }
