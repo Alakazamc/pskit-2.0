@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock3, Square, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import type { ArtifactRef, ResearchApi, ToolProductRun } from "../../api/types";
+import type { ArtifactRef, ContextRef, ResearchApi, ToolProductHandoff, ToolProductRun } from "../../api/types";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { errorTranslationKey } from "../../i18n/errors";
 import { personalSessionPath } from "../mono/sessionPaths";
@@ -31,14 +31,6 @@ function formSignature(form: ToolForm): string {
     : value);
 }
 
-function usageSource(source: ToolProductRun["usage"], language: "zh" | "en"): string {
-  const kind = source?.source;
-  const labels = language === "en"
-    ? { service_reported: "service reported", measured: "measured", estimated: "estimated", unknown: "unknown" }
-    : { service_reported: "服务上报", measured: "平台测量", estimated: "估算", unknown: "未知" };
-  return kind ? labels[kind] : "";
-}
-
 export function ToolProductPage({ api, slug, userId, theme, onBack }: {
   api: ResearchApi; slug: string; userId: string; theme: "dark" | "light"; onBack: () => void;
 }) {
@@ -61,7 +53,14 @@ export function ToolProductPage({ api, slug, userId, theme, onBack }: {
   const tab = params.get("tab") === "history" ? "history" : "run";
   const history = useQuery({ queryKey: ["tool-product-runs", userId, slug], queryFn: () => api.getToolProductRuns(slug), enabled: tab === "history" });
   const pendingStart = useRef<{ signature: string; key: string } | null>(null);
-  const pendingHandoff = useRef<{ id: string; key: string; sessionId?: string } | null>(null);
+  const pendingHandoff = useRef<{
+    id: string;
+    runId: string;
+    key: string;
+    sessionId?: string;
+    context?: ToolProductHandoff;
+    attachments?: ContextRef[];
+  } | null>(null);
 
   useEffect(() => {
     if (!runId) { setRun(null); setEvents([]); return; }
@@ -141,18 +140,35 @@ export function ToolProductPage({ api, slug, userId, theme, onBack }: {
   const performHandoff = async (handoffId: string) => {
     if (!run || run.status !== "completed" || busy) return;
     setBusy(true); setError("");
-    if (pendingHandoff.current?.id !== handoffId) pendingHandoff.current = { id: handoffId, key: crypto.randomUUID() };
+    if (pendingHandoff.current?.id !== handoffId || pendingHandoff.current.runId !== run.run_id) {
+      pendingHandoff.current = { id: handoffId, runId: run.run_id, key: crypto.randomUUID() };
+    }
     try {
-      const context = await api.handoffToolProductRun(run.run_id, handoffId);
+      const pending = pendingHandoff.current;
+      const context = pending.context ?? await api.handoffToolProductRun(run.run_id, handoffId);
+      pending.context = context;
+      if (!pending.attachments) {
+        const attachments: ContextRef[] = [];
+        for (const artifact of (context.artifacts ?? []).filter((item) => item.available).slice(0, 10)) {
+          const content = await api.downloadArtifact(artifact.id);
+          const type = artifact.kind.includes("/") ? artifact.kind : "";
+          const uploaded = await api.uploadFile(new File([content], artifact.name, { type }));
+          attachments.push({ id: uploaded.id, name: uploaded.name });
+        }
+        pending.attachments = attachments;
+      }
       const title = localized(product.data?.title, language) || slug;
-      const sessionId = pendingHandoff.current.sessionId ?? (await api.createSession(null, `${title} · Agent`, true)).id;
-      pendingHandoff.current.sessionId = sessionId;
+      const sessionId = pending.sessionId ?? (await api.createSession(null, `${title} · Agent`, true)).id;
+      pending.sessionId = sessionId;
       const summary = context.summary.slice(0, 4_000);
-      const content = language === "en" ? `Continue from Tool Run ${context.run_id}.\n\n${summary}` : `继续分析工具运行 ${context.run_id}。\n\n${summary}`;
-      await api.sendMessage(sessionId, { content, attachments: (context.artifacts ?? []).map((artifact) => ({ id: artifact.id, name: artifact.name })), skills: [], resources: [] }, pendingHandoff.current.key, null);
+      const inputs = JSON.stringify(run.arguments ?? {}).slice(0, 1_000);
+      const content = language === "en"
+        ? `Continue from Tool Run ${context.run_id}.\n\nRun inputs:\n${inputs}\n\nResult summary:\n${summary}`
+        : `继续分析工具运行 ${context.run_id}。\n\n本次运行参数：\n${inputs}\n\n结果摘要：\n${summary}`;
+      await api.sendMessage(sessionId, { content, attachments: pending.attachments, skills: [], resources: [] }, pending.key, null);
       pendingHandoff.current = null;
       navigate(personalSessionPath(sessionId));
-    } catch { setError(t("toolProduct.handoffFailed")); }
+    } catch (cause) { setError(t(errorTranslationKey(cause) ?? "toolProduct.handoffFailed")); }
     finally { setBusy(false); }
   };
 
@@ -189,12 +205,10 @@ export function ToolProductPage({ api, slug, userId, theme, onBack }: {
       <Tabs.List className="catalog-detail-tabs" aria-label={title}><Tabs.Trigger value="run">{t("tools.arguments")}</Tabs.Trigger><Tabs.Trigger value="history">{t("tools.history")}</Tabs.Trigger></Tabs.List>
       <Tabs.Content value="run" forceMount hidden={tab !== "run"}>
         {error && <p role="alert" className="mono-form-error">{error}</p>}
-        <div className="tool-product-run-actions">
-          {run?.usage && <span className="mono-chip">{t("toolProduct.usageSource", { source: usageSource(run.usage, language) })}</span>}
+        <ToolUiRenderer schema={currentSchema} form={form} run={run} events={events} onChange={setForm} onAction={(actionId, values) => void start(actionId, values)} onArtifactDownload={(artifact) => void downloadArtifact(artifact)} theme={theme} showHeader={false} resultActions={<>
           {run && activeStatuses.has(run.status) && <button type="button" className="mono-button" disabled={busy || run.status === "cancelling"} onClick={() => void cancel()}><Square size={13} />{t(run.status === "cancelling" ? "toolProduct.stopping" : "toolProduct.stop")}</button>}
           {run?.status === "completed" && handoffs.map((item) => <button type="button" className="mono-button" disabled={busy} key={item.id} onClick={() => void performHandoff(item.id)}><Sparkles size={14} />{localized(item.label, language)}</button>)}
-        </div>
-        <ToolUiRenderer schema={currentSchema} form={form} run={run} events={events} onChange={setForm} onAction={(actionId, values) => void start(actionId, values)} onArtifactDownload={(artifact) => void downloadArtifact(artifact)} theme={theme} showHeader={false} />
+        </>} />
       </Tabs.Content>
       <Tabs.Content value="history"><div className="mono-page-content tool-product-history">
         {history.isPending && <PageLoading label={t("tools.loadingRuns")} />}

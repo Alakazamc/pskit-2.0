@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import type { ReactNode } from "react";
-import { Download, FileText } from "lucide-react";
+import { Copy, Download, FileText } from "lucide-react";
 import type { ArtifactRef } from "../../api/types";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import {
@@ -35,7 +35,18 @@ function DataTable({ value, title, limit }: { value: unknown; title: string; lim
     <tbody>{rows.map((row, index) => <tr key={index}>{columns.map((column) => <td key={column}>{String(row[column] ?? "")}</td>)}</tr>)}</tbody></table></div>;
 }
 
+function metricLabel(name: string, language: "zh" | "en"): string {
+  const known: Record<string, [string, string]> = {
+    generated_count: ["Generated candidates", "生成候选数量"],
+    protein_sequence_preview: ["Protein sequence", "蛋白质序列"],
+  };
+  const label = known[name];
+  if (label) return language === "en" ? label[0] : label[1];
+  return name.replaceAll("_", " ").replace(/\b\w/gu, (letter) => letter.toUpperCase());
+}
+
 function MetricGrid({ value }: { value: unknown }) {
+  const { language, t } = useLanguage();
   const metrics = typeof value === "object" && value !== null && !Array.isArray(value) ? Object.entries(value) : [];
   if (!metrics.length) return null;
   const formatMetric = (metric: unknown): string => {
@@ -52,7 +63,12 @@ function MetricGrid({ value }: { value: unknown }) {
   };
   return <dl className="tool-metric-grid">{metrics.slice(0, 24).map(([name, metric]) => {
     const nested = typeof metric === "object" && metric !== null;
-    return <div key={name}><dt>{name}</dt><dd className={nested ? "tool-metric-detail" : undefined}>{formatMetric(metric)}</dd></div>;
+    const sequence = name.toLowerCase().includes("sequence") && typeof metric === "string";
+    const rendered = formatMetric(metric);
+    return <div key={name} className={sequence ? "tool-metric-sequence" : undefined}><dt>{metricLabel(name, language)}</dt>
+      <dd className={`${nested ? "tool-metric-detail" : ""}${sequence ? " tool-sequence-value" : ""}`.trim()}>{rendered}</dd>
+      {sequence && <button type="button" className="tool-metric-copy" aria-label={t("conversation.copyReply")} title={t("conversation.copyReply")} onClick={() => void navigator.clipboard?.writeText(rendered)}><Copy aria-hidden="true" /></button>}
+    </div>;
   })}</dl>;
 }
 

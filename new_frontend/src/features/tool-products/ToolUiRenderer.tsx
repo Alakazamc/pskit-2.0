@@ -1,8 +1,9 @@
-import type { CSSProperties, FormEvent } from "react";
+import type { CSSProperties, FormEvent, ReactNode } from "react";
 import type { ArtifactRef } from "../../api/types";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { ToolInputRenderer } from "./ToolInputRenderer";
 import { ToolResultRenderer } from "./ToolResultRenderer";
+import { ToolRunOverview } from "./ToolRunOverview";
 import {
   conditionMatches,
   formWithDefaults,
@@ -24,10 +25,11 @@ export type ToolUiRendererProps = {
   onArtifactDownload?: (artifact: ArtifactRef) => void;
   theme?: "dark" | "light";
   showHeader?: boolean;
+  resultActions?: ReactNode;
 };
 
-export function ToolUiRenderer({ schema, form, run, events, onChange, onAction, onArtifactDownload, theme = "light", showHeader = true }: ToolUiRendererProps) {
-  const { language } = useLanguage();
+export function ToolUiRenderer({ schema, form, run, events, onChange, onAction, onArtifactDownload, theme = "light", showHeader = true, resultActions }: ToolUiRendererProps) {
+  const { language, t } = useLanguage();
   const effectiveForm = formWithDefaults(schema, form);
   const document = { form: effectiveForm, run };
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -48,14 +50,15 @@ export function ToolUiRenderer({ schema, form, run, events, onChange, onAction, 
       "--tool-ui-result": `${schema.page.result_width ?? 7}fr`,
     } as CSSProperties}>
       <div className="tool-ui-input">
+        <div className="tool-ui-pane-heading"><h2>{t("toolProduct.newRun")}</h2><p>{t("toolProduct.newRunHelp")}</p></div>
         <ToolInputRenderer schema={schema} form={effectiveForm} onChange={onChange} />
         <div className="tool-ui-actions">{schema.actions.map((action) => conditionMatches(action.visible_when, document) &&
-          <button className="mono-button primary" type="submit" name="tool-action" value={action.id} key={action.id}>{localized(action.label, language)}</button>)}</div>
+          <button className={`mono-button ${run?.status === "completed" ? "secondary" : "primary"}`} type="submit" name="tool-action" value={action.id} key={action.id}>{localized(action.label, language)}</button>)}</div>
       </div>
       <div className="tool-ui-output">
-        {status && ["queued", "running", "cancelling"].includes(status) && <div className="tool-ui-run-status" role="status">{language === "en" ? status[0].toUpperCase() + status.slice(1) : ({ queued: "排队中", running: "运行中", cancelling: "正在取消" } as Record<string, string>)[status]} · {run?.progress ?? 0}%</div>}
+        {run && <ToolRunOverview schema={schema} run={run} actions={resultActions} />}
         {status && ["failed", "cancelled"].includes(status) && <div className="tool-ui-error" role="alert">{language === "en" ? `Run ${status}` : status === "failed" ? "运行失败" : "运行已取消"}</div>}
-        {run ? <ToolResultRenderer schema={schema} form={effectiveForm} run={run} events={events} onArtifactDownload={onArtifactDownload} theme={theme} />
+        {run ? <ToolResultRenderer schema={schema} form={run.arguments ?? {}} run={run} events={events} onArtifactDownload={onArtifactDownload} theme={theme} />
           : <div className="tool-ui-placeholder">{language === "en" ? "Run the tool to see results" : "运行工具后在这里查看结果"}</div>}
       </div>
     </form>
