@@ -74,6 +74,7 @@ def validate_staging(
     if root.is_symlink() or root.stat().st_mode & 0o077:
         raise ValueError("Staging directory has unsafe permissions")
     release = json.loads(manifest.read_text())
+    has_opensandbox = "opensandbox-server" in rendered.get("agent", {}).get("services", {})
     if release.get("projects") != list(PROJECTS.values()) or set(rendered) != set(PROJECTS):
         raise ValueError("Unexpected staging projects")
     for part, project in PROJECTS.items():
@@ -94,14 +95,22 @@ def validate_staging(
             "agent": {"app": "pskit-agent-staging_app", "supabase": NETWORK,
                       "mcp_egress": "pskit-agent-staging_mcp_egress"},
         }[part]
+        if part == "agent" and has_opensandbox:
+            allowed_networks["opensandbox_runtime"] = (
+                "pskit-agent-staging-opensandbox-runtime"
+            )
         if {key: item.get("name") for key, item in config.get("networks", {}).items()} != allowed_networks:
             raise ValueError("Unexpected staging network")
         for service_name, service in config.get("services", {}).items():
             service_networks = set(service.get("networks", {}))
-            expected_service_networks = ({"default"} if part == "supabase" else
-                                         {"supabase"} if part == "litellm" else
-                                         {"app", "mcp_egress"} if service_name == "mcp-receiver" else
-                                         {"app", "supabase"})
+            expected_service_networks = (
+                {"default"} if part == "supabase" else
+                {"supabase"} if part == "litellm" else
+                {"app", "mcp_egress"} if service_name == "mcp-receiver" else
+                {"app", "opensandbox_runtime"}
+                if service_name == "opensandbox-server" else
+                {"app", "supabase"}
+            )
             if service_networks != expected_service_networks:
                 raise ValueError("Unexpected staging service network")
             for mount in service.get("volumes", []):
@@ -113,8 +122,19 @@ def validate_staging(
                     path = Path(source).resolve()
                     allowed = (part == "supabase" and path.is_relative_to(SUPABASE / "volumes")
                                or part == "litellm" and path in {
-                                   LITELLM / "config.staging.yaml", AGENT / "tests/mock_model_gateway.py"})
-                    if not allowed or mount.get("read_only") is not True:
+                                   LITELLM / "config.staging.yaml", AGENT / "tests/mock_model_gateway.py"}
+                               or part == "agent" and has_opensandbox and path in {
+                                   root / "opensandbox.private.toml",
+                                   root / "opensandbox-rollout",
+                               })
+                    docker_socket = (
+                        part == "agent"
+                        and service_name == "opensandbox-server"
+                        and path == Path("/var/run/docker.sock")
+                    )
+                    if not docker_socket and (
+                        not allowed or mount.get("read_only") is not True
+                    ):
                         raise ValueError("Unexpected staging bind mount")
                 else:
                     raise ValueError("Unexpected staging mount type")
@@ -150,6 +170,21 @@ def validate_staging(
         raise ValueError("Staging Agent volume mismatch")
     if rendered["agent"]["volumes"]["mcp_receiver_data"]["name"] != "pskit-agent-staging_mcp_receiver_data":
         raise ValueError("Staging MCP receiver volume mismatch")
+    if has_opensandbox:
+        if (
+            rendered["agent"]["volumes"]["opensandbox_state"]["name"]
+            != "pskit-agent-staging_opensandbox_state"
+        ):
+            raise ValueError("Staging OpenSandbox state volume mismatch")
+        server = rendered["agent"]["services"]["opensandbox-server"]
+        if server.get("ports") or server.get("expose"):
+            raise ValueError("Staging OpenSandbox control plane is exposed")
+        if (
+            rendered["agent"]["services"]["backend"]["environment"].get(
+                "RESEARCH_AGENT_WORKSPACE_PROVIDER"
+            ) != "opensandbox"
+        ):
+            raise ValueError("Staging backend did not select OpenSandbox")
     if rendered["agent"]["services"]["backend"]["environment"].get("RESEARCH_AGENT_AF3_EXECUTOR") != "mock":
         raise ValueError("Real AF3 is prohibited in staging")
     if "af3-callback-proxy" in rendered["agent"]["services"] or "web" in rendered["agent"]["services"]:
@@ -235,9 +270,21 @@ def _production_fingerprints() -> dict[str, str]:
     return result
 
 
-def _run(command: list[str], *, env: dict[str, str] | None = None) -> str:
+def _run(
+    command: list[str],
+    *,
+    env: dict[str, str] | None = None,
+    input_text: str | None = None,
+) -> str:
     try:
-        result = subprocess.run(command, env=env, capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            command,
+            env=env,
+            input=input_text,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
     except (OSError, subprocess.CalledProcessError) as exc:
         raise RuntimeError("Staging command failed; inspect staging container logs") from exc
     return result.stdout
@@ -257,7 +304,18 @@ def _compose_commands(root: Path, env_file: Path) -> tuple[dict[str, list[str]],
                           "AGENT_MCP_RECEIVER_DATA_VOLUME", "AGENT_MCP_SERVICE_ID",
                           "AGENT_MCP_WORKER_ID", "SUPABASE_DOCKER_NETWORK",
                           "TURNSTILE_SITE_KEY"}
-    if set(cloud_env) != allowed_cloud_keys:
+    opensandbox_keys = {
+        "OPENSANDBOX_SERVER_IMAGE", "OPENSANDBOX_SANDBOX_IMAGE",
+        "OPENSANDBOX_CONFIG_FILE", "OPENSANDBOX_RUNTIME_NETWORK",
+        "OPENSANDBOX_STATE_VOLUME", "OPENSANDBOX_VOLUME_DRIVER",
+        "OPENSANDBOX_VOLUME_SIZE", "OPENSANDBOX_CPU_MILLICORES",
+        "OPENSANDBOX_MEMORY_BYTES", "OPENSANDBOX_PID_LIMIT",
+        "OPENSANDBOX_DISK_BYTES", "OPENSANDBOX_INODE_LIMIT",
+        "OPENSANDBOX_API_KEY", "OPENSANDBOX_NAMESPACE",
+        "OPENSANDBOX_ROLLOUT_DIR",
+    }
+    if frozenset(cloud_env) not in {frozenset(allowed_cloud_keys),
+                                    frozenset(allowed_cloud_keys | opensandbox_keys)}:
         raise ValueError("Unexpected Staging Compose interpolation variable")
     agent_env.update(cloud_env)
     agent_env["AGENT_BACKEND_ENV_FILE"] = str(env_file)
@@ -266,6 +324,12 @@ def _compose_commands(root: Path, env_file: Path) -> tuple[dict[str, list[str]],
     litellm_env = _env(root / "litellm.env")
     if litellm_env.get("SUPABASE_DOCKER_NETWORK") != NETWORK:
         raise ValueError("LiteLLM network mismatch")
+    agent_files = [
+        "compose.yaml", "compose.cloud.yaml", "compose.postgres.yaml",
+        "compose.staging.yaml",
+    ]
+    if opensandbox_keys <= cloud_env.keys():
+        agent_files.extend(("compose.opensandbox.yaml", "compose.opensandbox.staging.yaml"))
     commands = {
         "supabase": ["docker", "compose", "--env-file", str(root / "supabase.env"),
                      "-f", str(SUPABASE / "docker-compose.yml"),
@@ -277,10 +341,7 @@ def _compose_commands(root: Path, env_file: Path) -> tuple[dict[str, list[str]],
                     "-f", str(LITELLM / "compose.staging.yaml"),
                     "-p", PROJECTS["litellm"]],
         "agent": ["docker", "compose", "--env-file", str(root / "cloud.env"),
-                  "-f", str(AGENT / "compose.yaml"),
-                  "-f", str(AGENT / "compose.cloud.yaml"),
-                  "-f", str(AGENT / "compose.postgres.yaml"),
-                  "-f", str(AGENT / "compose.staging.yaml"),
+                  *(part for file in agent_files for part in ("-f", str(AGENT / file))),
                   "-p", PROJECTS["agent"]],
     }
     return commands, agent_env
@@ -354,13 +415,40 @@ def run_staging(
         for part in PROJECTS:
             print(f"[{part}]\n{_run(commands[part] + ['ps'], env=env)}")
         return
+    if command == "workspace-smoke":
+        source = (AGENT / "scripts/opensandbox_staging_smoke.py").read_text(
+            encoding="utf-8"
+        )
+        report = _run(
+            commands["agent"] + ["exec", "-T", "backend", "python", "-"],
+            env=env,
+            input_text=source,
+        )
+        parsed = json.loads(report)
+        if parsed.get("status") != "live-ready":
+            raise RuntimeError("OpenSandbox Staging smoke did not qualify the release")
+        destination = root / "opensandbox-capability-report.json"
+        descriptor, temporary = tempfile.mkstemp(prefix=".opensandbox-report-", dir=root)
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                json.dump(parsed, stream, indent=2, sort_keys=True)
+                stream.write("\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, destination)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+        print(report)
+        return
     if command == "logs":
         if log_part not in PROJECTS:
             raise ValueError("Expected logs supabase|litellm|agent")
         print(_run(commands[log_part] + ["logs", "--tail=100"], env=env))
         return
     if command != "up":
-        raise ValueError("Expected up|status|logs|down")
+        raise ValueError("Expected up|status|logs|workspace-smoke|down")
     fingerprints = production_fingerprints if production_fingerprints is not None else _production_fingerprints()
     rendered = _render_configs(commands, env)
     validate_staging(manifest, rendered, fingerprints)
@@ -396,7 +484,9 @@ def run_staging(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["up", "status", "logs", "down"])
+    parser.add_argument(
+        "command", choices=["up", "status", "logs", "workspace-smoke", "down"]
+    )
     parser.add_argument("part", nargs="?", choices=["supabase", "litellm", "agent"])
     arguments = parser.parse_args()
     config = os.environ.get("STAGING_CONFIG_DIR", "/home/ecs-user/pskit-agent-staging-private")

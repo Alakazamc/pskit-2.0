@@ -1,0 +1,14 @@
+# Staging rollout controls layered after compose.opensandbox.yaml.
+services:
+  backend:
+    environment:
+      RESEARCH_AGENT_WORKSPACE_ENABLED: "true"
+      RESEARCH_AGENT_WORKSPACE_USER_ALLOWLIST_JSON: '["*"]'
+      RESEARCH_AGENT_WORKSPACE_COMMANDS_ENABLED: "false"
+      RESEARCH_AGENT_WORKSPACE_CAPABILITY_HASH: ""
+      RESEARCH_AGENT_WORKSPACE_ROLLOUT_FILE: /run/pskit-workspace-rollout/policy.json
+    volumes:
+      - type: bind
+        source: ${OPENSANDBOX_ROLLOUT_DIR:?set private staging rollout directory}
+        target: /run/pskit-workspace-rollout
+        read_only: true

@@ -18,6 +18,30 @@ Staging 是阿里云上按需启动的预发布环境。它有单独的 Supabase
 
 ## 启动和验收
 
+### OpenSandbox 固定制品
+
+OpenSandbox 首次进入 Staging 前，先安装并检查固定版 `runsc`，再用全部
+镜像 digest 准备私有配置。下面的四个镜像参数必须是
+`name@sha256:<digest>`；backend 也可以使用精确的 `sha256:<image id>`，不能
+只给 tag：
+
+```bash
+python deploy/agent/scripts/prepare_opensandbox_release.py \
+  --config-dir "$STAGING_CONFIG_DIR" \
+  --backend-image 'sha256:<backend image id>' \
+  --server-image 'pskit-opensandbox-server@sha256:<digest>' \
+  --sandbox-image 'pskit-workspace@sha256:<digest>' \
+  --execd-image 'opensandbox/execd@sha256:<digest>' \
+  --egress-image 'opensandbox/egress@sha256:<digest>' \
+  --frontend-dist /home/ecs-user/pskit-agent-releases/<release>/frontend-dist \
+  --runsc-version '<fixed version>' \
+  --volume-driver '<reviewed quota volume driver>'
+```
+
+脚本生成独立 namespace、runtime network、state volume、API key、TOML 和
+动态 rollout 目录，并写 `opensandbox-release.json`。此时 manifest 状态只是
+`prepared`，后端文件能力仅在 Staging 放开，命令能力仍关闭。
+
 ```bash
 export STAGING_CONFIG_DIR=/home/ecs-user/pskit-agent-staging-private
 bash deploy/agent/staging.sh up
@@ -37,6 +61,24 @@ docker run --rm --network host --read-only --cap-drop ALL \
   --entrypoint python pskit-agent-backend:<固定发布标签> \
   /release/deploy/agent/tests/smoke_staging.py --config-dir /staging --private-api
 ```
+
+基础 Staging smoke 通过后，在运行中的 backend 容器执行真实 workspace
+smoke；该命令覆盖两个用户、两个 Session、文件隔离、命令事件、输出截断、
+取消确认、Artifact 和 stop/replace 保卷，并把非秘密证据写到私有配置目录：
+
+```bash
+bash deploy/agent/staging.sh workspace-smoke
+```
+
+然后使用同一组参数再次运行 `prepare_opensandbox_release.py`，增加：
+
+```bash
+--capability-report "$STAGING_CONFIG_DIR/opensandbox-capability-report.json"
+```
+
+只有第二次生成的 `status=qualified` manifest 才能交给生产发布脚本。实际
+command capability 哈希虽然已经写入 manifest，Staging rollout 文件仍默认
+保持 `commands_enabled=false`；单独验证 Pi 命令工具时才原子更新该文件。
 
 `up` 先做静态隔离预检，启动 Staging Supabase 并创建单独 `litellm` 逻辑库和 `pskit` schema，再启动 LiteLLM/模型替身、签发虚拟 key，最后启动 Agent。失败时保留 Staging 卷和日志；不会调用生产 `stack.sh`。首轮 seed 通过 Supabase 管理接口创建已确认邮箱的 `staging-user@example.invalid`，再次运行只复用已有项目、会话和文件。测试密码在 `seed.env`，不要贴到聊天或终端日志。
 
