@@ -12,6 +12,7 @@ import asyncio
 import json
 import os
 import re
+import secrets
 import subprocess
 import sys
 from pathlib import Path
@@ -105,11 +106,95 @@ def _static_preflight(args: argparse.Namespace) -> dict[str, Any]:
     )
     if "runsc" not in runtimes:
         raise Refusal("Docker has not registered the runsc runtime")
-    plugin = json.loads(
-        _run(["docker", "plugin", "inspect", values["OPENSANDBOX_VOLUME_DRIVER"]])
-    )
-    if not plugin or not plugin[0].get("Enabled"):
-        raise Refusal("quota volume driver is not enabled")
+    probe_name = f"pskit-quota-preflight-{secrets.token_hex(6)}"
+    try:
+        _run(
+            [
+                "docker",
+                "volume",
+                "create",
+                "--driver",
+                values["OPENSANDBOX_VOLUME_DRIVER"],
+                "--opt",
+                "size=64MiB",
+                "--opt",
+                "inodes=1024",
+                probe_name,
+            ]
+        )
+        inspected = json.loads(_run(["docker", "volume", "inspect", probe_name]))
+        if (
+            not inspected
+            or inspected[0].get("Driver") != values["OPENSANDBOX_VOLUME_DRIVER"]
+            or inspected[0].get("Options") != {"size": "64MiB", "inodes": "1024"}
+        ):
+            raise Refusal("quota volume driver did not preserve hard-limit options")
+        backend_image = values.get("AGENT_BACKEND_IMAGE", "")
+        if not backend_image:
+            raise Refusal("backend image is required for the quota volume probe")
+        probe_script = (
+            "import json,os,pathlib;"
+            "v=os.statvfs('/probe');"
+            "pathlib.Path('/probe/persist').write_text('bounded');"
+            "print(json.dumps({'bytes':v.f_blocks*v.f_frsize,'inodes':v.f_files}))"
+        )
+        filesystem = json.loads(
+            _run(
+                [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "--network",
+                    "none",
+                    "--read-only",
+                    "--cap-drop",
+                    "ALL",
+                    "--security-opt",
+                    "no-new-privileges",
+                    "-v",
+                    f"{probe_name}:/probe",
+                    "--entrypoint",
+                    "python",
+                    backend_image,
+                    "-c",
+                    probe_script,
+                ]
+            )
+        )
+        if not 0 < int(filesystem.get("bytes", 0)) <= 64 * 1024 * 1024:
+            raise Refusal("quota volume byte limit was not enforced")
+        if not 0 < int(filesystem.get("inodes", 0)) <= 1024:
+            raise Refusal("quota volume inode limit was not enforced")
+        persisted = _run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--read-only",
+                "--cap-drop",
+                "ALL",
+                "--security-opt",
+                "no-new-privileges",
+                "-v",
+                f"{probe_name}:/probe:ro",
+                "--entrypoint",
+                "python",
+                backend_image,
+                "-c",
+                "from pathlib import Path; print(Path('/probe/persist').read_text())",
+            ]
+        ).strip()
+        if persisted != "bounded":
+            raise Refusal("quota volume did not persist across mounts")
+    finally:
+        subprocess.run(
+            ["docker", "volume", "rm", probe_name],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
     rendered = _compose_config(args.compose_file, args.env_file)
     services = rendered.get("services", {})

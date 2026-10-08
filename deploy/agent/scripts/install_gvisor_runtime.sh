@@ -4,23 +4,23 @@ set -Eeuo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: install_gvisor_runtime.sh --package PATH --sha256 HEX --version VERSION [--apply]
+Usage: install_gvisor_runtime.sh --package PATH --sha512 HEX --version VERSION [--apply]
 
-Without --apply the script validates the local runsc binary and prints the
-Docker daemon.json diff. With --apply it requires root, installs a versioned
-binary, backs up daemon.json, and writes the merged configuration. It never
-reloads or restarts Docker.
+PACKAGE is the official gvisor.tar.bz2 release bundle. Without --apply the
+script validates the bundle and prints the Docker daemon.json diff. With
+--apply it requires root, installs a versioned bundle, backs up daemon.json,
+and writes the merged configuration. It never reloads or restarts Docker.
 EOF
 }
 
 package=
-expected_sha=
+expected_sha512=
 version=
 apply=false
 while (($#)); do
   case "$1" in
     --package) package=${2:-}; shift 2 ;;
-    --sha256) expected_sha=${2:-}; shift 2 ;;
+    --sha512) expected_sha512=${2:-}; shift 2 ;;
     --version) version=${2:-}; shift 2 ;;
     --apply) apply=true; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -31,32 +31,35 @@ done
 [[ -n "$package" && -f "$package" && ! -L "$package" ]] || {
   echo "A regular local --package file is required" >&2; exit 2;
 }
-[[ "$expected_sha" =~ ^[a-f0-9]{64}$ ]] || {
-  echo "--sha256 must be 64 lower-case hexadecimal characters" >&2; exit 2;
+[[ "$expected_sha512" =~ ^[a-f0-9]{128}$ ]] || {
+  echo "--sha512 must be 128 lower-case hexadecimal characters" >&2; exit 2;
 }
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || {
-  echo "--version must be an explicit release version" >&2; exit 2;
+[[ "$version" =~ ^release-[0-9]{8}\.[0-9]+$ ]] || {
+  echo "--version must look like release-YYYYMMDD.RC" >&2; exit 2;
 }
 [[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] || {
   echo "This installer only supports Linux x86_64" >&2; exit 2;
 }
 
-actual_sha=$(sha256sum "$package" | awk '{print $1}')
-[[ "$actual_sha" == "$expected_sha" ]] || {
-  echo "runsc checksum mismatch" >&2; exit 1;
+actual_sha512=$(sha512sum "$package" | awk '{print $1}')
+[[ "$actual_sha512" == "$expected_sha512" ]] || {
+  echo "gVisor bundle checksum mismatch" >&2; exit 1;
 }
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
+tar -xjf "$package" -C "$scratch"
 probe="$scratch/runsc"
-cp "$package" "$probe"
-chmod 0755 "$probe"
+[[ -x "$probe" && -x "$scratch/containerd-shim-runsc-v1" && -d "$scratch/gvisor-bin" ]] || {
+  echo "gVisor release bundle is incomplete" >&2; exit 1;
+}
 reported=$("$probe" --version 2>&1 || true)
 [[ "$reported" == *"$version"* ]] || {
   echo "runsc did not report the requested version" >&2; exit 1;
 }
 
 daemon=/etc/docker/daemon.json
-target="/usr/local/bin/runsc-$version"
+target_dir="/usr/local/lib/pskit-gvisor/$version"
+target="$target_dir/runsc"
 candidate="$scratch/daemon.json"
 python3 - "$daemon" "$candidate" "$target" <<'PY'
 import json
@@ -83,7 +86,7 @@ runtimes["runsc"] = desired
 destination.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
 PY
 
-echo "Validated runsc $version ($actual_sha)"
+echo "Validated gVisor $version ($actual_sha512)"
 if [[ -f "$daemon" ]]; then
   diff -u "$daemon" "$candidate" || true
 else
@@ -96,7 +99,11 @@ if [[ "$apply" != true ]]; then
 fi
 [[ $EUID -eq 0 ]] || { echo "--apply requires root" >&2; exit 2; }
 
-install -o root -g root -m 0755 "$package" "$target"
+install -d -o root -g root -m 0755 "$target_dir"
+cp -a "$scratch/." "$target_dir/"
+chown -R root:root "$target_dir"
+find "$target_dir" -type d -exec chmod 0755 {} +
+find "$target_dir" -type f -exec chmod 0755 {} +
 mkdir -p /etc/docker
 if [[ -f "$daemon" ]]; then
   backup="$daemon.pre-runsc-$(date -u +%Y%m%dT%H%M%SZ)"

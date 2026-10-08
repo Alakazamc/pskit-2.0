@@ -17,7 +17,7 @@
 ## 宿主机前置条件
 
 1. Docker 已注册 `runsc`，`docker info` 的 Runtimes 包含 `runsc`。
-2. 已安装并启用能对持久卷同时执行字节和 inode 硬限制的 Docker volume plugin。普通 `local` named volume 不合格。
+2. 已安装并启用仓库内 `pskit-quota` Docker volume plugin。它只监听 root-owned Unix socket，每个卷使用独立的稀疏 ext4 镜像，同时固定字节和 inode 上限；普通 `local` named volume 不合格。
 3. 配额驱动接受 `size=<IEC size>` 与 `inodes=<positive integer>` 两个 create 选项，并在重启后保留卷。
 4. 创建权限为 `0600` 的环境文件和 OpenSandbox TOML；API key 至少 32 字符，且不进入 Git。
 5. 四个运行镜像都已解析成 `name@sha256:<64 hex>`，禁止 `latest` 与仅 tag 引用。
@@ -26,12 +26,15 @@ OpenSandbox Server 持有 Docker socket，因此属于受信任控制面。只�
 
 ### 受控注册 gVisor
 
-先在可信环境下载已经审阅的 `runsc` 固定版本及其 SHA256，不使用移动的
-`latest` 地址。首次只预览 Docker 配置差异：
+先从 gVisor 官方固定 release 路径下载完整的 `gvisor.tar.bz2` 及其 SHA512，
+不使用移动的 `latest` 地址。2026-07 之后 `runsc` 依赖同包内的 sidecar
+二进制，不能再只复制单个 `runsc` 文件。首次只预览 Docker 配置差异：
 
 ```bash
 bash deploy/agent/scripts/install_gvisor_runtime.sh \
-  --package /path/to/runsc --sha256 '<release sha256>' --version '<fixed version>'
+  --package /path/to/gvisor.tar.bz2 \
+  --sha512 '<release sha512>' \
+  --version 'release-20261005.0'
 ```
 
 确认差异后，root 运维人员可用相同参数加 `--apply`。脚本安装带版本号的
@@ -48,6 +51,21 @@ bash deploy/agent/scripts/check_gvisor_runtime.sh \
 `no-new-privileges`。注册失败时恢复脚本输出的
 `daemon.json.pre-runsc-*` 备份，再通过同一宿主机流程 reload Docker。恢复时
 保留现有容器和卷，不执行 `docker compose down -v`。
+
+### 安装持久配额卷驱动
+
+先预览宿主路径；阿里云数据盘建议使用 `/data/pskit-quota-volumes`：
+
+```bash
+bash deploy/agent/scripts/install_quota_volume_driver.sh \
+  --root /data/pskit-quota-volumes
+```
+
+确认后以 root 加 `--apply`。脚本安装并启动 `pskit-quota-volume.service`，
+Docker 通过 `/run/docker/plugins/pskit-quota.sock` 发现驱动，且不需要重启
+Docker。生产配置固定 `OPENSANDBOX_VOLUME_DRIVER=pskit-quota`。不要手工删除
+`images/`、`mounts/` 或 `state/`；OpenSandbox 停止用户实例时使用
+`delete_on_sandbox_termination=false`，因此用户卷会跨实例保留。
 
 ## 构建与私有配置
 
