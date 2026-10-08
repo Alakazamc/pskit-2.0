@@ -185,17 +185,17 @@ A6000 升级或恢复前核对唯一接收器、活动任务、journal/outbox/sp
 
 ## 7. 当前交接与维护
 
-快照日期：2026-10-08 00:54（Asia/Shanghai）。流式性能发布和后续 A6000 收尾均已完成；生产制品见 [流式发布记录](releases/2026-10-07-streaming-quality.md)，接收器、对账、镜像源与 CORAL provider 证据见 [A6000 收尾记录](releases/2026-10-08-a6000-runtime-mirrors.md)。
+快照日期：2026-10-08 21:34（Asia/Shanghai）。流式性能发布、A6000 收尾和视觉能力合并修复均已完成；生产制品见 [流式发布记录](releases/2026-10-07-streaming-quality.md)与[视觉能力发布记录](releases/2026-10-08-vision-capability.md)，接收器、对账、镜像源与 CORAL provider 证据见 [A6000 收尾记录](releases/2026-10-08-a6000-runtime-mirrors.md)。
 
 - **已确认的用户偏好：** 本地前后端一起运行，完成开发与验证后部署云端。
-- **当前源码与部署：** 主仓库当前提交为 `e164dab8363915cd2e8daff5bc8fbf6169712af0`；阿里云生产与 Staging backend 仍使用 `a28b9af069cfcccbd42e1d3f009abc9b2c7a1abe`，A6000 接收器使用 `e164dab` runtime。`e164dab` 只增加后续镜像构建入口和部署说明，不要求重建当前阿里云后端。
-- **本地验证：** 前端 typecheck、lint、284 项测试和生产构建通过，Molstar 为 18 个延迟 chunk。后端 Ruff 与 7 项对账/CORAL 回归通过；完整 suite 为 577 passed、281 skipped，一个既有 MCP 租约时序用例在整套高负载下失败、隔离连续 5 次通过。不能据此宣称完整 suite 全绿；未运行真实付费模型或 GPU。
-- **生产与 Staging：** 两环境前端均为 dist 哈希 `f4eb708783ed2b95f1286fbc2b554ca19d04317bb36ed1b95109e296e01f85ba`，401 个新文件逐一核对。两环境后端均为 `pskit-agent-backend:20261007-streaming-a28b9af`，阿里云配置 ID `sha256:d713d9b57327ac231462c8b229cfaebb35178ba88413145409b8cebc3cc73e5f`。Staging 私有 API和 WireGuard Nginx 两轮 smoke 均通过登录、文件、SSE、配额和模拟 AF3，生产只读快照未变。生产 ready、HTTPS 200、usage 401、internal 404、首屏资源与未完成 Run=0 均已核对；基础设施和 Nginx 未重启。
+- **当前源码与部署：** 主仓库当前功能提交为 `23f0efc4c208a3dcaa19371a6031d853d5eab408`；阿里云生产与 Staging backend 均使用 `pskit-agent-backend:20261008-vision-23f0efc`，配置 ID `sha256:3f7dab0c322545be70ca860499bab8ce4edf223626e15a67b12eb88125560726`。A6000 接收器继续使用 `e164dab` runtime。
+- **本地验证：** 前端既有 typecheck、lint、284 项测试和生产构建记录保持有效，Molstar 为 18 个延迟 chunk。后端既有 Ruff、对账/CORAL 回归和完整 suite 结果未因本次一行逻辑修复重新运行；新镜像与上一生产镜像的 `pip freeze` 完全一致，revision、导入和目标代码探针通过。未运行真实付费模型或 GPU。
+- **生产与 Staging：** 两环境前端均为 dist 哈希 `873ee9a5b06416dc6004f01f8bf7b3ae0ce561239fe19cccf9fdfa04269d975d`，生产 index SHA256 为 `50f8a895273f66cf232d42aa361d7072d38b78b03be515cc5cc188070a07eb48`。两环境 backend 均为 `pskit-agent-backend:20261008-vision-23f0efc`。Staging backend healthy、ready 200、私网登录 200、usage 401；生产 healthy、ready 200、HTTPS 200、usage 401、internal 404、公网管理入口 403。生产 LiteLLM 元数据目录的 21 个可见模型均返回 `supports_images=true`；没有执行模型调用。切换前后未完成 Run/Job 与待对账用量均为 0；数据库、基础设施和 Nginx 未重启。
 - **A6000：** 唯一接收器已挂载 `runtime-e164dab`，三个 journal 均无未确认记录；原 AF3 计算容器 ID 和启动时间不变。两条旧 CORAL Job 已基于提供端证据完成管理员审计结算，中央无非终态或待对账 Job。4090 CORAL provider 已固化失败计量和产物读取修复到独立仓库提交 `25afdc0`；四个工具发现通过，修复后没有运行真实模型推理。
 - **发布性能结论：** 此次慢点是 WSL/Docker NAT 到 Docker Hub/PyPI；默认 PyPI 约 20 KB/s，清华镜像约 8–12 MB/s。`e164dab` 已给固定 Dockerfile 增加显式 PyPI/npm 镜像与已验证基础镜像参数；镜像源检查构建的 npm 层约 7 秒、pip 层约 20 秒，新旧 `pip freeze` 一致。生产依赖仍由锁文件和固定基础镜像 digest 决定。
 - **本地配置缺口：** 现有 live `.env` 未配置独立开发 PostgreSQL；日常开发使用第 3.1 节的独立 mock，真实联调补齐开发数据库后进行。
 - **4090 外部数据：** CORAL 一次生成需要读取 RCSB mmCIF。该主机直连 RCSB 会被拒绝，私有 `.pskit-mcp.runtime.env` 使用已验收的本机 SOCKS HTTPS 代理；重启提供端时由 `launch_artifact_server.py` 传入进程。代理配置不进入 Git，升级或重启前先用 CORAL 实际 Python 环境验证公开 mmCIF 下载。
 - **2026-10-08 CORAL 修复发布：** 4090 provider PID `3496099` 已继承私有 RCSB 代理；实时 CORAL 环境读取 `6VXX.cif` 返回 200，A6000 仍发现四个 CORAL 工具，中央无活动或待对账计算任务。前端提交 `64ca5b1` 已发布到 Staging 和生产，结构化错误不再显示为 `[object Object]`；生产 index SHA256 为 `50f8a895273f66cf232d42aa361d7072d38b78b03be515cc5cc188070a07eb48`。验证及回滚见 [发布记录](releases/2026-10-08-coral-rcsb-error-ui.md)。本次没有重新执行真实 CORAL 推理。
-- **下一步：** 真实 CORAL/AF3 结果验收另设明确输入及预算；下一次后端镜像发布可直接使用已记录的可信依赖镜像参数，并继续比较 `pip freeze`、revision label 和最终 image ID。本地开发进程接续时按实际端口重新核对。
+- **下一步：** 用户可在正常对话中选择支持图片的模型验证供应商端多模态调用；该操作会产生 Token 费用，本次发布没有代为调用。真实 CORAL/AF3 结果验收仍需另设明确输入及预算。下一次后端镜像发布继续比较 `pip freeze`、revision label 和最终 image ID。
 
 每次交接更新此节的日期、分支/提交、未完成项、实际验证结果、生产/Staging 状态及下一步。镜像 ID、制品哈希和回滚证据写入对应发布记录并链接到此处；连接别名、端口或职责变化则同时修改前面的环境章节。
