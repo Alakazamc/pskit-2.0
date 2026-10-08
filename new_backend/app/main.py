@@ -78,6 +78,7 @@ from app.domain.tool_products.registry import ToolProductRegistry
 from app.domain.tool_products.repository import ToolProductRepository
 from app.domain.tool_products.runs import ToolRunGateway
 from app.domain.tool_runs import ToolRunStore
+from app.domain.workspace_access import WorkspaceAccessPolicy
 from app.domain.workspace_attempts import WorkspaceAttemptStore
 from app.domain.workspace_sandboxes import WorkspaceSandboxStore
 from app.ports.avatars import AvatarStorage
@@ -300,6 +301,13 @@ def create_app(
     storage = database if database is not None else settings.agent_db_path
     workspace_sandbox_store = None
     workspace_reconciler = None
+    workspace_access = WorkspaceAccessPolicy(
+        enabled=settings.workspace_enabled,
+        commands_enabled=settings.workspace_commands_enabled,
+        user_allowlist_json=settings.workspace_user_allowlist_json,
+        capability_hash=settings.workspace_capability_hash,
+        rollout_file=settings.workspace_rollout_file,
+    )
     if settings.workspace_provider == "opensandbox":
         if database is None:
             raise ValueError("OpenSandbox workspace provider requires live PostgreSQL")
@@ -499,6 +507,7 @@ def create_app(
     app.state.database = database
     app.state.workspace_sandbox_store = workspace_sandbox_store
     app.state.workspace_sandbox_provider = workspace_sandbox_provider
+    app.state.workspace_access = workspace_access
     app.state.workspace_lease_reconciler = workspace_reconciler
     app.state.workspace_attempts = WorkspaceAttemptStore(database) if database is not None else None
     app.state.workspace_files = (
@@ -670,6 +679,7 @@ def create_app(
             max_active_runs_per_user=settings.pi_max_active_runs_per_user,
             tool_token_secret=load_or_create_internal_tool_secret(storage),
             mcp_tool_calls=app.state.mcp_tool_calls,
+            workspace_access=workspace_access,
         )
         if settings.agent_runtime == "pi" and pi_runner is not None
         else None

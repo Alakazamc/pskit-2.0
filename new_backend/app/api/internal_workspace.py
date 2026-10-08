@@ -77,12 +77,16 @@ async def _authorize(
     authorization: str | None,
     *,
     allow_terminal: bool = False,
+    command: bool = False,
 ) -> AuthorizedWorkspace:
     service = request.app.state.agent_service
     token = authorization.removeprefix("Bearer ") if authorization else ""
     claims = service.verify_workspace_tool_token(token) if service is not None else None
     if claims is None:
         raise HTTPException(status_code=401, detail={"code": "WORKSPACE_TOKEN_INVALID"})
+    access = request.app.state.workspace_access
+    if access is None or not access.files_allowed(claims.user_id):
+        raise HTTPException(status_code=403, detail={"code": "WORKSPACE_ACCESS_DISABLED"})
     if (
         payload.run_id != claims.run_id
         or payload.session_id != claims.session_id
@@ -121,6 +125,8 @@ async def _authorize(
         raise _provider_error(exc) from exc
     if not capabilities.file_access:
         raise HTTPException(status_code=503, detail={"code": "WORKSPACE_FILE_ACCESS_UNAVAILABLE"})
+    if command and not access.commands_allowed(claims.user_id, capabilities):
+        raise HTTPException(status_code=403, detail={"code": "WORKSPACE_COMMANDS_DISABLED"})
     return AuthorizedWorkspace(
         context=WorkspaceOperationContext(
             user_id=claims.user_id,
@@ -311,7 +317,7 @@ async def _start_command(
     argv: tuple[str, ...],
     cwd: str | None,
 ) -> CommandStartResponse:
-    authorized = await _authorize(payload, request, authorization)
+    authorized = await _authorize(payload, request, authorization, command=True)
     try:
         process_id = await _commands(request).start(
             authorized.context,
@@ -354,7 +360,7 @@ async def command_events(
     request: Request,
     authorization: Annotated[str | None, Header()] = None,
 ) -> StreamingResponse:
-    authorized = await _authorize(payload, request, authorization)
+    authorized = await _authorize(payload, request, authorization, command=True)
 
     async def records():
         try:
@@ -379,7 +385,9 @@ async def command_status(
     request: Request,
     authorization: Annotated[str | None, Header()] = None,
 ) -> CommandStatusResponse:
-    authorized = await _authorize(payload, request, authorization, allow_terminal=True)
+    authorized = await _authorize(
+        payload, request, authorization, allow_terminal=True, command=True
+    )
     try:
         status, exit_code, confirmed = await _commands(request).status(
             authorized.context,
@@ -402,7 +410,7 @@ async def cancel_command(
     request: Request,
     authorization: Annotated[str | None, Header()] = None,
 ) -> CommandStatusResponse:
-    authorized = await _authorize(payload, request, authorization)
+    authorized = await _authorize(payload, request, authorization, command=True)
     try:
         status, exit_code, confirmed = await _commands(request).cancel(
             authorized.context,

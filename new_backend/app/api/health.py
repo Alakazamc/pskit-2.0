@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.db.postgres_migrations import SCHEMA_VERSION
+from app.domain.workspace_access import WorkspaceAccessConfigurationError
 
 router = APIRouter(tags=["health"])
 
@@ -47,6 +48,21 @@ async def ready(request: Request) -> dict[str, object] | JSONResponse:
             )
     settings = request.app.state.settings
     workspace = await request.app.state.workspace_sandbox_provider.readiness()
+    try:
+        rollout = request.app.state.workspace_access.current()
+        rollout_status: dict[str, object] = {
+            "state": "configured",
+            "enabled": rollout.enabled,
+            "commands_enabled": rollout.commands_enabled,
+            "allowlisted_users": len(rollout.user_allowlist),
+        }
+    except WorkspaceAccessConfigurationError:
+        rollout_status = {
+            "state": "invalid",
+            "enabled": False,
+            "commands_enabled": False,
+            "allowlisted_users": 0,
+        }
     content: dict[str, object] = {
         "status": "ready",
         "identity": settings.mode,
@@ -63,6 +79,7 @@ async def ready(request: Request) -> dict[str, object] | JSONResponse:
             "command_execution": workspace.capabilities.command_execution,
             "persistent_volume": workspace.capabilities.persistent_volume,
             "session_mount_namespace": workspace.capabilities.session_mount_namespace,
+            "rollout": rollout_status,
         },
     }
     if settings.workspace_provider == "opensandbox" and not workspace.ready:

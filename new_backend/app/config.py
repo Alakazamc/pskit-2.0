@@ -57,6 +57,11 @@ class Settings:
     sandbox_manager_url: str = ""
     sandbox_manager_token: str = ""
     workspace_provider: Literal["disabled", "opensandbox"] = "disabled"
+    workspace_enabled: bool = False
+    workspace_user_allowlist_json: str = "[]"
+    workspace_commands_enabled: bool = False
+    workspace_rollout_file: str = ""
+    workspace_capability_hash: str = ""
     workspace_server_url: str = ""
     workspace_api_key: str = field(default="", repr=False)
     workspace_image_digest: str = ""
@@ -164,6 +169,21 @@ class Settings:
             sandbox_manager_url=os.getenv("PSKIT_SANDBOX_MANAGER_URL", ""),
             sandbox_manager_token=os.getenv("PSKIT_SANDBOX_MANAGER_TOKEN", ""),
             workspace_provider=os.getenv("RESEARCH_AGENT_WORKSPACE_PROVIDER", "disabled"),
+            workspace_enabled=os.getenv(
+                "RESEARCH_AGENT_WORKSPACE_ENABLED", "false"
+            ).lower() in {"1", "true", "yes"},
+            workspace_user_allowlist_json=os.getenv(
+                "RESEARCH_AGENT_WORKSPACE_USER_ALLOWLIST_JSON", "[]"
+            ),
+            workspace_commands_enabled=os.getenv(
+                "RESEARCH_AGENT_WORKSPACE_COMMANDS_ENABLED", "false"
+            ).lower() in {"1", "true", "yes"},
+            workspace_rollout_file=os.getenv(
+                "RESEARCH_AGENT_WORKSPACE_ROLLOUT_FILE", ""
+            ),
+            workspace_capability_hash=os.getenv(
+                "RESEARCH_AGENT_WORKSPACE_CAPABILITY_HASH", ""
+            ),
             workspace_server_url=os.getenv("RESEARCH_AGENT_WORKSPACE_SERVER_URL", ""),
             workspace_api_key=os.getenv("RESEARCH_AGENT_WORKSPACE_API_KEY", ""),
             workspace_image_digest=os.getenv("RESEARCH_AGENT_WORKSPACE_IMAGE_DIGEST", ""),
@@ -325,7 +345,28 @@ class Settings:
                 "RESEARCH_AGENT_WORKSPACE_PROVIDER must be disabled or opensandbox"
             )
         if self.workspace_provider == "disabled":
+            if self.workspace_enabled or self.workspace_commands_enabled:
+                raise ValueError(
+                    "Workspace rollout cannot be enabled while the provider is disabled"
+                )
             return
+        allowlist = json.loads(self.workspace_user_allowlist_json)
+        if (
+            not isinstance(allowlist, list)
+            or any(not isinstance(item, str) or not item for item in allowlist)
+            or len(set(allowlist)) != len(allowlist)
+        ):
+            raise ValueError(
+                "RESEARCH_AGENT_WORKSPACE_USER_ALLOWLIST_JSON must be a unique array of user IDs"
+            )
+        if self.workspace_commands_enabled and not self.workspace_enabled:
+            raise ValueError(
+                "Workspace commands cannot be enabled while workspace access is disabled"
+            )
+        if self.workspace_commands_enabled and not self.workspace_capability_hash:
+            raise ValueError(
+                "RESEARCH_AGENT_WORKSPACE_CAPABILITY_HASH is required when commands are enabled"
+            )
         required = {
             "RESEARCH_AGENT_WORKSPACE_SERVER_URL": self.workspace_server_url,
             "RESEARCH_AGENT_WORKSPACE_API_KEY": self.workspace_api_key,
@@ -379,9 +420,7 @@ class Settings:
             address = ip_address(hostname)
         except ValueError:
             return (
-                "." not in hostname
-                or hostname.endswith(".internal")
-                or hostname.endswith(".local")
+                "." not in hostname or hostname.endswith((".internal", ".local"))
             ) and bool(hostname)
         return (
             (address.is_private or address.is_loopback or address.is_link_local)

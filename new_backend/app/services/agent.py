@@ -5,6 +5,7 @@ import hmac
 import json
 import secrets
 import uuid
+from dataclasses import replace
 
 from app.adapters.live.pi_rpc import PiRpcError
 from app.contracts.conversation import (
@@ -31,6 +32,7 @@ from app.domain.internal_auth import WorkspaceToolClaims, WorkspaceToolTokenCode
 from app.domain.mcp_tool_calls import McpToolCallStore
 from app.domain.persistent_conversation import PersistentConversationStore
 from app.domain.quota import TokenQuotaExceeded
+from app.domain.workspace_access import WorkspaceAccessPolicy
 from app.ports.workspace_sandbox import WorkspaceCapabilities, WorkspaceProviderError
 
 
@@ -62,6 +64,7 @@ class AgentService:
         max_active_runs_per_user: int = 2,
         tool_token_secret: bytes | None = None,
         mcp_tool_calls: McpToolCallStore | None = None,
+        workspace_access: WorkspaceAccessPolicy | None = None,
     ) -> None:
         """Bind the durable store, Pi runner, tool gateway, and scheduler limits.
 
@@ -100,6 +103,7 @@ class AgentService:
         self._tool_secret = tool_token_secret or secrets.token_bytes(32)
         self._workspace_tool_tokens = WorkspaceToolTokenCodec(self._tool_secret)
         self.mcp_tool_calls = mcp_tool_calls
+        self.workspace_access = workspace_access
         self.catalog = None
         self.workspace_transfer = None
         self.workspace_sandbox_provider = None
@@ -409,10 +413,20 @@ class AgentService:
             self.workspace_sandbox_provider is None
             or self.workspace_sandbox_store is None
             or self.workspace_attempts is None
+            or self.workspace_access is None
+            or not self.workspace_access.files_allowed(user_id)
         ):
             return None
         try:
             capabilities = await self.workspace_sandbox_provider.capabilities()
+            if not self.workspace_access.commands_allowed(user_id, capabilities):
+                capabilities = replace(
+                    capabilities,
+                    command_execution=False,
+                    command_events=False,
+                    cancellation=False,
+                    metrics=False,
+                )
             if not capabilities.file_access:
                 if required:
                     raise PiRpcError(
