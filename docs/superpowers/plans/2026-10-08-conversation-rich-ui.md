@@ -42,7 +42,7 @@
 - [x] Add the renderer context and safe unknown fallback.
 - [x] Move the current switch behavior behind the registry.
 - [x] Replace raw tool-result JSON with an expandable generic result card and tool-specific override seam.
-- [ ] Commit the registry layer.
+- [x] Commit the registry layer.
 
 ### Task 2: Rich resource, citation and progress cards
 
@@ -59,7 +59,7 @@
 - [x] Implement format inference, blob opening and safe filename download.
 - [x] Reuse `DetailPanel` for supported artifact previews.
 - [x] Add compact accessible styles and bilingual copy.
-- [ ] Commit the resource card layer.
+- [x] Commit the resource card layer.
 
 ### Task 3: Saved and live conversation integration
 
@@ -77,7 +77,7 @@
 - [x] Build live `MessagePart` values for text, tools, artifacts and task progress.
 - [x] Inject authenticated resource APIs from both workspace shells.
 - [x] Keep saved-message replacement behavior so completed output is not duplicated.
-- [ ] Commit the conversation integration.
+- [x] Commit the conversation integration.
 
 ### Task 4: Contributor guidance and handoff
 
@@ -89,6 +89,6 @@
 - Produces: durable rules for future message types and a current handoff entry.
 
 - [x] Document typed Rich UI and resource-security rules.
-- [ ] Record implementation scope and deferred verification in the handoff.
-- [ ] Commit documentation.
+- [x] Record implementation scope and deferred verification in the handoff.
+- [x] Commit documentation.
 
