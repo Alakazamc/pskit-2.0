@@ -195,6 +195,7 @@ A6000 升级或恢复前核对唯一接收器、活动任务、journal/outbox/sp
 - **发布性能结论：** 此次慢点是 WSL/Docker NAT 到 Docker Hub/PyPI；默认 PyPI 约 20 KB/s，清华镜像约 8–12 MB/s。`e164dab` 已给固定 Dockerfile 增加显式 PyPI/npm 镜像与已验证基础镜像参数；镜像源检查构建的 npm 层约 7 秒、pip 层约 20 秒，新旧 `pip freeze` 一致。生产依赖仍由锁文件和固定基础镜像 digest 决定。
 - **本地配置缺口：** 现有 live `.env` 未配置独立开发 PostgreSQL；日常开发使用第 3.1 节的独立 mock，真实联调补齐开发数据库后进行。
 - **4090 外部数据：** CORAL 一次生成需要读取 RCSB mmCIF。该主机直连 RCSB 会被拒绝，私有 `.pskit-mcp.runtime.env` 使用已验收的本机 SOCKS HTTPS 代理；重启提供端时由 `launch_artifact_server.py` 传入进程。代理配置不进入 Git，升级或重启前先用 CORAL 实际 Python 环境验证公开 mmCIF 下载。
+- **2026-10-08 CORAL 修复发布：** 4090 provider PID `3496099` 已继承私有 RCSB 代理；实时 CORAL 环境读取 `6VXX.cif` 返回 200，A6000 仍发现四个 CORAL 工具，中央无活动或待对账计算任务。前端提交 `64ca5b1` 已发布到 Staging 和生产，结构化错误不再显示为 `[object Object]`；生产 index SHA256 为 `50f8a895273f66cf232d42aa361d7072d38b78b03be515cc5cc188070a07eb48`。验证及回滚见 [发布记录](releases/2026-10-08-coral-rcsb-error-ui.md)。本次没有重新执行真实 CORAL 推理。
 - **下一步：** 真实 CORAL/AF3 结果验收另设明确输入及预算；下一次后端镜像发布可直接使用已记录的可信依赖镜像参数，并继续比较 `pip freeze`、revision label 和最终 image ID。本地开发进程接续时按实际端口重新核对。
 
 每次交接更新此节的日期、分支/提交、未完成项、实际验证结果、生产/Staging 状态及下一步。镜像 ID、制品哈希和回滚证据写入对应发布记录并链接到此处；连接别名、端口或职责变化则同时修改前面的环境章节。
