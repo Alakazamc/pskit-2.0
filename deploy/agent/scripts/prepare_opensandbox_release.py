@@ -98,8 +98,21 @@ def _sha(value: bytes) -> str:
 
 
 def _runsc_version(expected: str) -> str:
+    info = subprocess.run(
+        ["docker", "info", "--format", "{{json .Runtimes}}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if info.returncode:
+        raise Refusal("Docker runtime inventory is unavailable")
+    runtimes = json.loads(info.stdout)
+    runtime = runtimes.get("runsc") or {}
+    executable = runtime.get("path") or runtime.get("Path")
+    if not executable:
+        raise Refusal("The registered runsc runtime is unavailable")
     completed = subprocess.run(
-        ["runsc", "--version"], capture_output=True, text=True, check=False
+        [executable, "--version"], capture_output=True, text=True, check=False
     )
     report = (completed.stdout + completed.stderr).strip()
     if completed.returncode or expected not in report:

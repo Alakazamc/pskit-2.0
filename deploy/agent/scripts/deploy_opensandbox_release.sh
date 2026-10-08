@@ -74,6 +74,10 @@ if not isinstance(value, (str, int)):
 print(value)
 PY
 }
+registered_runsc_path() {
+  docker info --format '{{json .Runtimes}}' | python3 -c \
+    'import json,sys; value=json.load(sys.stdin).get("runsc") or {}; print(value.get("path") or value.get("Path") or "")'
+}
 
 private_file "$manifest"
 private_file "$cloud_env"
@@ -113,7 +117,8 @@ production_key_hash=$(printf '%s' "$production_key" | sha256sum | awk '{print $1
    "$production_key_hash" != "$staging_key_hash" ]] || {
   echo "Production and Staging OpenSandbox identities are not isolated" >&2; exit 2;
 }
-[[ $(runsc --version 2>&1) == *"$runsc_version"* ]] || {
+runsc_path=$(registered_runsc_path)
+[[ -x "$runsc_path" && $("$runsc_path" --version 2>&1) == *"$runsc_version"* ]] || {
   echo "Production runsc version differs from the qualified release" >&2; exit 2;
 }
 docker image inspect "$backend_image" "$server_image" "$sandbox_image" >/dev/null
