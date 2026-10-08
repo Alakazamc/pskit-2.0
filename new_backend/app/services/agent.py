@@ -26,6 +26,7 @@ from app.contracts.conversation import (
     ToolUpdatedEvent,
 )
 from app.domain.catalog import image_mime_type
+from app.domain.internal_auth import WorkspaceToolClaims, WorkspaceToolTokenCodec
 from app.domain.mcp_tool_calls import McpToolCallStore
 from app.domain.persistent_conversation import PersistentConversationStore
 from app.domain.quota import TokenQuotaExceeded
@@ -95,6 +96,7 @@ class AgentService:
         self.max_active_runs = max_active_runs
         self.max_active_runs_per_user = max_active_runs_per_user
         self._tool_secret = tool_token_secret or secrets.token_bytes(32)
+        self._workspace_tool_tokens = WorkspaceToolTokenCodec(self._tool_secret)
         self.mcp_tool_calls = mcp_tool_calls
         self.catalog = None
         self.workspace_transfer = None
@@ -240,6 +242,28 @@ class AgentService:
     def verify_tool_token(self, run_id: str, token: str) -> bool:
         """Compare an internal tool token without leaking timing differences."""
         return secrets.compare_digest(self.tool_token(run_id), token)
+
+    def workspace_tool_token(
+        self,
+        *,
+        user_id: str,
+        run_id: str,
+        session_id: str,
+        attempt_id: str,
+        ttl_seconds: int = 900,
+    ) -> str:
+        """Issue a short-lived token bound to one active workspace attempt."""
+        return self._workspace_tool_tokens.issue(
+            user_id=user_id,
+            run_id=run_id,
+            session_id=session_id,
+            attempt_id=attempt_id,
+            ttl_seconds=ttl_seconds,
+        )
+
+    def verify_workspace_tool_token(self, token: str) -> WorkspaceToolClaims | None:
+        """Verify a workspace token and return its immutable scope."""
+        return self._workspace_tool_tokens.verify(token)
 
     def _mcp_tool_result_parts(self, run_id: str) -> list[ToolResultPart]:
         """Project durable completed MCP calls into typed answer parts."""

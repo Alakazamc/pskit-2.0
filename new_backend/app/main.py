@@ -43,6 +43,7 @@ from app.api import (
     health,
     internal,
     internal_compute,
+    internal_workspace,
     metrics,
     models,
     profile,
@@ -77,6 +78,7 @@ from app.domain.tool_products.registry import ToolProductRegistry
 from app.domain.tool_products.repository import ToolProductRepository
 from app.domain.tool_products.runs import ToolRunGateway
 from app.domain.tool_runs import ToolRunStore
+from app.domain.workspace_attempts import WorkspaceAttemptStore
 from app.domain.workspace_sandboxes import WorkspaceSandboxStore
 from app.ports.avatars import AvatarStorage
 from app.ports.captcha import CaptchaVerifier
@@ -95,6 +97,7 @@ from app.services.sandbox_operations import (
     WorkspaceLeaseReconciler,
 )
 from app.services.session_titles import SessionTitleService
+from app.services.workspace_files import WorkspaceFiles
 from app.services.workspace_transfer import WorkspaceTransfer
 
 
@@ -496,6 +499,12 @@ def create_app(
     app.state.workspace_sandbox_store = workspace_sandbox_store
     app.state.workspace_sandbox_provider = workspace_sandbox_provider
     app.state.workspace_lease_reconciler = workspace_reconciler
+    app.state.workspace_attempts = WorkspaceAttemptStore(database) if database is not None else None
+    app.state.workspace_files = (
+        WorkspaceFiles(workspace_sandbox_provider)
+        if settings.workspace_provider == "opensandbox"
+        else None
+    )
     app.state.tool_product_repository = (
         ToolProductRepository(database) if database is not None else None
     )
@@ -738,12 +747,16 @@ def create_app(
     )
     app.state.sandbox_operations = sandbox_operations
     app.state.workspace_transfer = None
-    if database is not None and settings.pi_execution == "sandbox" and app.state.agent_service:
+    if (
+        database is not None
+        and settings.workspace_provider == "opensandbox"
+        and app.state.agent_service
+    ):
         artifact_store = SandboxArtifactStore(app.state.conversations.db)
         artifact_store.storage_limit_for = app.state.catalog.total_storage_limit_for
         app.state.workspace_transfer = WorkspaceTransfer(
             app.state.catalog,
-            app.state.agent_service.runner,
+            workspace_sandbox_provider,
             artifact_store,
             conversations=app.state.conversations,
         )
@@ -796,6 +809,7 @@ def create_app(
     app.include_router(workspace.router)
     app.include_router(internal.router)
     app.include_router(internal_compute.router)
+    app.include_router(internal_workspace.router)
     app.include_router(admin.router)
     app.include_router(admin_auth.router)
     app.include_router(admin_models.router)

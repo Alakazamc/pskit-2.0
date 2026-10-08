@@ -91,3 +91,52 @@ class WorkspaceToolEvent(BaseModel):
     wall_ms: int | None = Field(default=None, ge=0)
     cpu_core_ms: int | None = Field(default=None, ge=0)
     peak_memory_bytes: int | None = Field(default=None, ge=0)
+
+
+class FileReadResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    content: str
+    encoding: Literal["utf-8", "base64"]
+    size: int = Field(ge=0)
+    offset: int = Field(ge=0)
+    eof: bool
+    revision: str | None = None
+
+
+class FileWriteResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    size: int = Field(ge=0)
+    revision: str
+
+
+class FileEntryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    kind: Literal["file", "directory"]
+    size: int = Field(ge=0)
+    revision: str | None = None
+
+
+class FileListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    entries: list[FileEntryResponse]
+
+
+class FileSearchMatchResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    line: int | None = Field(default=None, ge=1)
+    text: str | None = None
+
+
+class FileSearchResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    matches: list[FileSearchMatchResponse]
