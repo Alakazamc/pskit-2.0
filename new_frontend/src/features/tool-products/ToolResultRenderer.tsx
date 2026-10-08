@@ -38,7 +38,22 @@ function DataTable({ value, title, limit }: { value: unknown; title: string; lim
 function MetricGrid({ value }: { value: unknown }) {
   const metrics = typeof value === "object" && value !== null && !Array.isArray(value) ? Object.entries(value) : [];
   if (!metrics.length) return null;
-  return <dl className="tool-metric-grid">{metrics.slice(0, 24).map(([name, metric]) => <div key={name}><dt>{name}</dt><dd>{String(metric ?? "")}</dd></div>)}</dl>;
+  const formatMetric = (metric: unknown): string => {
+    const bounded = (text: string) => text.length > 4_000 ? `${text.slice(0, 4_000)}…` : text;
+    if (metric === null || metric === undefined) return "";
+    if (typeof metric !== "object") return String(metric);
+    if (!Array.isArray(metric)) {
+      const record = metric as Record<string, unknown>;
+      const code = typeof record.code === "string" ? record.code : "";
+      const message = typeof record.message === "string" ? record.message : "";
+      if (message) return bounded(code ? `${code}: ${message}` : message);
+    }
+    try { return bounded(JSON.stringify(metric)); } catch { return ""; }
+  };
+  return <dl className="tool-metric-grid">{metrics.slice(0, 24).map(([name, metric]) => {
+    const nested = typeof metric === "object" && metric !== null;
+    return <div key={name}><dt>{name}</dt><dd className={nested ? "tool-metric-detail" : undefined}>{formatMetric(metric)}</dd></div>;
+  })}</dl>;
 }
 
 function points(value: unknown): Array<{ x: number; y: number }> {
