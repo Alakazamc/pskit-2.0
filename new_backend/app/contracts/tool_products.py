@@ -481,6 +481,7 @@ class ToolRunSnapshot(ToolProductContract):
     user_id: str
     status: ToolRunStatus
     progress: int = Field(ge=0, le=100)
+    arguments: dict[str, Any] = Field(default_factory=dict)
     result: dict[str, Any] | None
     artifacts: list[ArtifactRef]
     usage: UsageReport | None

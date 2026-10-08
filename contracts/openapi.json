@@ -12549,6 +12549,11 @@
             "minimum": 0.0,
             "title": "Progress"
           },
+          "arguments": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Arguments"
+          },
           "result": {
             "anyOf": [
               {

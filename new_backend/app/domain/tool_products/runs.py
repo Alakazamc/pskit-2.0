@@ -84,7 +84,7 @@ class ToolRunGateway:
 
     def _snapshot(self, user_id: str, run_id: str, *, connection) -> ToolRunSnapshot | None:
         row = connection.execute(
-            "SELECT run_id,release_id,action_id,user_id,status,progress,result_json,"
+            "SELECT run_id,release_id,action_id,user_id,status,progress,input_json,result_json,"
             "artifacts_json,usage_json,created_at,updated_at,snapshot_json "
             "FROM tool_product_runs WHERE run_id=%s AND user_id=%s",
             (run_id, user_id),
@@ -93,9 +93,10 @@ class ToolRunGateway:
             return None
         status = row[4]
         progress = row[5]
-        result = row[6]
-        artifacts = row[7]
-        usage = row[8]
+        arguments = row[6]
+        result = row[7]
+        artifacts = row[8]
+        usage = row[9]
         step = connection.execute(
             "SELECT compute_job_id FROM tool_product_run_steps "
             "WHERE run_id=%s ORDER BY ordinal DESC LIMIT 1",
@@ -115,17 +116,18 @@ class ToolRunGateway:
                     usage = job.report.usage.model_dump(mode="json")
         return ToolRunSnapshot(
             run_id=row[0],
-            product_slug=row[11]["product_slug"],
+            product_slug=row[12]["product_slug"],
             release_id=row[1],
             action_id=row[2],
             user_id=row[3],
             status=status,
             progress=progress,
+            arguments=arguments,
             result=result,
             artifacts=artifacts,
             usage=usage,
-            created_at=row[9],
-            updated_at=row[10],
+            created_at=row[10],
+            updated_at=row[11],
         )
 
     def start(

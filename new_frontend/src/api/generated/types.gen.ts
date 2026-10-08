@@ -3302,6 +3302,12 @@ export type ToolRunSnapshot = {
      */
     progress: number;
     /**
+     * Arguments
+     */
+    arguments?: {
+        [key: string]: unknown;
+    };
+    /**
      * Result
      */
     result: {
