@@ -24,6 +24,31 @@
 
 OpenSandbox Server 持有 Docker socket，因此属于受信任控制面。只有它挂载 socket；backend、web 和用户沙箱均不得挂载。Server 没有 host `ports`，只加入内部 `app` 控制网络和独立 Docker `internal` runtime 网络。
 
+### 受控注册 gVisor
+
+先在可信环境下载已经审阅的 `runsc` 固定版本及其 SHA256，不使用移动的
+`latest` 地址。首次只预览 Docker 配置差异：
+
+```bash
+bash deploy/agent/scripts/install_gvisor_runtime.sh \
+  --package /path/to/runsc --sha256 '<release sha256>' --version '<fixed version>'
+```
+
+确认差异后，root 运维人员可用相同参数加 `--apply`。脚本安装带版本号的
+二进制、备份已有 `/etc/docker/daemon.json`，并且只合并 `runsc` runtime；
+脚本不会 reload 或 restart Docker。执行宿主机认可的 reload 前，先记录当前
+AF3、CORAL、Supabase、LiteLLM 和 backend 容器。之后运行：
+
+```bash
+bash deploy/agent/scripts/check_gvisor_runtime.sh \
+  '<fixed probe image>@sha256:<digest>' '<fixed runsc version>'
+```
+
+探针关闭网络，使用只读根文件系统、移除全部 Linux capabilities 并启用
+`no-new-privileges`。注册失败时恢复脚本输出的
+`daemon.json.pre-runsc-*` 备份，再通过同一宿主机流程 reload Docker。恢复时
+保留现有容器和卷，不执行 `docker compose down -v`。
+
 ## 构建与私有配置
 
 ```bash
