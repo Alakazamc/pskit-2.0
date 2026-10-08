@@ -172,6 +172,8 @@ Tools AF3 使用独立的 `af3-mcp` 服务密钥和 `af3-mcp-key` 凭据引用�
 
 CORAL 的提供端安装器位于 `new_backend/integrations/coral/install_artifacts.py`。重启提供端时使用同目录的 `launch_artifact_server.py`，显式提供 Python 和 Foldseek 路径；保留 `.pskit-mcp.runtime.env` 中的原有模块路径，并将 workspace 规范为绝对路径。确认没有模型调用执行中，再重启本项目的 MCP PID。不要替换其他人的服务或模型实现。
 
+CORAL 一次生成会从 RCSB 读取 mmCIF。提供端不能直连 RCSB 时，在私有 `.pskit-mcp.runtime.env` 中配置已验收的 `HTTPS_PROXY`；例如当前 4090 使用本机 SOCKS 代理 `socks5h://127.0.0.1:1080`。先用 CORAL 实际 Python 环境下载一个公开 mmCIF 并核对 HTTP 200 和非空内容，再重启 MCP。不要把代理凭据写入仓库；如代理同时承载内网流量，设置 `NO_PROXY` 保留 localhost、WireGuard 和模型内网地址。代理不可达时应让任务明确失败，不得回退到未审核的公共转发服务。
+
 管理员批准历史产物恢复后，在后端容器运行 `python -m scripts.backfill_compute_artifacts --service-id coral-mcp --actor <operator>`。此操作读取已发布历史绑定和终态 Job，校验文件后补存并写审计，不调用推理工具。
 
 AF3 计算完成后，结果与产物先进入 outbox；收到且验证服务端提交回执后才清理 journal，再删除已确认的 spool。用户取消或任务超时后，已开始的计算继续报告晚到用量，确认 `reconciled` 后才清理，不重新打开任务。CORAL 的不确定结果保留为 `unknown`，只暂停该服务，AF3 循环继续运行。
