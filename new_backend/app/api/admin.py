@@ -9,9 +9,9 @@ from app.api.admin_auth import get_admin_principal
 from app.api.admin_services import error
 from app.contracts.admin import AdminUser, LimitsUpdate
 from app.contracts.capabilities import Af3GpuReconciliation, Af3Job
-from app.contracts.catalog import CatalogItem
+from app.contracts.catalog import CatalogItem, SkillDetail, SkillReviewRequest
 from app.contracts.models import UsageSnapshot
-from app.domain.catalog import SkillManifest, SkillVersionConflict
+from app.domain.catalog import ContextNotFound, SkillManifest, SkillVersionConflict
 from app.domain.persistent_conversation import PersistentConversationStore
 from app.services.dependency_probe import DependencyReport, inspect_dependencies
 
@@ -164,6 +164,46 @@ async def register_skill_version(
         raise HTTPException(status_code=422, detail={"code": "INVALID_SKILL_DEFINITION"}) from exc
     except SkillVersionConflict as exc:
         raise HTTPException(status_code=409, detail={"code": "SKILL_VERSION_CONFLICT"}) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail={"code": "SKILL_REGISTRY_UNAVAILABLE"}) from exc
+
+
+@router.get("/skills/reviews")
+async def list_skill_reviews(
+    request: Request,
+    x_admin_key: Annotated[str | None, Header()] = None,
+) -> list[SkillDetail]:
+    """List user Skill versions awaiting public catalog review."""
+    await _require_admin(request, x_admin_key, "services:publish")
+    return request.app.state.catalog.pending_skill_reviews()
+
+
+@router.post("/skills/{skill_id}/versions/{version}/review")
+async def review_skill_version(
+    skill_id: str,
+    version: int,
+    payload: SkillReviewRequest,
+    request: Request,
+    x_admin_key: Annotated[str | None, Header()] = None,
+) -> CatalogItem:
+    """Approve a pending Skill for everyone or return it privately with a reason."""
+    actor_id = await _require_admin(request, x_admin_key, "services:publish")
+    try:
+        return request.app.state.catalog.review_skill(
+            skill_id,
+            version,
+            approved=payload.decision == "approve",
+            reason=payload.reason,
+            audit_actor=actor_id,
+            audit_callback=getattr(request.app.state, "admin_store", None).audit
+            if getattr(request.app.state, "admin_store", None)
+            else None,
+            audit_request_id=request.headers.get("x-request-id"),
+        )
+    except ContextNotFound as exc:
+        raise HTTPException(status_code=404, detail={"code": "SKILL_NOT_FOUND"}) from exc
+    except SkillVersionConflict as exc:
+        raise HTTPException(status_code=409, detail={"code": "SKILL_REVIEW_CONFLICT"}) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail={"code": "SKILL_REGISTRY_UNAVAILABLE"}) from exc
 

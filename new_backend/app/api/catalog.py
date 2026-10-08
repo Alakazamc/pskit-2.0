@@ -1,6 +1,6 @@
 from mimetypes import guess_type
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -13,6 +13,7 @@ from app.contracts.catalog import (
     CatalogItem,
     FileRef,
     FileUploadRequest,
+    SkillDetail,
 )
 from app.domain.catalog import (
     IMAGE_MIME_TYPES,
@@ -22,8 +23,14 @@ from app.domain.catalog import (
     TEXT_FILE_SUFFIXES,
     CatalogStore,
     InvalidFileUpload,
+    SkillVersionConflict,
 )
 from app.ports.providers import Af3Provider
+from app.services.skill_packages import (
+    MAX_SKILL_ARCHIVE_BYTES,
+    InvalidSkillPackage,
+    validate_skill_zip,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["catalog"])
 MAX_ARTIFACT_PREVIEW_BYTES = 256 * 1024
@@ -48,6 +55,53 @@ Af3Dep = Annotated[Af3Provider, Depends(get_af3)]
 async def list_skills(user: CurrentUserDep, catalog: CatalogDep) -> list[CatalogItem]:
     """List Skills visible to the authenticated user."""
     return catalog.skills_for(user.id)
+
+
+@router.get("/skills/{skill_id}")
+async def get_skill(
+    skill_id: str,
+    user: CurrentUserDep,
+    catalog: CatalogDep,
+) -> SkillDetail:
+    """Return an authorized Skill's metadata and inert text file tree."""
+    skill = catalog.skill_detail_for(user.id, skill_id)
+    if skill is None:
+        raise HTTPException(status_code=404, detail={"code": "SKILL_NOT_FOUND"})
+    return skill
+
+
+@router.post("/skills/packages", status_code=201)
+async def upload_skill_package(
+    request: Request,
+    user: CurrentUserDep,
+    catalog: CatalogDep,
+    visibility: Literal["private", "public"] = "private",
+) -> CatalogItem:
+    """Save a private Skill ZIP or submit it for public review."""
+    if user.is_anonymous:
+        raise HTTPException(status_code=403, detail={"code": "LOGIN_REQUIRED"})
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > MAX_SKILL_ARCHIVE_BYTES:
+            raise HTTPException(status_code=413, detail={"code": "SKILL_ARCHIVE_TOO_LARGE"})
+        chunks.append(chunk)
+    try:
+        package = validate_skill_zip(b"".join(chunks))
+        return catalog.register_user_skill(
+            user.id,
+            package,
+            request_public=visibility == "public",
+        )
+    except InvalidSkillPackage as exc:
+        raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail={"code": "SKILL_STORAGE_QUOTA_EXCEEDED"}) from exc
+    except SkillVersionConflict as exc:
+        raise HTTPException(status_code=409, detail={"code": "SKILL_VERSION_CONFLICT"}) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail={"code": "SKILL_REGISTRY_UNAVAILABLE"}) from exc
 
 
 @router.get("/resources")

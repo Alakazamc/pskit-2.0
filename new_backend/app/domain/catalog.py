@@ -13,7 +13,7 @@ from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
 from app.contracts.capabilities import McpTool
-from app.contracts.catalog import CatalogItem, FileRef, FileUploadRequest
+from app.contracts.catalog import CatalogItem, FileRef, FileUploadRequest, SkillDetail, SkillFile
 from app.contracts.conversation import ContextRef, MessageRequest
 from app.db.migrations import migrate_catalog_schema
 from app.db.postgres import PostgresDatabase, PostgresStatements
@@ -127,6 +127,7 @@ class CatalogStore:
             try:
                 manifest = SkillManifest.model_validate_json(path.read_text(encoding="utf-8"))
                 instructions = path.parent / "SKILL.md"
+                upstream_path = path.parent / "UPSTREAM.json"
                 if (manifest.id != path.parent.name
                     or not path.resolve().is_relative_to(self._skill_root)
                     or not instructions.resolve().is_relative_to(self._skill_root)
@@ -136,14 +137,28 @@ class CatalogStore:
                     or any(not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,63}", tool)
                            for tool in manifest.tools)
                     or (not defer_unknown_tool_validation
+                        and not upstream_path.is_file()
                         and any(tool not in known_tools for tool in manifest.tools))):
                     raise ValueError("Invalid skill manifest")
-                self._skill_specs[manifest.id] = manifest.model_dump()
+                upstream = json.loads(upstream_path.read_text(encoding="utf-8")) \
+                    if upstream_path.is_file() else {}
+                self._skill_specs[manifest.id] = {
+                    **manifest.model_dump(),
+                    "owner_id": None,
+                    "visibility": "public",
+                    "source": "upstream" if upstream else "builtin",
+                    "files": [],
+                    "license_name": upstream.get("license"),
+                    "source_url": upstream.get("repository"),
+                    "source_commit": upstream.get("commit"),
+                    "review_reason": None,
+                }
             except (OSError, ValueError, ValidationError) as exc:
                 raise ValueError(f"Invalid skill manifest: {path}") from exc
         self._static_skill_specs = dict(self._skill_specs)
         self._all_skill_specs = dict(self._static_skill_specs)
         self._registered_instructions: dict[str, str] = {}
+        self._registered_files: dict[str, list[SkillFile]] = {}
         self._registered_rows: tuple[tuple, ...] | None = None
         self._overridden_skills = skills is not None
         self._overridden_resources = resources is not None
@@ -154,8 +169,7 @@ class CatalogStore:
             if set(item["tools"]).issubset(enabled_tools)
         }
         self._skills = list(skills) if skills is not None else [
-            CatalogItem(id=item["id"], name=item["name"], description=item["description"],
-                        version=item["version"])
+            self._catalog_item(item)
             for item in self._skill_specs.values()
         ]
         self._resources = list(resources) if resources is not None else [
@@ -205,24 +219,48 @@ class CatalogStore:
         }
         if not self._overridden_skills:
             self._skills = [
-                CatalogItem(id=item["id"], name=item["name"], description=item["description"],
-                            version=item["version"])
+                self._catalog_item(item)
                 for item in self._skill_specs.values()
             ]
+
+    def _catalog_item(self, item: dict, user_id: str | None = None) -> CatalogItem:
+        owner_id = item.get("owner_id")
+        return CatalogItem(
+            id=item["id"],
+            name=item["name"],
+            description=item["description"],
+            version=item["version"],
+            visibility=item.get("visibility", "public"),
+            owned_by_me=bool(user_id and owner_id == user_id),
+            source=item.get("source", "builtin"),
+            available=(
+                item.get("visibility", "public") not in {"rejected", "disabled"}
+                and set(item.get("tools", [])).issubset(self._available_tools)
+            ),
+        )
+
+    @staticmethod
+    def _visible_to(item: dict, user_id: str) -> bool:
+        return item.get("visibility", "public") == "public" or item.get("owner_id") == user_id
 
     def _sync_registered_skills(self) -> None:
         """Load latest SQLite Skill versions and reject built-in ID conflicts."""
         if self.db is None:
             return
         rows = tuple(self.db.execute(
-            "SELECT id,version,name,description,tools_json,instructions "
+            "SELECT id,version,name,description,tools_json,instructions,owner_id,visibility,"
+            "files_json,package_sha256,source_url,source_commit,license_name,review_reason "
             "FROM catalog_skill_versions ORDER BY id,version DESC"
         ).fetchall())
         if rows == self._registered_rows:
             return
         specs = dict(self._static_skill_specs)
         instructions: dict[str, str] = {}
-        for skill_id, version, name, description, tools_json, guidance in rows:
+        package_files: dict[str, list[SkillFile]] = {}
+        for row in rows:
+            (skill_id, version, name, description, tools_json, guidance, owner_id, visibility,
+             files_json, package_sha256, source_url, source_commit, license_name,
+             review_reason) = row
             if skill_id in specs:
                 if skill_id in self._static_skill_specs:
                     raise ValueError(f"Registered Skill conflicts with built-in Skill: {skill_id}")
@@ -230,14 +268,32 @@ class CatalogStore:
             specs[skill_id] = {
                 "id": skill_id, "version": version, "name": name,
                 "description": description, "tools": json.loads(tools_json),
+                "owner_id": owner_id,
+                "visibility": visibility,
+                "source": "user" if owner_id else "upstream" if source_url else "builtin",
+                "package_sha256": package_sha256,
+                "source_url": source_url,
+                "source_commit": source_commit,
+                "license_name": license_name,
+                "review_reason": review_reason,
             }
             instructions[skill_id] = guidance
+            package_files[skill_id] = [
+                SkillFile.model_validate(item) for item in json.loads(files_json or "[]")
+            ]
         self._all_skill_specs = specs
         self._registered_instructions = instructions
+        self._registered_files = package_files
         self._registered_rows = rows
         self._rebuild_skills()
 
     def register_skill_version(self, manifest: SkillManifest, instructions: str, *,
+                               owner_id: str | None = None, visibility: str = "public",
+                               files: list[SkillFile] | None = None,
+                               package_sha256: str | None = None,
+                               source_url: str | None = None,
+                               source_commit: str | None = None,
+                               license_name: str | None = None,
                                audit_callback=None, audit_actor='operator:legacy-admin-key',
                                audit_reason='Legacy operator Skill registration', audit_request_id=None,
                                expected_revision=None) -> CatalogItem:
@@ -267,7 +323,12 @@ class CatalogStore:
             or (not self._defer_unknown_tool_validation
                 and any(tool not in self._known_tools for tool in manifest.tools))):
             raise ValueError("Invalid Skill definition")
+        if visibility not in {"private", "review_pending", "public", "rejected", "disabled"}:
+            raise ValueError("Invalid Skill visibility")
         tools_json = json.dumps(manifest.tools)
+        files_json = json.dumps(
+            [item.model_dump() for item in files or []], ensure_ascii=False, separators=(",", ":")
+        )
         self.db.execute("BEGIN IMMEDIATE")
         try:
             previous_version = self.db.execute(
@@ -277,12 +338,17 @@ class CatalogStore:
             if expected_revision is not None and previous_version != expected_revision:
                 raise SkillVersionConflict
             existing = self.db.execute(
-                "SELECT name,description,tools_json,instructions "
+                "SELECT name,description,tools_json,instructions,owner_id,visibility,files_json,"
+                "package_sha256,source_url,source_commit,license_name "
                 "FROM catalog_skill_versions WHERE id=? AND version=?",
                 (manifest.id, manifest.version),
             ).fetchone()
             if existing is not None:
-                if existing != (manifest.name, manifest.description, tools_json, instructions):
+                expected = (
+                    manifest.name, manifest.description, tools_json, instructions, owner_id,
+                    visibility, files_json, package_sha256, source_url, source_commit, license_name,
+                )
+                if existing != expected:
                     raise SkillVersionConflict
             else:
                 latest = self.db.execute(
@@ -292,10 +358,13 @@ class CatalogStore:
                     raise SkillVersionConflict
                 self.db.execute(
                     "INSERT INTO catalog_skill_versions "
-                    "(id,version,name,description,tools_json,instructions,created_at) "
-                    "VALUES (?,?,?,?,?,?,?)",
+                    "(id,version,name,description,tools_json,instructions,created_at,owner_id,"
+                    "visibility,files_json,package_sha256,source_url,source_commit,license_name) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (manifest.id, manifest.version, manifest.name, manifest.description,
-                     tools_json, instructions, datetime.now(UTC).isoformat()),
+                     tools_json, instructions, datetime.now(UTC).isoformat(), owner_id,
+                     visibility, files_json, package_sha256, source_url, source_commit,
+                     license_name),
                 )
             if audit_callback:
                 audit_callback(audit_actor, 'skills:register', manifest.id, audit_reason,
@@ -309,8 +378,116 @@ class CatalogStore:
             raise
         self._registered_rows = None
         self._sync_registered_skills()
-        return CatalogItem(id=manifest.id, version=manifest.version,
-                           name=manifest.name, description=manifest.description)
+        return self._catalog_item({
+            **manifest.model_dump(), "owner_id": owner_id, "visibility": visibility,
+            "source": "user" if owner_id else "upstream" if source_url else "builtin",
+        }, owner_id)
+
+    def register_user_skill(self, user_id: str, package, *, request_public: bool) -> CatalogItem:
+        """Create an immutable private version or a public review request."""
+        if self.db is None:
+            raise RuntimeError("Persistent Skill registry is unavailable")
+        count, stored = self.db.execute(
+            "SELECT COUNT(*),COALESCE(SUM(LENGTH(files_json)),0) "
+            "FROM catalog_skill_versions WHERE owner_id=?",
+            (user_id,),
+        ).fetchone()
+        incoming_size = sum(len((item.content or "").encode("utf-8")) for item in package.files)
+        if count >= 50 or stored + incoming_size > 20 * 1024 * 1024:
+            raise ValueError("Skill package quota exceeded")
+        owner_prefix = hashlib.sha256(user_id.encode()).hexdigest()[:12]
+        skill_id = f"custom-{owner_prefix}-{package.slug}"
+        if self.db.execute(
+            "SELECT 1 FROM catalog_skill_versions "
+            "WHERE id=? AND visibility='review_pending' LIMIT 1",
+            (skill_id,),
+        ).fetchone():
+            raise SkillVersionConflict
+        row = self.db.execute(
+            "SELECT COALESCE(MAX(version),0) FROM catalog_skill_versions WHERE id=?",
+            (skill_id,),
+        ).fetchone()
+        version = int(row[0]) + 1
+        return self.register_skill_version(
+            SkillManifest(
+                id=skill_id,
+                version=version,
+                name=package.name,
+                description=package.description,
+                tools=[],
+            ),
+            package.instructions,
+            owner_id=user_id,
+            visibility="review_pending" if request_public else "private",
+            files=list(package.files),
+            package_sha256=package.sha256,
+        )
+
+    def review_skill(
+        self,
+        skill_id: str,
+        version: int,
+        *,
+        approved: bool,
+        reason: str,
+        audit_callback=None,
+        audit_actor: str,
+        audit_request_id: str | None,
+    ) -> CatalogItem:
+        """Publish or reject exactly one pending user Skill version."""
+        if self.db is None:
+            raise RuntimeError("Persistent Skill registry is unavailable")
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.db.execute(
+                "SELECT owner_id,visibility,name,description FROM catalog_skill_versions "
+                "WHERE id=? AND version=?",
+                (skill_id, version),
+            ).fetchone()
+            if row is None or row[0] is None:
+                raise ContextNotFound
+            if row[1] != "review_pending":
+                raise SkillVersionConflict
+            visibility = "public" if approved else "rejected"
+            self.db.execute(
+                "UPDATE catalog_skill_versions SET visibility=?,review_reason=? "
+                "WHERE id=? AND version=? AND visibility='review_pending'",
+                (visibility, reason, skill_id, version),
+            )
+            if audit_callback:
+                audit_callback(
+                    audit_actor,
+                    "skills:review",
+                    skill_id,
+                    reason,
+                    {"version": version, "visibility": "review_pending"},
+                    {"version": version, "visibility": visibility},
+                    audit_request_id,
+                    connection=self.db,
+                )
+            self.db.commit()
+        except BaseException:
+            self.db.rollback()
+            raise
+        self._registered_rows = None
+        self._sync_registered_skills()
+        item = self._all_skill_specs[skill_id]
+        return self._catalog_item(item, row[0])
+
+    def pending_skill_reviews(self) -> list[SkillDetail]:
+        """List current pending versions for an authorized administrator."""
+        if self.db is None:
+            return []
+        self._sync_registered_skills()
+        pending = [
+            item for item in self._all_skill_specs.values()
+            if item.get("visibility") == "review_pending"
+        ]
+        return [
+            self.skill_detail_for(item["owner_id"], item["id"])
+            for item in pending
+            if item.get("owner_id")
+        ]
 
     def skills(self) -> list[CatalogItem]:
         """List currently executable Skill versions without user filtering."""
@@ -330,10 +507,44 @@ class CatalogStore:
         """List Skills allowed by grants, tool availability, and guest policy."""
         self._sync_registered_skills()
         allowed = self._allowed_skill_ids(user_id)
-        return [skill for skill in self._skills
-                if (allowed is None or skill.id in allowed)
-                and all(self.tool_allowed_for(user_id, tool)
-                        for tool in self._skill_specs.get(skill.id, {}).get("tools", []))]
+        return [self._catalog_item(skill, user_id) for skill in self._all_skill_specs.values()
+                if self._visible_to(skill, user_id)
+                and skill.get("visibility", "public") not in {"rejected", "disabled"}
+                and (skill.get("owner_id") == user_id or allowed is None or skill["id"] in allowed)
+                and (
+                    not set(skill.get("tools", [])).issubset(self._available_tools)
+                    or all(self.tool_allowed_for(user_id, tool) for tool in skill.get("tools", []))
+                )]
+
+    def skill_detail_for(self, user_id: str, skill_id: str) -> SkillDetail | None:
+        """Return one authorized Skill version with its inert file tree."""
+        self._sync_registered_skills()
+        item = self._all_skill_specs.get(skill_id)
+        if item is None or not self._visible_to(item, user_id):
+            return None
+        files = self._registered_files.get(skill_id)
+        if files is None and skill_id in self._static_skill_specs:
+            root = self._skill_root / skill_id
+            files = [
+                SkillFile(
+                    path=str(path.relative_to(root)),
+                    size=path.stat().st_size,
+                    content=path.read_text(encoding="utf-8"),
+                )
+                for path in sorted(root.rglob("*"))
+                if path.is_file() and path.suffix.lower() in {
+                    ".md", ".json", ".txt", ".py", ".sh", ".yaml", ".yml", ".toml",
+                    ".csv", ".tsv", ".bib",
+                }
+            ]
+        return SkillDetail(
+            **self._catalog_item(item, user_id).model_dump(),
+            files=files or [],
+            license_name=item.get("license_name"),
+            source_url=item.get("source_url"),
+            source_commit=item.get("source_commit"),
+            review_reason=item.get("review_reason"),
+        )
 
     def allowed_tool_ids_for(self, user_id: str) -> set[str] | None:
         """Collect tools granted through the user's permitted Skills."""
@@ -723,7 +934,16 @@ class CatalogStore:
         allowed_skills = self._allowed_skill_ids(user_id)
         for reference in payload.skills:
             skill = self._skill_specs.get(reference.id)
-            if skill is None or (allowed_skills is not None and reference.id not in allowed_skills):
+            if (
+                skill is None
+                or not self._visible_to(skill, user_id)
+                or skill.get("visibility", "public") in {"rejected", "disabled"}
+                or (
+                    skill.get("owner_id") != user_id
+                    and allowed_skills is not None
+                    and reference.id not in allowed_skills
+                )
+            ):
                 raise ContextNotFound
             if not all(self.tool_allowed_for(user_id, tool) for tool in skill["tools"]):
                 raise ContextNotFound

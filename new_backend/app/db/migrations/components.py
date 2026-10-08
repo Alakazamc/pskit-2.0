@@ -101,6 +101,29 @@ def _catalog_skill_versions(db: sqlite3.Connection) -> None:
         "created_at TEXT NOT NULL, PRIMARY KEY(id,version))"
     )
 
+
+def _catalog_skill_packages(db: sqlite3.Connection) -> None:
+    """Add owner, visibility, provenance, and browsable package files."""
+    for name, declaration in (
+        ("owner_id", "TEXT"),
+        ("visibility", "TEXT NOT NULL DEFAULT 'public'"),
+        ("files_json", "TEXT NOT NULL DEFAULT '[]'"),
+        ("package_sha256", "TEXT"),
+        ("source_url", "TEXT"),
+        ("source_commit", "TEXT"),
+        ("license_name", "TEXT"),
+        ("review_reason", "TEXT"),
+    ):
+        add_column_if_missing(db, "catalog_skill_versions", name, declaration)
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS catalog_skill_versions_owner "
+        "ON catalog_skill_versions(owner_id,id,version DESC)"
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS catalog_skill_versions_review "
+        "ON catalog_skill_versions(visibility,created_at DESC)"
+    )
+
 def migrate_catalog_schema(db: sqlite3.Connection) -> None:
     """Upgrade file and Skill catalog tables in one component transaction.
 
@@ -111,11 +134,14 @@ def migrate_catalog_schema(db: sqlite3.Connection) -> None:
         ("catalog files and skill grants", _catalog_base),
         ("raw upload bytes", _catalog_raw_content),
         ("registered Skill versions", _catalog_skill_versions),
+        ("owned and reviewable Skill packages", _catalog_skill_packages),
     ), {
         "catalog_files": {"id", "user_id", "name", "size", "content", "raw_content"},
         "catalog_skill_grants": {"user_id", "skill_ids_json"},
         "catalog_skill_versions": {
             "id", "version", "name", "description", "tools_json", "instructions", "created_at",
+            "owner_id", "visibility", "files_json", "package_sha256", "source_url",
+            "source_commit", "license_name", "review_reason",
         },
     })
 

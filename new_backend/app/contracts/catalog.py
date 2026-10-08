@@ -8,6 +8,29 @@ class CatalogItem(BaseModel):
     name: str
     description: str = ""
     version: int = 1
+    visibility: Literal["private", "review_pending", "public", "rejected", "disabled"] = "public"
+    owned_by_me: bool = False
+    source: Literal["builtin", "upstream", "user"] = "builtin"
+    available: bool = True
+
+
+class SkillFile(BaseModel):
+    path: str
+    size: int = Field(ge=0)
+    content: str | None = None
+
+
+class SkillDetail(CatalogItem):
+    files: list[SkillFile] = Field(default_factory=list)
+    license_name: str | None = None
+    source_url: str | None = None
+    source_commit: str | None = None
+    review_reason: str | None = None
+
+
+class SkillReviewRequest(BaseModel):
+    decision: Literal["approve", "reject"]
+    reason: str = Field(min_length=5, max_length=500)
 
 
 class FileUploadRequest(BaseModel):
