@@ -1,0 +1,9 @@
+{
+  "id": "chembl-database",
+  "version": 1,
+  "name": "Chembl Database",
+  "description": "Query the ChEMBL database for bioactive molecules, drug targets, bioactivity data, approved drugs, and chemical structures. Use when the user asks about compounds, targets, IC50/Ki values, drug mechanisms, or structure searches.",
+  "tools": [
+    "chembl_search"
+  ]
+}

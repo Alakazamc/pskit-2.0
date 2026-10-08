@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/google-deepmind/science-skills",
+  "commit": "68832757cbbf941c620b71df5756cf6e5cc287b0",
+  "path": "skills/gnomad_database",
+  "license": "Apache-2.0; database terms listed in SKILL_LICENSES.md"
+}

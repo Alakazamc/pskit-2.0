@@ -1,0 +1,9 @@
+{
+  "id": "pdb-database",
+  "version": 1,
+  "name": "Pdb Database",
+  "description": "Use when you want to search for or download experimentally-determined 3D structures for biomolecules (proteins, nucleic acids, bound ligands). Supports searching by sequence similarity, structure similarity, chemical and other attributes. Also use to get metadata about biomolecular structure experiments.",
+  "tools": [
+    "search_pdb"
+  ]
+}
