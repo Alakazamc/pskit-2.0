@@ -19,7 +19,8 @@ from app.contracts.admin import (
     RevisionRequest,
 )
 from app.contracts.sandbox import SandboxSummary
-from app.domain.sandboxes import SandboxConflict
+from app.domain.sandboxes import SandboxConflict as LegacySandboxConflict
+from app.ports.workspace_sandbox import WorkspaceConflict
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin-operations"])
 Users = Annotated[AdminMe, Depends(require_permission("quotas:read"))]
@@ -158,7 +159,7 @@ async def drain_sandbox(
     )
     try:
         operation = await operations.drain(owner_id, payload.expected_revision)
-    except (ValueError, SandboxConflict) as exc:
+    except (ValueError, LegacySandboxConflict, WorkspaceConflict) as exc:
         raise HTTPException(409, detail={"code": "REVISION_CONFLICT"}) from exc
     except Exception as exc:
         await run_in_threadpool(
@@ -190,11 +191,89 @@ async def drain_sandbox(
     )
 
 
+@router.post("/sandboxes/{owner_id}/replace")
+async def replace_sandbox(
+    owner_id: str, payload: RevisionRequest, actor: Drain, request: Request
+) -> AdminOperation:
+    """Replace one stopped OpenSandbox instance while preserving its volume."""
+    operations = getattr(request.app.state, "sandbox_operations", None)
+    if operations is None or request.app.state.settings.workspace_provider != "opensandbox":
+        raise HTTPException(503, detail={"code": "SANDBOX_OPERATIONS_UNAVAILABLE"})
+    store = request.app.state.admin_store
+    await run_in_threadpool(
+        record_sandbox_action,
+        store,
+        actor.user_id,
+        owner_id,
+        payload,
+        "sandboxes:replace",
+        "requested",
+        request.headers.get("x-request-id"),
+    )
+    try:
+        operation = await operations.replace_keep_volume(
+            owner_id,
+            payload.expected_revision,
+        )
+    except (ValueError, LegacySandboxConflict, WorkspaceConflict) as exc:
+        raise HTTPException(409, detail={"code": "REVISION_CONFLICT"}) from exc
+    except Exception as exc:
+        await run_in_threadpool(
+            record_sandbox_action,
+            store,
+            actor.user_id,
+            owner_id,
+            payload,
+            "sandboxes:replace",
+            "failed",
+            request.headers.get("x-request-id"),
+        )
+        raise HTTPException(503, detail={"code": "SANDBOX_OPERATIONS_UNAVAILABLE"}) from exc
+    await run_in_threadpool(
+        record_sandbox_action,
+        store,
+        actor.user_id,
+        owner_id,
+        payload,
+        "sandboxes:replace",
+        "confirmed",
+        request.headers.get("x-request-id"),
+    )
+    return AdminOperation(
+        operation_id=operation.operation_id,
+        resource_id=owner_id,
+        kind="replace",
+        state="confirmed",
+        revision=operation.revision,
+    )
+
+
 def record_drain(store, actor, owner_id, payload, state, request_id):
     with store.transaction():
         store.audit(
             actor,
             "sandboxes:drain",
+            owner_id,
+            payload.reason,
+            {"revision": payload.expected_revision},
+            {"state": state},
+            request_id,
+        )
+
+
+def record_sandbox_action(
+    store,
+    actor,
+    owner_id,
+    payload,
+    action,
+    state,
+    request_id,
+):
+    with store.transaction():
+        store.audit(
+            actor,
+            action,
             owner_id,
             payload.reason,
             {"revision": payload.expected_revision},

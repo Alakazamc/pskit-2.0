@@ -223,14 +223,18 @@ class WorkspaceFilePort(Protocol):
     """Bounded file operations under `/workspace/<session_id>/`."""
 
     async def stat(
-        self, sandbox: WorkspaceSandbox, session_id: str, path: str,
-    ) -> WorkspaceFileEntry:
-        ...
+        self,
+        sandbox: WorkspaceSandbox,
+        session_id: str,
+        path: str,
+    ) -> WorkspaceFileEntry: ...
 
     async def list(
-        self, sandbox: WorkspaceSandbox, session_id: str, path: str,
-    ) -> tuple[WorkspaceFileEntry, ...]:
-        ...
+        self,
+        sandbox: WorkspaceSandbox,
+        session_id: str,
+        path: str,
+    ) -> tuple[WorkspaceFileEntry, ...]: ...
 
     async def read(
         self,
@@ -240,8 +244,7 @@ class WorkspaceFilePort(Protocol):
         *,
         offset: int = 0,
         limit: int = 1_048_576,
-    ) -> WorkspaceFileChunk:
-        ...
+    ) -> WorkspaceFileChunk: ...
 
     async def write(
         self,
@@ -251,29 +254,25 @@ class WorkspaceFilePort(Protocol):
         content: bytes,
         *,
         expected_revision: str | None = None,
-    ) -> WorkspaceWriteResult:
-        ...
+    ) -> WorkspaceWriteResult: ...
 
 
 class WorkspaceCommandPort(Protocol):
     """Process lifecycle operations inside a verified Session namespace."""
 
     async def start(
-        self, sandbox: WorkspaceSandbox, request: WorkspaceCommandRequest,
-    ) -> WorkspaceCommandHandle:
-        ...
+        self,
+        sandbox: WorkspaceSandbox,
+        request: WorkspaceCommandRequest,
+    ) -> WorkspaceCommandHandle: ...
 
-    def events(self, handle: WorkspaceCommandHandle) -> AsyncIterator[WorkspaceCommandEvent]:
-        ...
+    def events(self, handle: WorkspaceCommandHandle) -> AsyncIterator[WorkspaceCommandEvent]: ...
 
-    async def status(self, handle: WorkspaceCommandHandle) -> WorkspaceCommandStatus:
-        ...
+    async def status(self, handle: WorkspaceCommandHandle) -> WorkspaceCommandStatus: ...
 
-    async def cancel(self, handle: WorkspaceCommandHandle) -> WorkspaceCommandStatus:
-        ...
+    async def cancel(self, handle: WorkspaceCommandHandle) -> WorkspaceCommandStatus: ...
 
-    async def metrics(self, handle: WorkspaceCommandHandle) -> WorkspaceMetrics:
-        ...
+    async def metrics(self, handle: WorkspaceCommandHandle) -> WorkspaceMetrics: ...
 
 
 class WorkspaceSandboxProvider(Protocol):
@@ -282,19 +281,20 @@ class WorkspaceSandboxProvider(Protocol):
     files: WorkspaceFilePort
     commands: WorkspaceCommandPort
 
-    async def ensure_user(self, user_id: str) -> WorkspaceSandbox:
-        ...
+    async def ensure_user(self, user_id: str) -> WorkspaceSandbox: ...
 
-    async def capabilities(self) -> WorkspaceCapabilities:
-        ...
+    async def capabilities(self) -> WorkspaceCapabilities: ...
 
-    async def readiness(self) -> WorkspaceReadiness:
-        ...
+    async def readiness(self) -> WorkspaceReadiness: ...
 
-    async def stop_user(self, user_id: str) -> None:
-        ...
+    async def stop_user(
+        self,
+        user_id: str,
+        expected_revision: int | None = None,
+    ) -> None: ...
 
     async def replace_user(
-        self, user_id: str, expected_revision: int,
-    ) -> WorkspaceSandbox:
-        ...
+        self,
+        user_id: str,
+        expected_revision: int,
+    ) -> WorkspaceSandbox: ...

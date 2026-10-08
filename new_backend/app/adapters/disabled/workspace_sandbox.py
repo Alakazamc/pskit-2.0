@@ -31,24 +31,39 @@ class _DisabledFiles:
         self._raise()
 
     async def read(
-        self, sandbox, session_id, path, *, offset=0, limit=1_048_576,
+        self,
+        sandbox,
+        session_id,
+        path,
+        *,
+        offset=0,
+        limit=1_048_576,
     ) -> WorkspaceFileChunk:
         self._raise()
 
     async def write(
-        self, sandbox, session_id, path, content, *, expected_revision=None,
+        self,
+        sandbox,
+        session_id,
+        path,
+        content,
+        *,
+        expected_revision=None,
     ) -> WorkspaceWriteResult:
         self._raise()
 
 
 class _DisabledCommands:
     async def start(
-        self, sandbox: WorkspaceSandbox, request: WorkspaceCommandRequest,
+        self,
+        sandbox: WorkspaceSandbox,
+        request: WorkspaceCommandRequest,
     ) -> WorkspaceCommandHandle:
         raise WorkspaceUnavailable()
 
     async def _unavailable_events(
-        self, handle: WorkspaceCommandHandle,
+        self,
+        handle: WorkspaceCommandHandle,
     ) -> AsyncIterator[WorkspaceCommandEvent]:
         raise WorkspaceUnavailable()
         yield  # pragma: no cover - keeps this an async iterator without executing
@@ -88,7 +103,11 @@ class DisabledWorkspaceSandboxProvider:
             capabilities=self._capabilities,
         )
 
-    async def stop_user(self, user_id: str) -> None:
+    async def stop_user(
+        self,
+        user_id: str,
+        expected_revision: int | None = None,
+    ) -> None:
         raise WorkspaceUnavailable()
 
     async def replace_user(self, user_id: str, expected_revision: int) -> WorkspaceSandbox:

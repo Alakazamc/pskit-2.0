@@ -87,29 +87,54 @@ class WorkspaceSandboxLifecycle:
             WorkspaceCreationClaim(record, True), old_sandbox_id=old_sandbox_id
         )
 
-    async def stop(self, user_id: str) -> None:
+    async def stop(
+        self,
+        user_id: str,
+        expected_revision: int | None = None,
+    ) -> WorkspaceSandboxRecord | None:
         record = self.store.get(user_id)
         if record is None or record.sandbox_id is None:
-            return
-        unresolved = [
-            lease for lease in self.store.leases_for_user(user_id) if lease.state != "released"
-        ]
-        if unresolved:
-            raise WorkspaceConflict("Workspace has unresolved attempts")
-        await self.compat.kill(record.sandbox_id)
-        self.store.mark_runtime(user_id, "stopped")
+            return None
+        revision = record.provider_revision if expected_revision is None else expected_revision
+        draining = self.store.begin_drain(user_id, revision)
+        if draining.runtime_state == "stopped":
+            return draining
+        try:
+            await self.compat.kill(record.sandbox_id)
+        except WorkspaceProviderError as exc:
+            try:
+                self.store.fail_drain(
+                    user_id,
+                    draining.provider_revision,
+                    exc.code.value,
+                )
+            except WorkspaceConflict:
+                pass
+            self._audit("sandbox_stop_failed", user_id, exc.code.value)
+            raise
+        stopped = self.store.confirm_stopped(user_id, draining.provider_revision)
         self._audit("sandbox_stopped", user_id, "WORKSPACE_STOPPED")
+        return stopped
 
     async def reconcile_orphans(self) -> int:
         """Kill namespace instances that are not the current durable owner."""
+        records = self.store.list()
         owned = {
             record.sandbox_id
-            for record in self.store.list()
+            for record in records
             if record.sandbox_id and record.lifecycle_state in {"ready", "replacing"}
         }
+        claimed_owner_hashes = {
+            self._owner_hash(record.user_id)
+            for record in records
+            if record.claim_token
+            and record.claim_expires_at is not None
+            and record.claim_expires_at > time.time()
+            and record.lifecycle_state in {"creating", "replacing"}
+        }
         killed = 0
-        for sandbox_id, _metadata in await self.compat.list_owned(self.namespace):
-            if sandbox_id in owned:
+        for sandbox_id, metadata in await self.compat.list_owned(self.namespace):
+            if sandbox_id in owned or metadata.get("pskit.owner_hash") in claimed_owner_hashes:
                 continue
             await self.compat.kill(sandbox_id)
             killed += 1

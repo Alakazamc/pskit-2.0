@@ -66,14 +66,35 @@ class WorkspaceLeaseRecord:
 
 
 _SANDBOX_COLUMNS = (
-    "user_id", "provider", "sandbox_id", "volume_id", "image_digest",
-    "provider_revision", "lifecycle_state", "runtime_state", "claim_token",
-    "claim_expires_at", "last_error_code", "last_confirmed_at", "created_at", "updated_at",
+    "user_id",
+    "provider",
+    "sandbox_id",
+    "volume_id",
+    "image_digest",
+    "provider_revision",
+    "lifecycle_state",
+    "runtime_state",
+    "claim_token",
+    "claim_expires_at",
+    "last_error_code",
+    "last_confirmed_at",
+    "created_at",
+    "updated_at",
 )
 _LEASE_COLUMNS = (
-    "attempt_id", "user_id", "session_id", "run_id", "fencing_token", "state",
-    "expires_at", "process_id", "process_state", "exit_code", "exit_confirmed",
-    "created_at", "updated_at",
+    "attempt_id",
+    "user_id",
+    "session_id",
+    "run_id",
+    "fencing_token",
+    "state",
+    "expires_at",
+    "process_id",
+    "process_state",
+    "exit_code",
+    "exit_confirmed",
+    "created_at",
+    "updated_at",
 )
 
 
@@ -110,8 +131,7 @@ class WorkspaceSandboxStore:
 
     def get(self, user_id: str) -> WorkspaceSandboxRecord | None:
         row = self.db.execute(
-            "SELECT " + ",".join(_SANDBOX_COLUMNS)
-            + " FROM workspace_sandboxes WHERE user_id=?",
+            "SELECT " + ",".join(_SANDBOX_COLUMNS) + " FROM workspace_sandboxes WHERE user_id=?",
             (user_id,),
         ).fetchone()
         return WorkspaceSandboxRecord(*row) if row else None
@@ -120,7 +140,8 @@ class WorkspaceSandboxStore:
         return [
             WorkspaceSandboxRecord(*row)
             for row in self.db.execute(
-                "SELECT " + ",".join(_SANDBOX_COLUMNS)
+                "SELECT "
+                + ",".join(_SANDBOX_COLUMNS)
                 + " FROM workspace_sandboxes ORDER BY user_id"
             )
         ]
@@ -146,8 +167,16 @@ class WorkspaceSandboxStore:
                     + ",".join(_SANDBOX_COLUMNS)
                     + ") VALUES (?,?,?,?,?,1,'creating','pending',?,?,NULL,?,?,?)",
                     (
-                        user_id, provider, None, volume_id, image_digest,
-                        token, now + self.claim_seconds, 0.0, now, now,
+                        user_id,
+                        provider,
+                        None,
+                        volume_id,
+                        image_digest,
+                        token,
+                        now + self.claim_seconds,
+                        0.0,
+                        now,
+                        now,
                     ),
                 )
                 return WorkspaceCreationClaim(self._required_record(user_id), True)
@@ -219,7 +248,9 @@ class WorkspaceSandboxStore:
             )
 
     def mark_runtime(
-        self, user_id: str, runtime_state: RuntimeState,
+        self,
+        user_id: str,
+        runtime_state: RuntimeState,
     ) -> WorkspaceSandboxRecord:
         if runtime_state == "pending":
             raise ValueError("Pending runtime is reserved for lifecycle claims")
@@ -232,6 +263,83 @@ class WorkspaceSandboxStore:
                 "UPDATE workspace_sandboxes SET runtime_state=?,last_confirmed_at=?,updated_at=? "
                 "WHERE user_id=?",
                 (runtime_state, now, now, user_id),
+            )
+            return self._required_record(user_id)
+
+    def begin_drain(
+        self,
+        user_id: str,
+        expected_revision: int,
+    ) -> WorkspaceSandboxRecord:
+        """Fence new attempts before an instance is stopped."""
+        now = self.clock()
+        with self._locked_user(user_id):
+            current = self.get(user_id)
+            if current is None or current.provider_revision != expected_revision:
+                raise WorkspaceConflict("Workspace revision is stale")
+            if current.lifecycle_state != "ready":
+                raise WorkspaceConflict("Workspace cannot be drained in its current state")
+            unresolved = self.db.execute(
+                "SELECT 1 FROM workspace_sandbox_leases WHERE user_id=? AND state<>'released' "
+                "LIMIT 1",
+                (user_id,),
+            ).fetchone()
+            if unresolved:
+                raise WorkspaceConflict("Workspace has unresolved attempts")
+            if current.runtime_state == "stopped":
+                return current
+            self.db.execute(
+                "UPDATE workspace_sandboxes SET lifecycle_state='draining',"
+                "runtime_state='unknown',provider_revision=provider_revision+1,updated_at=? "
+                "WHERE user_id=?",
+                (now, user_id),
+            )
+            return self._required_record(user_id)
+
+    def confirm_stopped(
+        self,
+        user_id: str,
+        expected_revision: int,
+    ) -> WorkspaceSandboxRecord:
+        """Record provider-confirmed termination without deleting the volume."""
+        now = self.clock()
+        with self._locked_user(user_id):
+            current = self.get(user_id)
+            if (
+                current is None
+                or current.provider_revision != expected_revision
+                or current.lifecycle_state != "draining"
+            ):
+                raise WorkspaceConflict("Workspace drain revision is stale")
+            self.db.execute(
+                "UPDATE workspace_sandboxes SET lifecycle_state='ready',"
+                "runtime_state='stopped',provider_revision=provider_revision+1,"
+                "last_confirmed_at=?,updated_at=? WHERE user_id=?",
+                (now, now, user_id),
+            )
+            return self._required_record(user_id)
+
+    def fail_drain(
+        self,
+        user_id: str,
+        expected_revision: int,
+        error_code: str,
+    ) -> WorkspaceSandboxRecord:
+        """Retain an unconfirmed stop as an explicit error/unknown state."""
+        now = self.clock()
+        with self._locked_user(user_id):
+            current = self.get(user_id)
+            if (
+                current is None
+                or current.provider_revision != expected_revision
+                or current.lifecycle_state != "draining"
+            ):
+                raise WorkspaceConflict("Workspace drain revision is stale")
+            self.db.execute(
+                "UPDATE workspace_sandboxes SET lifecycle_state='error',"
+                "runtime_state='unknown',last_error_code=?,"
+                "provider_revision=provider_revision+1,updated_at=? WHERE user_id=?",
+                (error_code, now, user_id),
             )
             return self._required_record(user_id)
 
@@ -281,14 +389,23 @@ class WorkspaceSandboxStore:
                 + ",".join(_LEASE_COLUMNS)
                 + ") VALUES (?,?,?,?,?,'active',?,NULL,'pending',NULL,false,?,?)",
                 (
-                    attempt_id, user_id, session_id, run_id, fencing,
-                    now + lease_seconds, now, now,
+                    attempt_id,
+                    user_id,
+                    session_id,
+                    run_id,
+                    fencing,
+                    now + lease_seconds,
+                    now,
+                    now,
                 ),
             )
             return self._lease(attempt_id)
 
     def attach_process(
-        self, attempt_id: str, fencing_token: int, process_id: str,
+        self,
+        attempt_id: str,
+        fencing_token: int,
+        process_id: str,
     ) -> WorkspaceLeaseRecord:
         lease = self._required_lease(attempt_id)
         with self._locked_user(lease.user_id):
@@ -304,7 +421,10 @@ class WorkspaceSandboxStore:
             return self._required_lease(attempt_id)
 
     def renew_lease(
-        self, attempt_id: str, fencing_token: int, lease_seconds: float,
+        self,
+        attempt_id: str,
+        fencing_token: int,
+        lease_seconds: float,
     ) -> WorkspaceLeaseRecord:
         if lease_seconds <= 0:
             raise ValueError("Workspace lease duration must be positive")
@@ -352,7 +472,9 @@ class WorkspaceSandboxStore:
             return self._required_lease(attempt_id)
 
     def begin_replace(
-        self, user_id: str, expected_revision: int,
+        self,
+        user_id: str,
+        expected_revision: int,
     ) -> WorkspaceSandboxRecord:
         now = self.clock()
         with self._locked_user(user_id):
@@ -366,7 +488,9 @@ class WorkspaceSandboxStore:
             ).fetchone()
             if unresolved:
                 raise WorkspaceConflict("Workspace has unresolved attempts")
-            if current.lifecycle_state not in {"ready", "error"}:
+            if current.lifecycle_state not in {"ready", "error"} or (
+                current.lifecycle_state == "ready" and current.runtime_state != "stopped"
+            ):
                 raise WorkspaceConflict("Workspace cannot be replaced in its current state")
             token = "replace-" + uuid.uuid4().hex
             self.db.execute(
@@ -397,7 +521,8 @@ class WorkspaceSandboxStore:
         return [
             WorkspaceLeaseRecord(*row)
             for row in self.db.execute(
-                "SELECT " + ",".join(_LEASE_COLUMNS)
+                "SELECT "
+                + ",".join(_LEASE_COLUMNS)
                 + " FROM workspace_sandbox_leases WHERE user_id=? ORDER BY created_at",
                 (user_id,),
             )
@@ -405,7 +530,8 @@ class WorkspaceSandboxStore:
 
     def _lease(self, attempt_id: str) -> WorkspaceLeaseRecord | None:
         row = self.db.execute(
-            "SELECT " + ",".join(_LEASE_COLUMNS)
+            "SELECT "
+            + ",".join(_LEASE_COLUMNS)
             + " FROM workspace_sandbox_leases WHERE attempt_id=?",
             (attempt_id,),
         ).fetchone()

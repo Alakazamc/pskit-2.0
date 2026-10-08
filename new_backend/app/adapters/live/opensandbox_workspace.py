@@ -501,8 +501,12 @@ class OpenSandboxWorkspaceProvider:
             capabilities=self._capabilities,
         )
 
-    async def stop_user(self, user_id: str) -> None:
-        await self.lifecycle.stop(user_id)
+    async def stop_user(
+        self,
+        user_id: str,
+        expected_revision: int | None = None,
+    ) -> None:
+        await self.lifecycle.stop(user_id, expected_revision)
 
     async def replace_user(
         self,

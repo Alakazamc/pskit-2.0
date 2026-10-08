@@ -13,9 +13,10 @@ from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.adapters.disabled import DisabledAf3, DisabledMcp
+from app.adapters.disabled import DisabledAf3, DisabledMcp, DisabledWorkspaceSandboxProvider
 from app.adapters.live.limited_mcp import LimitedMcp
 from app.adapters.live.multi_remote_mcp import MultiRemoteMcp
+from app.adapters.live.opensandbox_workspace import OpenSandboxWorkspaceProvider
 from app.adapters.live.pi_rpc import PiRpcRunner
 from app.adapters.live.remote_mcp import RemoteMcp
 from app.adapters.live.sandbox_pi import SandboxPiRunner
@@ -76,9 +77,11 @@ from app.domain.tool_products.registry import ToolProductRegistry
 from app.domain.tool_products.repository import ToolProductRepository
 from app.domain.tool_products.runs import ToolRunGateway
 from app.domain.tool_runs import ToolRunStore
+from app.domain.workspace_sandboxes import WorkspaceSandboxStore
 from app.ports.avatars import AvatarStorage
 from app.ports.captcha import CaptchaVerifier
 from app.ports.providers import ProviderUnavailable
+from app.ports.workspace_sandbox import WorkspaceProviderError
 from app.services.agent import AgentService
 from app.services.auth_protection import AuthProtection
 from app.services.client_ip import TrustedClientIpResolver
@@ -86,13 +89,20 @@ from app.services.csrf import CsrfProtector
 from app.services.model_catalog import ModelCatalog
 from app.services.observability import ObservabilityMiddleware, RequestMetrics
 from app.services.pdf_processing import PdfProcessingPool
-from app.services.sandbox_operations import SandboxOperations
+from app.services.sandbox_operations import (
+    LegacySandboxOperations,
+    SandboxOperations,
+    WorkspaceLeaseReconciler,
+)
 from app.services.session_titles import SessionTitleService
 from app.services.workspace_transfer import WorkspaceTransfer
 
 
 def create_app(
-    settings: Settings | None = None, *, pi_runner=None, mcp_provider=None,
+    settings: Settings | None = None,
+    *,
+    pi_runner=None,
+    mcp_provider=None,
     avatar_storage: AvatarStorage | None = None,
     captcha_verifier: CaptchaVerifier | None = None,
     auth_guard: AuthAbuseGuard | None = None,
@@ -112,6 +122,7 @@ def create_app(
         ValueError: A selected runtime lacks required or safe configuration.
     """
     settings = settings or Settings.from_env()
+    settings.validate_workspace_config()
     if settings.mode not in {"mock", "live"}:
         raise ValueError("RESEARCH_AGENT_MODE must be mock or live")
     if not 1 <= settings.title_timeout_seconds <= 60:
@@ -283,18 +294,50 @@ def create_app(
         else None
     )
     storage = database if database is not None else settings.agent_db_path
+    workspace_sandbox_store = None
+    workspace_reconciler = None
+    if settings.workspace_provider == "opensandbox":
+        if database is None:
+            raise ValueError("OpenSandbox workspace provider requires live PostgreSQL")
+        workspace_sandbox_store = WorkspaceSandboxStore(database)
+        workspace_sandbox_provider = OpenSandboxWorkspaceProvider(
+            settings,
+            workspace_sandbox_store,
+        )
+        workspace_reconciler = WorkspaceLeaseReconciler(
+            workspace_sandbox_store,
+            workspace_sandbox_provider.lifecycle.reconcile_orphans,
+        )
+        sandbox_operations = SandboxOperations(
+            workspace_sandbox_provider,
+            workspace_sandbox_store,
+        )
+    else:
+        workspace_sandbox_provider = DisabledWorkspaceSandboxProvider()
+        sandbox_operations = (
+            LegacySandboxOperations(
+                settings.sandbox_manager_url,
+                settings.sandbox_manager_token,
+            )
+            if settings.pi_execution == "sandbox"
+            and settings.sandbox_manager_url
+            and settings.sandbox_manager_token
+            else None
+        )
     request_metrics = RequestMetrics()
     configured_auth_guard = auth_guard
     if settings.auth_abuse_mode != "off" and configured_auth_guard is None:
         if database is None:
             raise ValueError("Auth abuse protection requires live PostgreSQL")
         configured_auth_guard = AuthAbuseGuard(
-            database, secret=settings.auth_rate_limit_secret,
+            database,
+            secret=settings.auth_rate_limit_secret,
         )
     configured_captcha = captcha_verifier
     if settings.auth_captcha_required and configured_captcha is None:
         configured_captcha = TurnstileVerifier(
-            settings.turnstile_secret_key, settings.turnstile_hostnames(),
+            settings.turnstile_secret_key,
+            settings.turnstile_hostnames(),
         )
 
     @asynccontextmanager
@@ -304,6 +347,20 @@ def create_app(
         mock_scheduler = None
         mcp_refresh_task = None
         auth_cleanup_task = None
+        workspace_probe_task = None
+        if settings.workspace_provider == "opensandbox":
+
+            async def probe_workspace() -> None:
+                """Populate verified capabilities without creating a user workspace."""
+                try:
+                    await application.state.workspace_sandbox_provider.probe()
+                except WorkspaceProviderError:
+                    # Readiness publishes the sanitized degraded/unsafe state.
+                    pass
+                else:
+                    await application.state.workspace_lease_reconciler.start()
+
+            workspace_probe_task = asyncio.create_task(probe_workspace())
         if mcp_executor == "remote":
 
             async def refresh_mcp() -> None:
@@ -358,6 +415,15 @@ def create_app(
         try:
             yield
         finally:
+            if application.state.workspace_lease_reconciler is not None:
+                await application.state.workspace_lease_reconciler.stop()
+            if workspace_probe_task is not None:
+                if not workspace_probe_task.done():
+                    workspace_probe_task.cancel()
+                try:
+                    await workspace_probe_task
+                except asyncio.CancelledError:
+                    pass
             if auth_cleanup_task:
                 auth_cleanup_task.cancel()
                 try:
@@ -427,6 +493,9 @@ def create_app(
         f"{frontend.scheme}://{frontend.netloc}",
     )
     app.state.database = database
+    app.state.workspace_sandbox_store = workspace_sandbox_store
+    app.state.workspace_sandbox_provider = workspace_sandbox_provider
+    app.state.workspace_lease_reconciler = workspace_reconciler
     app.state.tool_product_repository = (
         ToolProductRepository(database) if database is not None else None
     )
@@ -505,7 +574,8 @@ def create_app(
         else SupabaseIdentityAdapter(settings.supabase_url, settings.supabase_publishable_key)
     )
     app.state.avatar_storage = avatar_storage or (
-        MockAvatarStorage() if settings.mode == "mock"
+        MockAvatarStorage()
+        if settings.mode == "mock"
         else SupabaseAvatarStorage(settings.supabase_url, settings.supabase_secret_key)
     )
     app.state.avatar_processing = asyncio.Semaphore(2)
@@ -648,9 +718,14 @@ def create_app(
     )
     app.state.session_titles = (
         SessionTitleService(
-            app.state.conversations, app.state.model_policy, model=settings.title_model,
-            timeout=settings.title_timeout_seconds, gateway_kind=settings.model_gateway_kind,
-        ) if settings.agent_runtime == "pi" else None
+            app.state.conversations,
+            app.state.model_policy,
+            model=settings.title_model,
+            timeout=settings.title_timeout_seconds,
+            gateway_kind=settings.model_gateway_kind,
+        )
+        if settings.agent_runtime == "pi"
+        else None
     )
     app.state.catalog.admin_storage_limit_for = app.state.admin_store.storage_limit_for
     app.state.conversations.admin_concurrency_limit_for = (
@@ -661,11 +736,7 @@ def create_app(
         endpoints=approved_references["endpoints"],
         credentials=approved_references["credentials"],
     )
-    app.state.sandbox_operations = (
-        SandboxOperations(settings.sandbox_manager_url, settings.sandbox_manager_token)
-        if settings.sandbox_manager_url and settings.sandbox_manager_token
-        else None
-    )
+    app.state.sandbox_operations = sandbox_operations
     app.state.workspace_transfer = None
     if database is not None and settings.pi_execution == "sandbox" and app.state.agent_service:
         artifact_store = SandboxArtifactStore(app.state.conversations.db)
