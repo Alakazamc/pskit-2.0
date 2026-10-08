@@ -1,0 +1,53 @@
+# Layer after compose.yaml and the target environment overlay.
+services:
+  backend:
+    environment:
+      RESEARCH_AGENT_WORKSPACE_PROVIDER: opensandbox
+      RESEARCH_AGENT_WORKSPACE_SERVER_URL: http://opensandbox-server:8090
+      RESEARCH_AGENT_WORKSPACE_API_KEY: ${OPENSANDBOX_API_KEY:?set OPENSANDBOX_API_KEY}
+      RESEARCH_AGENT_WORKSPACE_IMAGE_DIGEST: ${OPENSANDBOX_SANDBOX_IMAGE:?set OPENSANDBOX_SANDBOX_IMAGE}
+      RESEARCH_AGENT_WORKSPACE_NAMESPACE: ${OPENSANDBOX_NAMESPACE:-pskit}
+      RESEARCH_AGENT_WORKSPACE_CPU_MILLICORES: ${OPENSANDBOX_CPU_MILLICORES:-1000}
+      RESEARCH_AGENT_WORKSPACE_MEMORY_BYTES: ${OPENSANDBOX_MEMORY_BYTES:-1073741824}
+      RESEARCH_AGENT_WORKSPACE_PID_LIMIT: ${OPENSANDBOX_PID_LIMIT:-256}
+      RESEARCH_AGENT_WORKSPACE_DISK_BYTES: ${OPENSANDBOX_DISK_BYTES:-10737418240}
+      RESEARCH_AGENT_WORKSPACE_INODE_LIMIT: ${OPENSANDBOX_INODE_LIMIT:-100000}
+    depends_on:
+      opensandbox-server:
+        condition: service_started
+
+  opensandbox-server:
+    image: ${OPENSANDBOX_SERVER_IMAGE:?set OPENSANDBOX_SERVER_IMAGE}
+    environment:
+      SANDBOX_CONFIG_PATH: /etc/opensandbox/config.toml
+      OPENSANDBOX_SERVER_API_KEY: ${OPENSANDBOX_API_KEY:?set OPENSANDBOX_API_KEY}
+      PSKIT_WORKSPACE_VOLUME_DRIVER: ${OPENSANDBOX_VOLUME_DRIVER:?set quota volume driver}
+      PSKIT_WORKSPACE_VOLUME_SIZE: ${OPENSANDBOX_VOLUME_SIZE:-10Gi}
+      PSKIT_WORKSPACE_VOLUME_INODES: ${OPENSANDBOX_INODE_LIMIT:-100000}
+    volumes:
+      - type: bind
+        source: ${OPENSANDBOX_CONFIG_FILE:?set private OpenSandbox config}
+        target: /etc/opensandbox/config.toml
+        read_only: true
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+      - opensandbox_state:/var/lib/opensandbox
+    networks:
+      - app
+      - opensandbox_runtime
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+networks:
+  opensandbox_runtime:
+    name: ${OPENSANDBOX_RUNTIME_NETWORK:?set private runtime network}
+    internal: true
+
+volumes:
+  opensandbox_state:
+    name: ${OPENSANDBOX_STATE_VOLUME:?set persistent server state volume}

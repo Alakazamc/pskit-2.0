@@ -1,0 +1,50 @@
+[server]
+host = "0.0.0.0"
+port = 8090
+max_sandbox_timeout_seconds = 86400
+
+[proxy]
+resolve_internal = true
+
+[log]
+level = "INFO"
+
+[runtime]
+type = "docker"
+execd_image = "opensandbox/execd@sha256:replace-with-64-lowercase-hex"
+execd_run_as_init = true
+
+[secure_runtime]
+type = "gvisor"
+docker_runtime = "runsc"
+
+[storage]
+# A non-existent allowlisted root disables caller-supplied host binds.
+allowed_host_paths = ["/var/empty/pskit-host-binds-disabled"]
+volume_default_size = "10Gi"
+
+[store]
+type = "sqlite"
+path = "/var/lib/opensandbox/opensandbox.db"
+
+[docker]
+# Must equal OPENSANDBOX_RUNTIME_NETWORK in the environment-specific manifest.
+network_mode = "replace-with-private-runtime-network"
+drop_capabilities = ["ALL"]
+no_new_privileges = true
+pids_limit = 256
+seccomp_profile = ""
+apparmor_profile = ""
+
+[ingress]
+mode = "direct"
+
+[egress]
+# Kept pinned because it is part of the version matrix. PSKit does not request
+# the 1.1.0 egress sidecar with gVisor; the Docker internal network denies egress.
+image = "opensandbox/egress@sha256:replace-with-64-lowercase-hex"
+mode = "dns"
+readiness_timeout_seconds = 30.0
+
+[renew_intent]
+enabled = false

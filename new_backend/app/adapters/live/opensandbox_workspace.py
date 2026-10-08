@@ -574,6 +574,9 @@ test "$(id -u)" = 10001
 test "$(id -g)" = 10001
 test -f ./persist
 test ! -e ./.sibling-sentinel
+test ! -S /var/run/docker.sock
+test ! -e /app/app
+test ! -e /run/secrets
 test "$(awk '/^CapEff:/{print $2}' /proc/self/status)" = 0000000000000000
 test "$(awk '/^NoNewPrivs:/{print $2}' /proc/self/status)" = 1
 test ! -r /proc/1/environ
@@ -595,6 +598,13 @@ else:
     raise SystemExit(21)
 finally:
     s.close()
+
+for hostname in ("backend", "postgres", "supabase-db", "api-gw", "litellm"):
+    try:
+        socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        continue
+    raise SystemExit(22)
 PY
 """
                 exit_code, _output = await self.compat.run_isolated(
@@ -658,7 +668,14 @@ PY
                 if persisted != b"durable":
                     raise WorkspaceUnsafeRuntime("Workspace volume did not persist")
                 diagnostics.extend(
-                    ("runsc", "bwrap-strict", "internal-network", "volume-reconnect")
+                    (
+                        "runsc",
+                        "bwrap-strict",
+                        "internal-network",
+                        "control-plane-unreachable",
+                        "no-docker-socket",
+                        "volume-reconnect",
+                    )
                 )
                 self._capabilities = WorkspaceCapabilities(
                     provider="opensandbox",

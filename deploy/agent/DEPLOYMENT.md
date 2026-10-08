@@ -1,5 +1,7 @@
 # 新版 PSKit Agent 部署与运行
 
+> 用户工作区的 OpenSandbox/gVisor 叠加、固定镜像、配额卷和失败关闭预检见 [OPENSANDBOX.md](OPENSANDBOX.md)。该叠加通过 Staging live probe 前，生产继续使用 `RESEARCH_AGENT_WORKSPACE_PROVIDER=disabled`；禁止以 `runc`、普通 named volume 或本地子进程代替。
+
 日期：2026-10-07。适用范围：阿里云生产、阿里云 Staging、A6000 通用 MCP/AF3 接收器。
 
 本文借鉴 [ASD-STE100 官方 FAQ](https://www.asd-ste100.org/STE_faq.html)的清晰写作原则。每组命令先说明执行主机和条件，再说明预期结果。中文文档不宣称符合英语标准。系统职责见[架构文档](../../docs/AGENT_ARCHITECTURE.md)。
