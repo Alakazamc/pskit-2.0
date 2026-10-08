@@ -1,5 +1,11 @@
+"""Disabled provider implementations used for explicit fail-closed modes."""
+
 from app.contracts.capabilities import Af3Job, Af3JobRequest, McpInvokeResult, McpTool
 from app.ports.providers import ProviderUnavailable
+
+from .workspace_sandbox import DisabledWorkspaceSandboxProvider
+
+__all__ = ["DisabledAf3", "DisabledMcp", "DisabledWorkspaceSandboxProvider"]
 
 
 class DisabledMcp:
@@ -10,11 +16,7 @@ class DisabledMcp:
         return []
 
     async def invoke(self, name: str, arguments: dict) -> McpInvokeResult | None:
-        """Reject every invocation when MCP has no configured executor.
-
-        Raises:
-            ProviderUnavailable: MCP execution is disabled.
-        """
+        """Reject every invocation when MCP has no configured executor."""
         raise ProviderUnavailable("MCP is not configured")
 
 
@@ -28,29 +30,20 @@ class DisabledAf3:
     def submit(
         self, user_id: str, payload: Af3JobRequest, idempotency_key: str | None = None,
     ) -> Af3Job:
-        """Reject an AF3 submission when no executor is configured.
-
-        Raises:
-            ProviderUnavailable: AF3 execution is disabled.
-        """
+        """Reject an AF3 submission when no executor is configured."""
         raise ProviderUnavailable("AF3 is not configured")
 
     def get(self, user_id: str, job_id: str) -> Af3Job | None:
-        """Return no job while AF3 is disabled."""
         return None
 
     def cancel(self, user_id: str, job_id: str) -> Af3Job | None:
-        """Return no cancellation result while AF3 is disabled."""
         return None
 
     def active_job_ids_for_run(self, user_id: str, run_id: str) -> list[str]:
-        """Return no active AF3 jobs while execution is disabled."""
         return []
 
     def artifacts_for(self, user_id: str, session_id: str | None = None) -> list[dict[str, str]]:
-        """Return no AF3 artifacts while execution is disabled."""
         return []
 
     def artifact_bytes_for(self, user_id: str, artifact_id: str) -> tuple[str, bytes] | None:
-        """Return no downloadable AF3 artifact while execution is disabled."""
         return None

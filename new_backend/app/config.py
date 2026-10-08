@@ -2,7 +2,7 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
-from ipaddress import ip_network
+from ipaddress import ip_address, ip_network
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -56,6 +56,18 @@ class Settings:
     pi_execution: Literal["local", "sandbox"] = "local"
     sandbox_manager_url: str = ""
     sandbox_manager_token: str = ""
+    workspace_provider: Literal["disabled", "opensandbox"] = "disabled"
+    workspace_server_url: str = ""
+    workspace_api_key: str = field(default="", repr=False)
+    workspace_image_digest: str = ""
+    workspace_namespace: str = "pskit"
+    workspace_connect_timeout_seconds: float = 5.0
+    workspace_request_timeout_seconds: float = 30.0
+    workspace_cpu_millicores: int = 1000
+    workspace_memory_bytes: int = 1024 * 1024 * 1024
+    workspace_pid_limit: int = 256
+    workspace_disk_bytes: int = 10 * 1024 * 1024 * 1024
+    workspace_inode_limit: int = 100_000
     pi_max_active_runs: int = 4
     pi_max_active_runs_per_user: int = 2
     supabase_url: str = ""
@@ -151,6 +163,30 @@ class Settings:
             pi_execution=os.getenv("RESEARCH_AGENT_PI_EXECUTION", "local"),
             sandbox_manager_url=os.getenv("PSKIT_SANDBOX_MANAGER_URL", ""),
             sandbox_manager_token=os.getenv("PSKIT_SANDBOX_MANAGER_TOKEN", ""),
+            workspace_provider=os.getenv("RESEARCH_AGENT_WORKSPACE_PROVIDER", "disabled"),
+            workspace_server_url=os.getenv("RESEARCH_AGENT_WORKSPACE_SERVER_URL", ""),
+            workspace_api_key=os.getenv("RESEARCH_AGENT_WORKSPACE_API_KEY", ""),
+            workspace_image_digest=os.getenv("RESEARCH_AGENT_WORKSPACE_IMAGE_DIGEST", ""),
+            workspace_namespace=os.getenv("RESEARCH_AGENT_WORKSPACE_NAMESPACE", "pskit"),
+            workspace_connect_timeout_seconds=float(
+                os.getenv("RESEARCH_AGENT_WORKSPACE_CONNECT_TIMEOUT_SECONDS", "5")
+            ),
+            workspace_request_timeout_seconds=float(
+                os.getenv("RESEARCH_AGENT_WORKSPACE_REQUEST_TIMEOUT_SECONDS", "30")
+            ),
+            workspace_cpu_millicores=int(
+                os.getenv("RESEARCH_AGENT_WORKSPACE_CPU_MILLICORES", "1000")
+            ),
+            workspace_memory_bytes=int(
+                os.getenv("RESEARCH_AGENT_WORKSPACE_MEMORY_BYTES", str(1024 * 1024 * 1024))
+            ),
+            workspace_pid_limit=int(os.getenv("RESEARCH_AGENT_WORKSPACE_PID_LIMIT", "256")),
+            workspace_disk_bytes=int(
+                os.getenv("RESEARCH_AGENT_WORKSPACE_DISK_BYTES", str(10 * 1024 * 1024 * 1024))
+            ),
+            workspace_inode_limit=int(
+                os.getenv("RESEARCH_AGENT_WORKSPACE_INODE_LIMIT", "100000")
+            ),
             pi_max_active_runs=int(os.getenv("RESEARCH_AGENT_PI_MAX_ACTIVE_RUNS", "4")),
             pi_max_active_runs_per_user=int(
                 os.getenv("RESEARCH_AGENT_PI_MAX_ACTIVE_RUNS_PER_USER", "2")
@@ -230,6 +266,7 @@ class Settings:
         """
         if self.mode != "live":
             raise ValueError("Live configuration requested in mock mode")
+        self.validate_workspace_config()
         if self.model_gateway_kind not in {"generic", "litellm"}:
             raise ValueError("MODEL_GATEWAY_KIND must be generic or litellm")
         if not self.database_url:
@@ -280,6 +317,77 @@ class Settings:
                 raise ValueError("TURNSTILE_SECRET_KEY is required when auth CAPTCHA is enabled")
             if not self.turnstile_hostnames():
                 raise ValueError("TURNSTILE_HOSTNAMES_JSON cannot be empty when auth CAPTCHA is enabled")
+
+    def validate_workspace_config(self) -> None:
+        """Validate the independent workspace provider and its fail-closed limits."""
+        if self.workspace_provider not in {"disabled", "opensandbox"}:
+            raise ValueError(
+                "RESEARCH_AGENT_WORKSPACE_PROVIDER must be disabled or opensandbox"
+            )
+        if self.workspace_provider == "disabled":
+            return
+        required = {
+            "RESEARCH_AGENT_WORKSPACE_SERVER_URL": self.workspace_server_url,
+            "RESEARCH_AGENT_WORKSPACE_API_KEY": self.workspace_api_key,
+            "RESEARCH_AGENT_WORKSPACE_IMAGE_DIGEST": self.workspace_image_digest,
+        }
+        for name, value in required.items():
+            if not value:
+                raise ValueError(f"{name} is required for the OpenSandbox provider")
+        self._validate_http_base_url(
+            self.workspace_server_url, "RESEARCH_AGENT_WORKSPACE_SERVER_URL"
+        )
+        if not self._workspace_server_is_private(self.workspace_server_url):
+            raise ValueError("RESEARCH_AGENT_WORKSPACE_SERVER_URL must use a private host")
+        if len(self.workspace_api_key) < 32:
+            raise ValueError("RESEARCH_AGENT_WORKSPACE_API_KEY must contain at least 32 characters")
+        if re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._:/-]*@sha256:[a-f0-9]{64}",
+            self.workspace_image_digest,
+        ) is None:
+            raise ValueError(
+                "RESEARCH_AGENT_WORKSPACE_IMAGE_DIGEST must be an immutable image digest"
+            )
+        if re.fullmatch(r"[a-z][a-z0-9-]{0,31}", self.workspace_namespace) is None:
+            raise ValueError(
+                "RESEARCH_AGENT_WORKSPACE_NAMESPACE must be a lower-case namespace"
+            )
+        positive_limits = {
+            "RESEARCH_AGENT_WORKSPACE_CONNECT_TIMEOUT_SECONDS": (
+                self.workspace_connect_timeout_seconds
+            ),
+            "RESEARCH_AGENT_WORKSPACE_REQUEST_TIMEOUT_SECONDS": (
+                self.workspace_request_timeout_seconds
+            ),
+            "RESEARCH_AGENT_WORKSPACE_CPU_MILLICORES": self.workspace_cpu_millicores,
+            "RESEARCH_AGENT_WORKSPACE_MEMORY_BYTES": self.workspace_memory_bytes,
+            "RESEARCH_AGENT_WORKSPACE_PID_LIMIT": self.workspace_pid_limit,
+            "RESEARCH_AGENT_WORKSPACE_DISK_BYTES": self.workspace_disk_bytes,
+            "RESEARCH_AGENT_WORKSPACE_INODE_LIMIT": self.workspace_inode_limit,
+        }
+        for name, value in positive_limits.items():
+            if isinstance(value, bool) or value <= 0:
+                raise ValueError(f"{name} must be positive")
+
+    @staticmethod
+    def _workspace_server_is_private(value: str) -> bool:
+        """Accept private IPs and private service-discovery hostnames only."""
+        hostname = (urlparse(value).hostname or "").lower()
+        if hostname == "localhost":
+            return True
+        try:
+            address = ip_address(hostname)
+        except ValueError:
+            return (
+                "." not in hostname
+                or hostname.endswith(".internal")
+                or hostname.endswith(".local")
+            ) and bool(hostname)
+        return (
+            (address.is_private or address.is_loopback or address.is_link_local)
+            and not address.is_unspecified
+            and not address.is_multicast
+        )
 
     def effective_auth_csrf_secret(self) -> str:
         """Use a dedicated CSRF key, with the existing HMAC key as a rollout fallback."""
