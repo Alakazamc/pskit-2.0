@@ -1,6 +1,6 @@
 # PSKit 本地开发与云端背景
 
-更新时间：2026-10-09（Asia/Shanghai）。用户确认的默认流程是：**本地前后端一起运行 → 本地验证 → 云端 Staging → 云端生产**。
+更新时间：2026-10-10（Asia/Shanghai）。用户确认的默认流程是：**本地前后端一起运行 → 本地验证 → 云端 Staging → 云端生产**。
 
 本文用于新对话恢复环境和工作背景。连接配置已在本地核对；云端职责来自最新部署及发布记录，本次发布前已只读核对阿里云和 A6000 运行配置；具体制品及验收状态见末尾交接。每次部署仍需核对目标主机实际状态。
 
@@ -185,13 +185,13 @@ A6000 升级或恢复前核对唯一接收器、活动任务、journal/outbox/sp
 
 ## 7. 当前交接与维护
 
-快照日期：2026-10-09（Asia/Shanghai）。OpenSandbox 已完成 Staging 资格验收并在生产全量开放基础工具；最新制品及回滚见 [OpenSandbox/gVisor 发布记录](releases/2026-10-09-opensandbox-gvisor-rollout.md)与 [workspace 文件写入修复记录](releases/2026-10-09-workspace-file-tools.md)，前序证据见 [对话 Rich UI 发布记录](releases/2026-10-08-conversation-rich-ui.md)、[Tool Product 草稿交接发布记录](releases/2026-10-08-tool-handoff-drafts.md)、[流式发布记录](releases/2026-10-07-streaming-quality.md)、[视觉能力发布记录](releases/2026-10-08-vision-capability.md)与 [A6000 收尾记录](releases/2026-10-08-a6000-runtime-mirrors.md)。
+快照日期：2026-10-10（Asia/Shanghai）。OpenSandbox 生产基础工具仍全量开放；本次文件工具与 Markdown 产物预览发布见 [workspace file tools / rich artifacts 记录](releases/2026-10-10-workspace-file-tools-rich-artifacts.md)，前序 OpenSandbox、workspace、对话 Rich UI 与计算接收器证据见下方历史发布记录。
 
 - **已确认的用户偏好：** 本地前后端一起运行，完成开发与验证后部署云端。
-- **当前源码与部署：** OpenSandbox 实现提交范围为 `118a00a..0f3f01b`；2026-10-09 workspace 文件写入修复 `230b94e` 与 Codex 式工具执行 prompt 更新 `2d21370` 已推送至 `codex/new-stack-baseline`。生产与 Staging backend 使用镜像 `pskit-agent-backend:20261009-2d21370-prompt`（ID `sha256:76dadc6a5baf9c082e83da426f522b907f74914928857c2bffe5c267de8f5271`）；prompt SHA256 为 `fc2319a50dd95b84e75c5dec94e66e561aded92ad86d01db65f22208022ecfa4`。镜像只以既有后端镜像为基底覆盖 prompt；workspace runtime 和 A6000 接收器未改变。详细制品与回滚见 [发布记录](releases/2026-10-09-codex-tool-execution-prompt.md)。
+- **当前源码与部署：** `52e934c` 与 `e1a8caf` 已推送到 `codex/new-stack-baseline`；生产和 Staging 后端运行 `pskit-agent-backend:20261010-e1a8caf`，阿里云 image ID 为 `sha256:781d6dbc3b12f657d10e5038db26ca78daa98fc8296824aea025361782e15757`。生产/Staging 前端 dist 哈希为 `23321b7cb49235c268f5ff0894957fe43f9dfe3575539629fd02020958d74911`。详细镜像层、前端、验证和回滚证据见本次 [发布记录](releases/2026-10-10-workspace-file-tools-rich-artifacts.md)。
 - **2026-10-09 OpenSandbox 全量基础工具（提交 `dfd943d`）：** 阿里云宿主已注册固定 `runsc release-20261005.0` 和 `pskit-quota` 1.0.1；Staging capability hash 为 `24fddff87b8a7775e49b20f423bc3641a62cdb47697063ba4384dec8c40cd977`，真实隔离/持久化 smoke 与两层应用 smoke 通过。生产 provider 为 `WORKSPACE_READY`，`user_allowlist=["*"]` 与 `commands_enabled=true` 向所有用户开放 `read/write/edit/ls/find/grep/bash/python`。固定 workspace 镜像已含 Python 3.12；生产策略原子更新后 readiness 仍为 200，未重启 backend 或 OpenSandbox，活动/unknown attempt 为 `0|0`。Bash/Python 在 gVisor Session `/workspace` 内运行并受资源配额约束；回滚、制品与失败关闭证据见 [发布记录](releases/2026-10-09-opensandbox-gvisor-rollout.md)。
-- **本地验证：** 本次前端 typecheck、lint、生产构建与 Molstar 18 个延迟 chunk 检查通过；没有重新运行前端测试套件。后端镜像未变更，未运行真实付费模型或 GPU。
-- **生产与 Staging：** 两环境前端均为 dist 哈希 `bc97a8da678138b0ee7fb8980ac09cc450e2f85d0c25d468d24afcb57a78bad9`，HTTP index SHA256 均为 `7153b60bb3dc4b5532d612ba7e2c2f5741e4c61c209f7bc1a7af83f3355cbbb1`。Staging 私有 API 与 WireGuard Nginx 两层完整 smoke 均通过登录、文件、SSE、配额及模拟 AF3，并确认生产数据快照不变；生产 healthy、ready 200、HTTPS 200、应用主包 200、usage 401、internal 404、公网管理入口 403。数据库、后端、基础设施、Nginx 配置与 A6000 均未重启。
+- **2026-10-10 本地构建：** 固定 Python 依赖锁与发布前生产容器的 45 个包版本一致；前端生产构建完成，未运行测试套件。Staging 使用模型替身，未验证真实供应商是否会按提示调用 `write_file`，也没有触发真实付费模型或 GPU。
+- **2026-10-10 生产与 Staging：** Staging API/SSE/额度/mock AF3 smoke 通过，OpenSandbox workspace smoke 为 `live-ready`，私网登录页 200，生产数据库快照未变。生产后端 healthy、restart count 0，部署后无非终态 Run/Job/Workspace Attempt；Nginx login 200、usage 401、internal 404，部署 JS 与 dist 字节匹配。AF3 callback proxy、数据库、A6000 接收器和 Nginx 配置未重启。
 - **A6000：** 唯一接收器已挂载 `runtime-e164dab`，三个 journal 均无未确认记录；原 AF3 计算容器 ID 和启动时间不变。两条旧 CORAL Job 已基于提供端证据完成管理员审计结算，中央无非终态或待对账 Job。4090 CORAL provider 已固化失败计量和产物读取修复到独立仓库提交 `25afdc0`；四个工具发现通过，修复后没有运行真实模型推理。
 - **发布性能结论：** 此次慢点是 WSL/Docker NAT 到 Docker Hub/PyPI；默认 PyPI 约 20 KB/s，清华镜像约 8–12 MB/s。`e164dab` 已给固定 Dockerfile 增加显式 PyPI/npm 镜像与已验证基础镜像参数；镜像源检查构建的 npm 层约 7 秒、pip 层约 20 秒，新旧 `pip freeze` 一致。生产依赖仍由锁文件和固定基础镜像 digest 决定。
 - **本地配置缺口：** 现有 live `.env` 未配置独立开发 PostgreSQL；日常开发使用第 3.1 节的独立 mock，真实联调补齐开发数据库后进行。
@@ -201,6 +201,7 @@ A6000 升级或恢复前核对唯一接收器、活动任务、journal/outbox/sp
 - **2026-10-08 对话 Rich UI：** 提交 `b4d7c23` 增加统一消息 part 注册器、文件/产物卡片、可扩展工具结果卡片，并让实时工具、进度和产物复用历史消息渲染路径。资源通过已有鉴权 ID 打开、预览和下载，未解析模型输出的本地路径；旧消息无需迁移。相同前端制品已通过 Staging 两层 smoke 并发布生产；制品、验证与回滚见 [发布记录](releases/2026-10-08-conversation-rich-ui.md)。
 - **2026-10-09 workspace 文件写入修复：** 助手此前把 `<write_file>` 伪标记作为普通文本输出并错误声称文件已创建；提示词已要求使用真实 Pi `write` 工具、仅在成功后报告完成，并指向会话右上角“产物”面板。Staging 合成账号 smoke 通过登录、文件、SSE、配额与模拟 AF3；Staging/生产 readiness 均为 200，生产公网登录页 200、未登录 usage 401。两个环境运行中的提示词哈希均与提交源码一致。未调用真实付费模型。部署镜像基于现有生产镜像，只覆盖提示词文件；常规基础镜像下载因阿里云 Docker Hub 超时未能全量构建。详细制品及回滚见 [发布记录](releases/2026-10-09-workspace-file-tools.md)。
 - **2026-10-09 Codex 式工具执行 prompt 发布：** 提交 `2d21370` 为 Pi 增加真实工具调用、执行后核验和如实报告规则，并区分文件写入与客户端产物卡片注册。Staging 与生产同用镜像 `pskit-agent-backend:20261009-2d21370-prompt`（ID `sha256:76dadc6a5baf9c082e83da426f522b907f74914928857c2bffe5c267de8f5271`），容器 prompt SHA256 为 `fc2319a50dd95b84e75c5dec94e66e561aded92ad86d01db65f22208022ecfa4`。Staging 合成账号 smoke 通过；公网 login 200、usage 401、internal 404，production ready 200，无非终态 Run/Job/Workspace Attempt。未调用真实付费模型；生产 cloud.env 回滚副本与 Staging seed/pins 备份见 [发布记录](releases/2026-10-09-codex-tool-execution-prompt.md)。
-- **下一步：** 在生产普通对话中请求生成一个 Markdown 文件，确认真实 `write` 调用、文件内容和右上角“产物”面板事件；若模型仍只输出文本，收集该 Run 的工具事件继续排查。真实模型调用会消耗 Token；CORAL/AF3 仍需明确输入和预算。
+- **2026-10-10 文件工具与 Markdown 产物预览发布：** Pi 已注册真实的 `read_file`/`write_file` 等工作区工具，提示词禁止输出伪工具标记；聊天与产物面板的 Markdown 预览使用安全富文本渲染。Staging 通过合成账号 smoke、产物持久化和私网 Nginx 验收；生产公网 login 200、usage 401、internal 404。真实模型工具调用未用付费模型验证；详细证据与回滚见 [发布记录](releases/2026-10-10-workspace-file-tools-rich-artifacts.md)。
+- **下一步：** 在普通生产对话里新发一次“创建并写入 Markdown 文件”的请求，确认模型调用真实 `write_file`、内容保存在当前 Session 的 `artifacts` 并出现在聊天卡片与右上角“产物”面板；旧的 `<write_file>` 伪文本没有创建文件，不会自动补成历史产物。真实模型调用会消耗 Token。
 
 每次交接更新此节的日期、分支/提交、未完成项、实际验证结果、生产/Staging 状态及下一步。镜像 ID、制品哈希和回滚证据写入对应发布记录并链接到此处；连接别名、端口或职责变化则同时修改前面的环境章节。
