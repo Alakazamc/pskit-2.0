@@ -179,7 +179,7 @@ class OpenSandboxCompat:
     async def create(self, spec: OpenSandboxCreateSpec) -> CompatSandbox:
         """Create from fixed image, named volume, limits and metadata only."""
         sdk = self._sdk()
-        volume = sdk.Volume(
+        workspace_volume = sdk.Volume(
             name="workspace",
             pvc=sdk.PVC(
                 claim_name=spec.volume_id,
@@ -188,6 +188,17 @@ class OpenSandboxCompat:
                 storage=f"{max(1, math.ceil(spec.disk_bytes / (1024**3)))}Gi",
             ),
             mount_path="/workspace",
+            read_only=False,
+        )
+        workspace_alias_volume = sdk.Volume(
+            name="workspace-root-alias",
+            pvc=sdk.PVC(
+                claim_name=spec.volume_id,
+                create_if_not_exists=True,
+                delete_on_sandbox_termination=False,
+                storage=f"{max(1, math.ceil(spec.disk_bytes / (1024**3)))}Gi",
+            ),
+            mount_path="/tmp/pskit-workspace-root",
             read_only=False,
         )
         metadata = {
@@ -223,7 +234,10 @@ class OpenSandboxCompat:
                 network_policy=None,
                 extensions=extensions,
                 entrypoint=["/opt/pskit-sandbox/entrypoint.sh"],
-                volumes=[volume],
+                # gVisor intentionally rejects mount(2) inside the sandbox.
+                # Mount the same quota-backed volume twice at container create
+                # time so strict sessions can expose only their own subtree.
+                volumes=[workspace_volume, workspace_alias_volume],
                 connection_config=self._connection(),
             )
         except Exception as exc:
