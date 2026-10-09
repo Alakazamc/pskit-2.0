@@ -211,6 +211,7 @@ class OpenSandboxCompat:
                     "PSKIT_WORKSPACE_ROOT": "/workspace",
                     "PSKIT_GVISOR_BWRAP_COMPAT": "1",
                     "EXECD_ISOLATION_CONFIG": "/opt/pskit-sandbox/isolation.toml",
+                    "PATH": "/opt/opensandbox:/usr/local/bin:/usr/bin:/bin",
                 },
                 metadata=metadata,
                 resource={

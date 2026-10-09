@@ -1,5 +1,5 @@
 ARG OPENSANDBOX_EXECD_BASE
 FROM ${OPENSANDBOX_EXECD_BASE}
 
-COPY bwrap_gvisor_compat.py /bwrap
-RUN chmod 0555 /bwrap
+COPY bwrap_gvisor_compat.py /usr/local/bin/bwrap
+RUN chmod 0555 /usr/local/bin/bwrap

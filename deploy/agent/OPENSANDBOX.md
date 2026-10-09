@@ -15,15 +15,19 @@
 派生 Server 的修订可审计：诊断输出实际 OCI runtime；Docker PVC 必须由指定的
 非 `local` 配额卷驱动创建并验证 `size` 与 `inodes`；隔离 Session 的 execd
 引导进程只在请求明确设置 `bootstrap.execd.isolation=enable` 时以 root 启动，
-ceiling 只增加 `SYS_ADMIN`、`SETPCAP`、降权所需的 `SETUID`/`SETGID`，以及读取
-UID 10001 私有 lifecycle 配置所需的 `DAC_OVERRIDE`。这样引导层才能创建 mount
-namespace 并执行 `setpriv`；
+ceiling 只增加 `SYS_ADMIN`、`SETPCAP`、降权所需的 `SETUID`/`SETGID`、文件 API
+把目录归属到 UID 10001 所需的 `CHOWN`，以及读取该用户私有 lifecycle 配置所需的
+`DAC_OVERRIDE`。这样引导层才能创建 mount namespace、准备工作区并执行 `setpriv`；
 用户命令随后固定降到 UID/GID 10001，由 hardening floor
 清空 capabilities 并启用 NoNewPrivs。补丁遇到非 1.1.0 源码形状会中止构建。
 
-派生 execd 只把原生 bwrap 的 `--unshare-cgroup` 改为
-`--unshare-cgroup-try`，而且要求创建请求显式设置 PSKit gVisor 标记。gVisor 已
-提供独立 cgroupfs，但不实现嵌套 cgroup namespace 和 Landlock ABI；准入因此要求
+派生 execd 在显式启用 PSKit gVisor 标记后移除原生 bwrap 的显式 cgroup
+namespace 参数，并把会隐式包含 cgroup namespace 的 `--unshare-all` 展开为
+IPC、PID、UTS 和按请求决定的 network namespace。gVisor 已提供容器级 cgroup
+边界，但不实现嵌套 cgroup namespace；Bubblewrap 0.8.0 的
+`--unshare-cgroup-try` 在该运行时仍会失败，因此不能作为兼容替代。gVisor 同样
+不实现 Landlock ABI。Backend 创建请求把受控的 `/opt/opensandbox` 放在 execd
+控制面 PATH 首位；隔离 Session 使用空环境 allowlist，不继承该 PATH。准入因此要求
 `runsc`、bwrap、cap-drop、seccomp、NoNewPrivs、目录与网络行为探针全部通过，
 并只接受明确报告为 `degraded` 或 `unsupported` 的 Landlock，不能接受
 `disabled`。
