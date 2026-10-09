@@ -203,7 +203,7 @@ PY
 rm -f "$report"
 
 python3 "$agent_dir/scripts/set_workspace_rollout.py" "$rollout_dir" \
-  --enabled --no-commands-enabled --user '*' \
+  --enabled --commands-enabled --user '*' \
   --capability-hash "$capability_hash"
 "${compose[@]}" up -d --no-deps --wait backend
 curl --noproxy '*' --fail --silent http://127.0.0.1:18088/health/ready >/dev/null
@@ -221,7 +221,7 @@ manifest, rollout = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
 record = {
     "deployed_at": datetime.datetime.now(datetime.UTC).isoformat(),
     "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
-    "rollout": "files-only",
+    "rollout": "basic-tools",
     "allowlisted_users": ["*"],
 }
 fd, temporary = tempfile.mkstemp(prefix=".production-active.", dir=rollout)
@@ -234,4 +234,4 @@ os.chmod(temporary, 0o600)
 os.replace(temporary, rollout / "production-active.json")
 PY
 trap - ERR
-echo "OpenSandbox production rollout enabled for all files-only users"
+echo "OpenSandbox production rollout enabled basic tools for all users"

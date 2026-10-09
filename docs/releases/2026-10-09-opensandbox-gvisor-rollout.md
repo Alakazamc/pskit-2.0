@@ -1,4 +1,4 @@
-# OpenSandbox、gVisor 与 Pi 工作区工具灰度发布记录
+# OpenSandbox、gVisor 与 Pi 工作区工具发布记录
 
 日期：2026-10-09（Asia/Shanghai）
 分支：`codex/new-stack-baseline`
@@ -7,9 +7,8 @@
 
 本次完成 OpenSandbox 1.1.0 provider、每用户持久工作区、`/workspace/<session_id>`
 会话目录、受控文件/命令工具、Artifact 回收、gVisor `runsc`、配额 ext4 卷、
-Staging 资格验收和生产 files-only 发布。生产先以单用户验证，随后于
-2026-10-09 按用户决定改为默认全量。生产只开放文件能力；命令与 Python 能力
-继续由服务端 rollout 关闭。A6000 通用 MCP/AF3 接收器、AF3 计算容器、4090
+Staging 资格验收和生产发布。生产先以单用户 files-only 验证，随后于
+2026-10-09 按用户决定依次全量开放文件与 Bash/Python 工具。A6000 通用 MCP/AF3 接收器、AF3 计算容器、4090
 CORAL、Supabase、LiteLLM 和生产前端均未重建。
 
 ## 固定制品
@@ -60,8 +59,8 @@ UID 10001 的只读 bind mount。文件不含 API key、JWT、数据库 DSN 或�
   Server digest，未发布宿主端口。
 - provider readiness：`WORKSPACE_READY`、runtime `runsc`、文件、命令执行能力、
   持久卷及 Session mount namespace 均已由 capability probe 证明。
-- rollout：`files-only`，`user_allowlist=["*"]` 对所有用户开放，
-  `commands_enabled=false`；
+- rollout：`basic-tools`，`user_allowlist=["*"]` 对所有用户开放，
+  `commands_enabled=true`；
   活动/unknown workspace attempt 为 `0|0`。
 - 路由验收：登录页 200、未登录 `/api/v1/usage` 401、`/internal` 404、
   公网管理入口 403；生产与 Staging readiness 均为 200。
@@ -71,18 +70,27 @@ UID 10001 的只读 bind mount。文件不含 API key、JWT、数据库 DSN 或�
   `cloud.env.pre-opensandbox-20261009T084231Z` 与
   `.env.stack.pre-opensandbox-20261009T084231Z`。这些文件只留在阿里云宿主机。
 
-## 同日全量开放更新
+## 同日全量文件工具更新（12:58 UTC）
 
 - 根因核对发现，新近对话用户不在原单用户 allowlist 中，因此后端在
   创建 workspace attempt 前直接跳过，Pi 未收到文件工具。
-- 变更前活动/unknown attempt 为 `0|0`；原子将策略改为
-  `enabled=true`、`user_allowlist=["*"]`、`commands_enabled=false`。
+- 变更前活动/unknown attempt 为 `0|0`；第一阶段原子将策略改为
+  `enabled=true`、`user_allowlist=["*"]`、`commands_enabled=false`，仅开放文件能力。
 - 未重建或重启 backend、OpenSandbox Server、Supabase、LiteLLM、A6000 接收器或
   前端。Readiness 继续返回 `WORKSPACE_READY`。
 - 发布脚本同步改为默认写入 `user_allowlist=["*"]`，不再接受单用户
   `--allow-user`。
 - 线上策略回退副本：
   `policy.json.pre-full-20261009T125811Z`。
+
+## 同日基础命令工具更新
+
+- 用户确认不增加产品专用 Artifact 工具，使用 Pi 基本工具
+  `read/write/edit/ls/find/grep/bash/python`。
+- 沙箱基础镜像已使用固定 Python 3.12 slim digest；无须更换镜像。
+- 生产在 Staging 验收 capability hash 下启用命令工具。Bash/Python 只在 gVisor
+  Session `/workspace` 内执行，受每日 1 CPU 核小时、1000 millicores、10 GiB
+  磁盘、超时与输出限制，不可访问宿主文件系统或 Docker socket。
 
 ## 回退
 
@@ -99,5 +107,4 @@ bash deploy/agent/scripts/rollback_opensandbox_release.sh --drain-seconds 120
 
 ## 后续
 
-观察全量用户的 provider error、冷启动、工作区容量和 Artifact 行为；命令能力
-仍作为后续独立发布动作。
+观察全量用户的 provider error、冷启动、工作区容量、命令配额和 Artifact 行为。

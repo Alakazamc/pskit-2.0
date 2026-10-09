@@ -26,7 +26,7 @@
 `cloud.env` 使用相同 backend、OpenSandbox Server 和 workspace 镜像 digest，
 但必须配置不同的 namespace、API key、runtime network、state volume 和 rollout
 目录。`opensandbox.private.toml` 的 execd/egress digest 与 Staging manifest 保持
-一致。文件能力默认对所有用户开放：
+一致。受控工作区工具默认对所有用户开放：
 
 ```bash
 bash deploy/agent/scripts/deploy_opensandbox_release.sh \
@@ -34,15 +34,15 @@ bash deploy/agent/scripts/deploy_opensandbox_release.sh \
 ```
 
 脚本依次执行静态预检、兼容数据库迁移、unknown/active attempt 检查、启动私有
-OpenSandbox Server、真实 gVisor capability probe、哈希核对、原子写入 files-only
+OpenSandbox Server、真实 gVisor capability probe、哈希核对、原子写入 basic-tools
 rollout，再只重建 backend。它不会重建 Supabase、LiteLLM、AF3 proxy、CORAL
-receiver 或前端。命令和 Python 仍保持关闭；确认文件工具稳定后，运维人员才用
-`set_workspace_rollout.py` 写入同一 capability hash 并显式增加
-`--commands-enabled`。
+receiver 或前端。所有用户可用 `read/write/edit/ls/find/grep/bash/python`；命令工具
+只在 Staging 验收的 gVisor capability hash 匹配时开放。
 
-全量策略使用 `user_allowlist: ["*"]`，包括游客和正式账号。这个通配符
-只授予当前 Session `/workspace` 内的受控文件能力，不授予宿主文件系统、
-shell 或 Python 访问。
+全量策略使用 `user_allowlist: ["*"]`，包括游客和正式账号。所有工具只访问当前
+Session `/workspace`。`bash/python` 在 gVisor `runsc` 内运行，受每日 CPU 额度、
+CPU/内存/磁盘限制、命令超时、输出截断和网络策略约束，不得访问宿主文件系统或
+Docker socket。
 
 Rollout 目录固定为 `0755`，`policy.json` 固定为 `0644`，因为 backend 以
 UID 10001 读取宿主机只读 bind mount。该文件只保存开关、能力哈希和用户 UUID，
