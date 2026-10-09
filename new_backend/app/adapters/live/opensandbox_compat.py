@@ -207,7 +207,11 @@ class OpenSandboxCompat:
                 spec.image_digest,
                 timeout=None,
                 ready_timeout=timedelta(seconds=self._connect_timeout),
-                env={"PSKIT_WORKSPACE_ROOT": "/workspace"},
+                env={
+                    "PSKIT_WORKSPACE_ROOT": "/workspace",
+                    "PSKIT_GVISOR_BWRAP_COMPAT": "1",
+                    "EXECD_ISOLATION_CONFIG": "/opt/pskit-sandbox/isolation.toml",
+                },
                 metadata=metadata,
                 resource={
                     "cpu": f"{spec.cpu_millicores / 1000:g}",

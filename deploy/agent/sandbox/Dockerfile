@@ -19,8 +19,9 @@ RUN sed -i \
     && install -d -o 10001 -g 10001 -m 0700 /workspace /home/pskit \
     && rm -rf /var/lib/apt/lists/* /root/.cache
 
-COPY --chown=10001:10001 entrypoint.sh /opt/pskit-sandbox/entrypoint.sh
-RUN chmod 0555 /opt/pskit-sandbox/entrypoint.sh
+COPY --chown=10001:10001 entrypoint.sh isolation.toml /opt/pskit-sandbox/
+RUN chmod 0555 /opt/pskit-sandbox/entrypoint.sh \
+    && chmod 0444 /opt/pskit-sandbox/isolation.toml
 
 USER 10001:10001
 WORKDIR /workspace

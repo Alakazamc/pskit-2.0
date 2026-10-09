@@ -59,6 +59,7 @@ def main() -> int:
     parser.add_argument("--release", required=True)
     parser.add_argument("--server-image", required=True)
     parser.add_argument("--sandbox-image", required=True)
+    parser.add_argument("--execd-image")
     args = parser.parse_args()
     if RELEASE.fullmatch(args.release) is None:
         raise SystemExit("Release name is invalid")
@@ -69,6 +70,8 @@ def main() -> int:
             "server": _publish(args.server_image, "opensandbox-server", args.release),
             "sandbox": _publish(args.sandbox_image, "workspace", args.release),
         }
+        if args.execd_image:
+            result["execd"] = _publish(args.execd_image, "opensandbox-execd", args.release)
     except (OSError, ValueError, json.JSONDecodeError, PublishError) as exc:
         print(json.dumps({"status": "refused", "reason": str(exc)}))
         return 2

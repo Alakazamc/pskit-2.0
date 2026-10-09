@@ -552,12 +552,15 @@ class OpenSandboxWorkspaceProvider:
                 first_id = (await self.compat.create(spec)).id
                 await self._require_runsc(first_id)
                 capabilities = await self.compat.isolation_capabilities(first_id)
-                required_layers = {"cap_drop", "seccomp", "landlock"}
+                required_layers = {"cap_drop", "seccomp"}
+                landlock_state = capabilities.hardening.get("landlock")
                 if (
                     not capabilities.available
                     or capabilities.isolator not in {"bwrap", "bubblewrap"}
                     or not capabilities.setpriv_available
                     or any(capabilities.hardening.get(name) != "active" for name in required_layers)
+                    or capabilities.hardening.get("signal_shield") != "active"
+                    or landlock_state not in {"active", "degraded", "unsupported"}
                 ):
                     raise WorkspaceUnsafeRuntime("Workspace hardening is incomplete")
 
@@ -691,6 +694,7 @@ PY
                     (
                         "runsc",
                         "bwrap-strict",
+                        f"landlock-{landlock_state}",
                         "internal-network",
                         "control-plane-unreachable",
                         "no-docker-socket",

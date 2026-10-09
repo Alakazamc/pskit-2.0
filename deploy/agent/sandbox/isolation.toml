@@ -1,0 +1,11 @@
+upper_root = "/var/lib/execd/isolation"
+allowed_writable = ["/workspace"]
+
+[hardening]
+enabled = true
+keep_capabilities = []
+
+[landlock]
+enabled = true
+extra_writable = []
+extra_readable = []

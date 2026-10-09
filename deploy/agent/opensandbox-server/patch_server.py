@@ -1,4 +1,4 @@
-"""Apply the two reviewed PSKit hardening patches to OpenSandbox 1.1.0.
+"""Apply the reviewed PSKit hardening patches to OpenSandbox 1.1.0.
 
 The build fails if the pinned upstream source no longer matches. This keeps the
 derived image auditable and prevents a silent patch against another release.
@@ -102,6 +102,13 @@ def main(root: Path) -> None:
             driver = vol_info.get(\"Driver\", \"\")
 """
     replace_once(volumes, validation_anchor, validation)
+
+    docker_service = root / "services/docker/docker_service.py"
+    replace_once(
+        docker_service,
+        '                cap_add.add("SYS_ADMIN")\n',
+        '                cap_add.update({"SETPCAP", "SYS_ADMIN"})\n',
+    )
 
 
 if __name__ == "__main__":

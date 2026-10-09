@@ -8,11 +8,21 @@
 | --- | --- | --- |
 | Python SDK | `opensandbox==1.1.0` | `new_backend/pyproject.toml` 锁定 |
 | OpenSandbox Server | `1.1.0`，上游提交 `b1a29cf93a823a95913f7943010febb3f29de05c` | 固定 base digest 构建派生镜像并记录最终 digest |
-| execd | `1.1.0` | 私有 TOML 写完整 digest |
+| execd | `1.1.0` + PSKit gVisor 兼容层 | 固定 base digest 构建派生镜像并在私有 TOML 写最终 digest |
 | egress | `1.1.7` | 私有 TOML 写完整 digest；gVisor 模式当前不启用 sidecar |
 | workspace | PSKit 固定版本 | Python base 和最终镜像均记录 digest |
 
-派生 Server 只做两项可审计修订：诊断输出实际 OCI runtime；Docker PVC 必须由指定的非 `local` 配额卷驱动创建，并验证 `size` 与 `inodes` 选项。补丁遇到非 1.1.0 源码形状会中止构建。
+派生 Server 的修订可审计：诊断输出实际 OCI runtime；Docker PVC 必须由指定的
+非 `local` 配额卷驱动创建并验证 `size` 与 `inodes`；隔离 Session 的 execd
+ceiling 只增加 `SYS_ADMIN` 与 `SETPCAP`。补丁遇到非 1.1.0 源码形状会中止构建。
+用户命令再由 hardening floor 清空 capabilities。
+
+派生 execd 只把原生 bwrap 的 `--unshare-cgroup` 改为
+`--unshare-cgroup-try`，而且要求创建请求显式设置 PSKit gVisor 标记。gVisor 已
+提供独立 cgroupfs，但不实现嵌套 cgroup namespace 和 Landlock ABI；准入因此要求
+`runsc`、bwrap、cap-drop、seccomp、NoNewPrivs、目录与网络行为探针全部通过，
+并只接受明确报告为 `degraded` 或 `unsupported` 的 Landlock，不能接受
+`disabled`。
 
 ## 宿主机前置条件
 
@@ -20,7 +30,7 @@
 2. 已安装并启用仓库内 `pskit-quota` Docker volume plugin。它只监听 root-owned Unix socket，每个卷使用独立的稀疏 ext4 镜像，同时固定字节和 inode 上限；普通 `local` named volume 不合格。
 3. 配额驱动接受 `size=<IEC size>` 与 `inodes=<positive integer>` 两个 create 选项，并在重启后保留卷。
 4. 创建权限为 `0600` 的环境文件和 OpenSandbox TOML；API key 至少 32 字符，且不进入 Git。
-5. 四个运行镜像都已解析成 `name@sha256:<64 hex>`，禁止 `latest` 与仅 tag 引用。
+5. 五个运行镜像都已解析成 `name@sha256:<64 hex>`，禁止 `latest` 与仅 tag 引用。
 
 OpenSandbox Server 持有 Docker socket，因此属于受信任控制面。只有它挂载 socket；backend、web 和用户沙箱均不得挂载。Server 没有 host `ports`，只加入内部 `app` 控制网络和独立 Docker `internal` runtime 网络。
 
@@ -84,6 +94,11 @@ docker build \
   deploy/agent/opensandbox-server
 
 docker build \
+  --build-arg OPENSANDBOX_EXECD_BASE='opensandbox/execd@sha256:<digest>' \
+  -t pskit-opensandbox-execd:<release> \
+  deploy/agent/execd
+
+docker build \
   --build-arg PYTHON_BASE_IMAGE='python:3.12-slim@sha256:<digest>' \
   -t pskit-workspace:<release> \
   deploy/agent/sandbox
@@ -100,6 +115,7 @@ docker compose -f deploy/agent/compose.release-registry.yaml \
 python deploy/agent/scripts/publish_opensandbox_images.py \
   --release <release> \
   --server-image pskit-opensandbox-server:<release> \
+  --execd-image pskit-opensandbox-execd:<release> \
   --sandbox-image pskit-workspace:<release>
 ```
 
