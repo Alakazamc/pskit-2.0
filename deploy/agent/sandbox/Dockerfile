@@ -14,6 +14,8 @@ RUN sed -i \
       /etc/apt/sources.list.d/debian.sources \
     && apt-get update \
     && apt-get install -y --no-install-recommends bubblewrap util-linux \
+    && test -x /usr/local/bin/python3 \
+    && { test -x /usr/bin/python3 || ln -s /usr/local/bin/python3 /usr/bin/python3; } \
     && printf 'pskit:x:10001:\n' >> /etc/group \
     && printf 'pskit:x:10001:10001:PSKit workspace:/home/pskit:/bin/sh\n' >> /etc/passwd \
     && install -d -o 10001 -g 10001 -m 0700 /workspace /home/pskit \
