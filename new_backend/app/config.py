@@ -66,7 +66,7 @@ class Settings:
     workspace_api_key: str = field(default="", repr=False)
     workspace_image_digest: str = ""
     workspace_namespace: str = "pskit"
-    workspace_connect_timeout_seconds: float = 5.0
+    workspace_connect_timeout_seconds: float = 20.0
     workspace_request_timeout_seconds: float = 30.0
     workspace_cpu_millicores: int = 1000
     workspace_memory_bytes: int = 1024 * 1024 * 1024
@@ -189,7 +189,7 @@ class Settings:
             workspace_image_digest=os.getenv("RESEARCH_AGENT_WORKSPACE_IMAGE_DIGEST", ""),
             workspace_namespace=os.getenv("RESEARCH_AGENT_WORKSPACE_NAMESPACE", "pskit"),
             workspace_connect_timeout_seconds=float(
-                os.getenv("RESEARCH_AGENT_WORKSPACE_CONNECT_TIMEOUT_SECONDS", "5")
+                os.getenv("RESEARCH_AGENT_WORKSPACE_CONNECT_TIMEOUT_SECONDS", "20")
             ),
             workspace_request_timeout_seconds=float(
                 os.getenv("RESEARCH_AGENT_WORKSPACE_REQUEST_TIMEOUT_SECONDS", "30")
