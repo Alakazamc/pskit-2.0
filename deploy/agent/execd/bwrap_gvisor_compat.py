@@ -11,14 +11,17 @@ def compatible_arguments(arguments: list[str]) -> list[str]:
     """Expand bwrap's aggregate namespace flag without requesting cgroupns."""
     unshare_all = "--unshare-all" in arguments
     share_net = "--share-net" in arguments
+    if "--unshare-net" in arguments or (unshare_all and not share_net):
+        raise SystemExit(
+            "private bwrap network namespaces are unavailable under gVisor; "
+            "PSKit sessions must use the audited seccomp socket floor"
+        )
     compatible: list[str] = []
     for value in arguments:
         if value in {"--unshare-cgroup", "--unshare-cgroup-try"}:
             continue
         if value == "--unshare-all":
             compatible.extend(("--unshare-ipc", "--unshare-pid", "--unshare-uts"))
-            if not share_net:
-                compatible.append("--unshare-net")
             continue
         if value == "--share-net" and unshare_all:
             continue

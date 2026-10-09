@@ -14,6 +14,7 @@
 
 派生 Server 的修订可审计：诊断输出实际 OCI runtime；Docker PVC 必须由指定的
 非 `local` 配额卷驱动创建并验证 `size` 与 `inodes`；隔离 Session 的 execd
+随机宿主端口只绑定 `127.0.0.1`，不会暴露到公网或 WireGuard 接口；
 引导进程只在请求明确设置 `bootstrap.execd.isolation=enable` 时以 root 启动，
 ceiling 只增加 `SYS_ADMIN`、`SETPCAP`、降权所需的 `SETUID`/`SETGID`、文件 API
 把目录归属到 UID 10001 所需的 `CHOWN`，修改工作区挂载目录模式所需的 `FOWNER`，
@@ -24,10 +25,14 @@ namespace、准备工作区并执行 `setpriv`；
 
 派生 execd 在显式启用 PSKit gVisor 标记后移除原生 bwrap 的显式 cgroup
 namespace 参数，并把会隐式包含 cgroup namespace 的 `--unshare-all` 展开为
-IPC、PID、UTS 和按请求决定的 network namespace。gVisor 已提供容器级 cgroup
-边界，但不实现嵌套 cgroup namespace；Bubblewrap 0.8.0 的
+IPC、PID 和 UTS namespace。gVisor 已提供容器级 cgroup 边界，但不实现嵌套
+cgroup namespace；Bubblewrap 0.8.0 的
 `--unshare-cgroup-try` 在该运行时仍会失败，因此不能作为兼容替代。gVisor 同样
-不实现 Landlock ABI。Backend 创建请求把受控的 `/opt/opensandbox` 放在 execd
+不实现 Landlock ABI，也不实现 OpenSandbox 1.1.0 绑定嵌套 private netns 所需的
+namespace ioctl。Backend 因此固定请求 `share_net=true`，同时 sandbox 的 seccomp
+floor 在完整上游 denylist 之外拒绝 `socket(2)`；用户进程无法创建网络 socket，且
+真实行为探针仍必须证明公网和内部服务均不可达。wrapper 对任何意外的 private-net
+请求失败关闭。Backend 创建请求把受控的 `/opt/opensandbox` 放在 execd
 控制面 PATH 首位；隔离 Session 使用空环境 allowlist，不继承该 PATH。准入因此要求
 `runsc`、bwrap、cap-drop、seccomp、NoNewPrivs、目录与网络行为探针全部通过，
 并只接受明确报告为 `degraded` 或 `unsupported` 的 Landlock，不能接受

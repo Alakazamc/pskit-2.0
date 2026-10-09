@@ -22,6 +22,13 @@ def replace_once(path: Path, before: str, after: str) -> None:
 
 
 def main(root: Path) -> None:
+    port_allocator = root / "services/docker/port_allocator.py"
+    replace_once(
+        port_allocator,
+        'DOCKER_PUBLISH_HOST = "0.0.0.0"\n',
+        'DOCKER_PUBLISH_HOST = "127.0.0.1"\n',
+    )
+
     diagnostics = root / "services/docker/docker_diagnostics.py"
     replace_once(
         diagnostics,

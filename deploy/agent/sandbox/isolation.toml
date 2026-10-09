@@ -1,6 +1,26 @@
 upper_root = "/var/lib/execd/isolation"
 allowed_writable = ["/workspace"]
 
+# OpenSandbox 1.1.0 cannot bind-pin a nested private network namespace under
+# gVisor because runsc does not implement the required namespace ioctls. The
+# session shares the per-user container namespace while this audited floor
+# denies creation of every new network socket. A seccomp override replaces the
+# upstream default, so the complete default denylist is repeated here.
+[seccomp]
+deny = [
+  "mount", "umount2", "chroot", "pivot_root",
+  "ptrace", "process_vm_readv", "process_vm_writev", "kcmp",
+  "init_module", "finit_module", "delete_module",
+  "bpf", "seccomp", "personality",
+  "add_key", "request_key", "keyctl",
+  "iopl", "ioperm",
+  "reboot", "syslog", "swapon", "swapoff",
+  "setns", "unshare",
+  "name_to_handle_at", "open_by_handle_at",
+  "userfaultfd", "kexec_load", "kexec_file_load", "acct",
+  "socket",
+]
+
 [hardening]
 enabled = true
 keep_capabilities = []

@@ -416,7 +416,11 @@ class OpenSandboxCompat:
                     for path in readonly_paths
                 ],
             ],
-            share_net=False,
+            # OpenSandbox 1.1.0 relies on namespace ioctls that runsc does not
+            # implement when pinning a nested private netns. The immutable
+            # sandbox policy denies socket(2), so the session can safely share
+            # only the already-internal per-user container namespace.
+            share_net=True,
             env_passthrough=sdk.EnvPassthroughSpec(mode="allow", keys=[]),
             uid=uid,
             gid=gid,

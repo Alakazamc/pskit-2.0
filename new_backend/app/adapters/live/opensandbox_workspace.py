@@ -182,7 +182,7 @@ class _WorkspaceFiles:
             or session.profile != "strict"
             or session.uid != 10001
             or session.gid != 10001
-            or session.share_net is not False
+            or session.share_net is not True
         ):
             await self.compat.delete_isolated_session(sandbox.sandbox_id, session.id)
             raise WorkspaceUnsafeRuntime("Workspace file Session is unsafe")
@@ -241,7 +241,7 @@ class _WorkspaceCommands:
             or isolated.profile != "strict"
             or isolated.uid != 10001
             or isolated.gid != 10001
-            or isolated.share_net is not False
+            or isolated.share_net is not True
         ):
             await self.compat.delete_isolated_session(sandbox.sandbox_id, isolated.id)
             raise WorkspaceUnsafeRuntime("Workspace Session isolation was not confirmed")
@@ -579,7 +579,7 @@ class OpenSandboxWorkspaceProvider:
                     or session.profile != "strict"
                     or session.uid != 10001
                     or session.gid != 10001
-                    or session.share_net is not False
+                    or session.share_net is not True
                 ):
                     raise WorkspaceUnsafeRuntime("Workspace Session metadata is unsafe")
                 script = """
