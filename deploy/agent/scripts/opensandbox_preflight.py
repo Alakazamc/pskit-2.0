@@ -282,6 +282,9 @@ def _live_probe(args: argparse.Namespace, static: dict[str, Any]) -> dict[str, A
         raise Refusal("backend private environment file is unavailable")
 
     workspace_entries = {
+        # The mounted probe script lives under /tmp, so Python otherwise drops
+        # the image WORKDIR from sys.path and cannot import the packaged app.
+        "PYTHONPATH": "/app",
         "RESEARCH_AGENT_WORKSPACE_PROVIDER": "opensandbox",
         "RESEARCH_AGENT_WORKSPACE_SERVER_URL": "http://opensandbox-server:8090",
         "RESEARCH_AGENT_WORKSPACE_API_KEY": values["OPENSANDBOX_API_KEY"],
