@@ -27,8 +27,8 @@ RUN sed -i \
     rm -rf /var/lib/apt/lists/* && \
     groupadd --gid 10001 agent && useradd --uid 10001 --gid 10001 --home-dir /home/agent --create-home agent && \
     mkdir -p /data /workspace && chown agent:agent /data /workspace
-COPY pyproject.toml ./
-RUN PIP_INDEX_URL="${PYPI_INDEX_URL}" python -c "import subprocess,sys,tomllib; dependencies=tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']; subprocess.check_call([sys.executable,'-m','pip','install','--no-cache-dir',*dependencies])"
+COPY pyproject.toml requirements.lock ./
+RUN PIP_INDEX_URL="${PYPI_INDEX_URL}" python -c "import subprocess,sys,tomllib; dependencies=tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']; subprocess.check_call([sys.executable,'-m','pip','install','--no-cache-dir','--constraint','requirements.lock',*dependencies])"
 COPY app ./app
 COPY pskit_compute ./pskit_compute
 COPY --from=pi-build /usr/local/bin/node /usr/local/bin/node

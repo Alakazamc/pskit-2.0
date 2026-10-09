@@ -113,6 +113,8 @@ docker build --label org.opencontainers.image.revision="$COMMIT" \
   -f deploy/agent/backend.Dockerfile -t "$IMAGE" new_backend
 ```
 
+Python runtime packages are constrained by [`new_backend/requirements.lock`](../../new_backend/requirements.lock). Keep that lock aligned with the qualified production dependency set; do not let an image build silently upgrade packages from the open lower bounds in `pyproject.toml`.
+
 WSL NAT 访问 Docker Hub、PyPI 或 npm 较慢时，可以只替换下载入口，不改变依赖版本：
 
 ```bash
