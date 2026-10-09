@@ -185,10 +185,11 @@ A6000 升级或恢复前核对唯一接收器、活动任务、journal/outbox/sp
 
 ## 7. 当前交接与维护
 
-快照日期：2026-10-08（Asia/Shanghai）。对话 Rich UI 已发布到 Staging 和生产；最新制品及回滚见 [对话 Rich UI 发布记录](releases/2026-10-08-conversation-rich-ui.md)，前序证据见 [Tool Product 草稿交接发布记录](releases/2026-10-08-tool-handoff-drafts.md)、[流式发布记录](releases/2026-10-07-streaming-quality.md)、[视觉能力发布记录](releases/2026-10-08-vision-capability.md)与 [A6000 收尾记录](releases/2026-10-08-a6000-runtime-mirrors.md)。
+快照日期：2026-10-09（Asia/Shanghai）。OpenSandbox 已完成 Staging 资格验收并进入生产单用户 files-only 灰度；最新制品及回滚见 [OpenSandbox/gVisor 发布记录](releases/2026-10-09-opensandbox-gvisor-rollout.md)，前序证据见 [对话 Rich UI 发布记录](releases/2026-10-08-conversation-rich-ui.md)、[Tool Product 草稿交接发布记录](releases/2026-10-08-tool-handoff-drafts.md)、[流式发布记录](releases/2026-10-07-streaming-quality.md)、[视觉能力发布记录](releases/2026-10-08-vision-capability.md)与 [A6000 收尾记录](releases/2026-10-08-a6000-runtime-mirrors.md)。
 
 - **已确认的用户偏好：** 本地前后端一起运行，完成开发与验证后部署云端。
-- **当前源码与部署：** 主仓库当前功能提交为 `b4d7c23`；阿里云生产与 Staging backend 均使用 `pskit-agent-backend:20261008-tool-handoff-807ad92`，阿里云镜像 ID `sha256:1a4cad73f0ae9b0f60f20de51ab139a02f6aeaa681cfc9fc5f427adea42eb3f3`。A6000 接收器继续使用 `e164dab` runtime。对话 Rich UI 前端已发布到两套环境。
+- **当前源码与部署：** OpenSandbox 实现提交范围为 `118a00a..0f3f01b`；阿里云生产与 Staging backend 均使用镜像 ID `sha256:6c8cfe2edf465b003eec11baa7a49013a75ea1255e9a54ae01c65f5e877bcbb3`（revision `3912773`），workspace 使用 registry digest `sha256:7a038231ce80e0ddbaca47756e69d7c06c76484f6f525d625e66280553830fcb`（revision `9fb8b70`）。A6000 接收器继续使用原 runtime，本次未修改。生产前端沿用既有 dist。
+- **2026-10-09 OpenSandbox 灰度：** 阿里云宿主已注册固定 `runsc release-20261005.0` 和 `pskit-quota` 1.0.1；Staging capability hash 为 `24fddff87b8a7775e49b20f423bc3641a62cdb47697063ba4384dec8c40cd977`，真实隔离/持久化 smoke 与两层应用 smoke 通过。生产 provider 为 `WORKSPACE_READY`，仅 1 个已验证账号开启 files-only，command/Python 仍关闭；活动/unknown attempt 为 0。回滚、制品与失败关闭证据见 [发布记录](releases/2026-10-09-opensandbox-gvisor-rollout.md)。
 - **本地验证：** 本次前端 typecheck、lint、生产构建与 Molstar 18 个延迟 chunk 检查通过；没有重新运行前端测试套件。后端镜像未变更，未运行真实付费模型或 GPU。
 - **生产与 Staging：** 两环境前端均为 dist 哈希 `bc97a8da678138b0ee7fb8980ac09cc450e2f85d0c25d468d24afcb57a78bad9`，HTTP index SHA256 均为 `7153b60bb3dc4b5532d612ba7e2c2f5741e4c61c209f7bc1a7af83f3355cbbb1`。Staging 私有 API 与 WireGuard Nginx 两层完整 smoke 均通过登录、文件、SSE、配额及模拟 AF3，并确认生产数据快照不变；生产 healthy、ready 200、HTTPS 200、应用主包 200、usage 401、internal 404、公网管理入口 403。数据库、后端、基础设施、Nginx 配置与 A6000 均未重启。
 - **A6000：** 唯一接收器已挂载 `runtime-e164dab`，三个 journal 均无未确认记录；原 AF3 计算容器 ID 和启动时间不变。两条旧 CORAL Job 已基于提供端证据完成管理员审计结算，中央无非终态或待对账 Job。4090 CORAL provider 已固化失败计量和产物读取修复到独立仓库提交 `25afdc0`；四个工具发现通过，修复后没有运行真实模型推理。
