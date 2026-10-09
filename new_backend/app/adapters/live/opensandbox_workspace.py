@@ -603,16 +603,20 @@ import socket
 libc = ctypes.CDLL(None, use_errno=True)
 if libc.ptrace(16, 1, 0, 0) != -1:
     raise SystemExit(20)
-s = socket.socket()
-s.settimeout(1)
 try:
-    s.connect(("1.1.1.1", 443))
+    s = socket.socket()
 except OSError:
     pass
 else:
-    raise SystemExit(21)
-finally:
-    s.close()
+    s.settimeout(1)
+    try:
+        s.connect(("1.1.1.1", 443))
+    except OSError:
+        pass
+    else:
+        raise SystemExit(21)
+    finally:
+        s.close()
 
 for hostname in ("backend", "postgres", "supabase-db", "api-gw", "litellm"):
     try:
