@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import json
 import uuid
+from dataclasses import replace
 
 from app.adapters.live.opensandbox_workspace import OpenSandboxWorkspaceProvider
 from app.config import Settings
@@ -47,6 +48,14 @@ async def smoke() -> dict[str, object]:
     settings.validate_workspace_config()
     if settings.workspace_provider != "opensandbox" or settings.database_url == "":
         raise SmokeFailure("Smoke requires the Staging OpenSandbox backend environment")
+    # The live backend reconciles orphaned sandboxes in its configured namespace.
+    # This smoke runs in a second process, so its capability probe is intentionally
+    # invisible to that reconciler.  Keep qualification sandboxes in a dedicated
+    # namespace instead of racing or pausing the live safety loop.
+    settings = replace(
+        settings,
+        workspace_namespace=f"{settings.workspace_namespace}-qualification",
+    )
     database = PostgresDatabase(settings.database_url, schema=settings.database_schema)
     store = WorkspaceSandboxStore(database)
     provider = OpenSandboxWorkspaceProvider(settings, store)
@@ -63,8 +72,8 @@ async def smoke() -> dict[str, object]:
     if not required:
         raise SmokeFailure("Capability probe did not prove the complete command boundary")
 
-    user_a = "staging-workspace-smoke-a"
-    user_b = "staging-workspace-smoke-b"
+    user_a = "staging-workspace-qualification-a"
+    user_b = "staging-workspace-qualification-b"
     first_a, second_a = await asyncio.gather(
         provider.ensure_user(user_a), provider.ensure_user(user_a)
     )
@@ -178,7 +187,7 @@ async def smoke() -> dict[str, object]:
         raise SmokeFailure("Workspace replacement did not preserve the user volume")
 
     capability_hash = WorkspaceAccessPolicy.capability_hash(capabilities)
-    return {
+    report = {
         "status": "live-ready",
         "runtime": capabilities.runtime,
         "file_access": capabilities.file_access,
@@ -199,6 +208,11 @@ async def smoke() -> dict[str, object]:
             f"{capability_hash}:{first_a.volume_id}".encode()
         ).hexdigest(),
     }
+    for user_id in (user_b, user_a):
+        current = store.get(user_id)
+        if current is not None and current.sandbox_id is not None:
+            await provider.stop_user(user_id, current.provider_revision)
+    return report
 
 
 def main() -> int:
