@@ -20,8 +20,9 @@ def write_policy(
     capability_hash: str,
 ) -> None:
     root = directory.resolve(strict=True)
-    if root.is_symlink() or not root.is_dir() or root.stat().st_mode & 0o077:
-        raise ValueError("Rollout directory must be private and not a symlink")
+    mode = root.stat().st_mode & 0o777
+    if root.is_symlink() or not root.is_dir() or mode != 0o755:
+        raise ValueError("Rollout directory must be mode 0755 and not a symlink")
     if commands_enabled and (
         not enabled or re.fullmatch(r"[a-f0-9]{64}", capability_hash) is None
     ):
@@ -36,7 +37,10 @@ def write_policy(
     }
     descriptor, temporary = tempfile.mkstemp(prefix=".policy.", dir=root)
     try:
-        os.fchmod(descriptor, 0o600)
+        # The backend receives this directory as a read-only bind mount and
+        # runs as UID 10001.  The policy contains no credential, so make it
+        # readable while keeping host writes restricted to the owner.
+        os.fchmod(descriptor, 0o644)
         with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
             json.dump(payload, stream, indent=2, sort_keys=True)
             stream.write("\n")

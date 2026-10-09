@@ -289,8 +289,11 @@ def _live_probe(args: argparse.Namespace, static: dict[str, Any]) -> dict[str, A
         "RESEARCH_AGENT_WORKSPACE_SERVER_URL": "http://opensandbox-server:8090",
         "RESEARCH_AGENT_WORKSPACE_API_KEY": values["OPENSANDBOX_API_KEY"],
         "RESEARCH_AGENT_WORKSPACE_IMAGE_DIGEST": values["OPENSANDBOX_SANDBOX_IMAGE"],
-        "RESEARCH_AGENT_WORKSPACE_NAMESPACE": values.get(
-            "OPENSANDBOX_NAMESPACE", "pskit"
+        # A repeated production preflight can run while the backend orphan
+        # reconciler is active.  Keep this disposable probe outside the live
+        # namespace so that safety loop cannot race the qualification run.
+        "RESEARCH_AGENT_WORKSPACE_NAMESPACE": (
+            values.get("OPENSANDBOX_NAMESPACE", "pskit") + "-qualification"
         ),
         "RESEARCH_AGENT_WORKSPACE_CPU_MILLICORES": values.get(
             "OPENSANDBOX_CPU_MILLICORES", "1000"

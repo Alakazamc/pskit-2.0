@@ -124,7 +124,7 @@ runsc_path=$(registered_runsc_path)
 docker image inspect "$backend_image" "$server_image" "$sandbox_image" >/dev/null
 
 mkdir -p "$rollout_dir"
-chmod 0700 "$rollout_dir"
+chmod 0755 "$rollout_dir"
 python3 "$agent_dir/scripts/set_workspace_rollout.py" "$rollout_dir" \
   --no-enabled --no-commands-enabled --capability-hash "$capability_hash"
 

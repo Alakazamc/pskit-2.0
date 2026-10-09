@@ -41,6 +41,10 @@ receiver 或前端。命令和 Python 仍保持关闭；确认文件工具稳定
 `set_workspace_rollout.py` 写入同一 capability hash 并显式增加
 `--commands-enabled`。
 
+Rollout 目录固定为 `0755`，`policy.json` 固定为 `0644`，因为 backend 以
+UID 10001 读取宿主机只读 bind mount。该文件只保存开关、能力哈希和用户 UUID，
+不保存 API key、JWT、数据库 DSN 或模型凭据；宿主写权限仍只属于目录所有者。
+
 常规 `stack.sh` 要沿用 OpenSandbox overlay 时，在权限 0600 的 `.env.stack`
 设置 `STACK_OPENSANDBOX_ENABLED=true`。该开关只决定 Compose 叠加；真正用户
 授权仍来自服务端 rollout `policy.json`，浏览器不能开启。

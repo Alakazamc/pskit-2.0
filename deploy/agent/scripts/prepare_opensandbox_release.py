@@ -222,7 +222,8 @@ def prepare(args: argparse.Namespace) -> dict[str, object]:
     runtime_network = "pskit-agent-staging-opensandbox-runtime"
     state_volume = "pskit-agent-staging_opensandbox_state"
     rollout_dir = config_dir / "opensandbox-rollout"
-    rollout_dir.mkdir(mode=0o700, exist_ok=True)
+    rollout_dir.mkdir(mode=0o755, exist_ok=True)
+    rollout_dir.chmod(0o755)
     policy_path = rollout_dir / "policy.json"
     if not policy_path.exists():
         _atomic(policy_path, json.dumps({
@@ -230,7 +231,7 @@ def prepare(args: argparse.Namespace) -> dict[str, object]:
             "commands_enabled": False,
             "user_allowlist": ["*"],
             "capability_hash": "",
-        }, indent=2).encode() + b"\n", 0o600)
+        }, indent=2).encode() + b"\n", 0o644)
     api_key = cloud.get("OPENSANDBOX_API_KEY") or secrets.token_urlsafe(48)
     cloud.update({
         "AGENT_BACKEND_IMAGE": backend,
@@ -283,7 +284,7 @@ def prepare(args: argparse.Namespace) -> dict[str, object]:
             "commands_enabled": False,
             "user_allowlist": ["*"],
             "capability_hash": capability_hash,
-        }, indent=2).encode() + b"\n", 0o600)
+        }, indent=2).encode() + b"\n", 0o644)
     manifest: dict[str, object] = {
         "schema": 1,
         "status": status,
