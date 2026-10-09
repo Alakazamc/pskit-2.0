@@ -57,6 +57,7 @@ _RESERVED_ENV_PREFIXES = (
     "GOOGLE_",
     "AZURE_",
 )
+_WORKSPACE_ALIAS_ROOT = "/tmp/pskit-workspace-root"
 
 
 @dataclass(slots=True)
@@ -172,13 +173,13 @@ class _WorkspaceFiles:
         await self.compat.mkdir(sandbox.sandbox_id, physical)
         session = await self.compat.create_isolated_session(
             sandbox.sandbox_id,
-            physical_workspace=physical,
+            physical_workspace=f"{_WORKSPACE_ALIAS_ROOT}/{safe_session}",
             uid=10001,
             gid=10001,
             idle_timeout_seconds=60,
         )
         if (
-            session.workspace_path != physical
+            session.workspace_path != f"{_WORKSPACE_ALIAS_ROOT}/{safe_session}"
             or session.profile != "strict"
             or session.uid != 10001
             or session.gid != 10001
@@ -223,6 +224,7 @@ class _WorkspaceCommands:
         session_id = _identifier(request.session_id, "session")
         cwd = _logical_path(request.cwd)
         physical_session = f"/workspace/{session_id}"
+        isolated_session = f"{_WORKSPACE_ALIAS_ROOT}/{session_id}"
         await self.compat.mkdir(sandbox.sandbox_id, physical_session)
         for directory in ("files", "work", "attempts", "artifacts"):
             await self.compat.mkdir(sandbox.sandbox_id, f"{physical_session}/{directory}")
@@ -230,14 +232,14 @@ class _WorkspaceCommands:
         await self.compat.mkdir(sandbox.sandbox_id, f"{physical_session}/{cwd}")
         isolated = await self.compat.create_isolated_session(
             sandbox.sandbox_id,
-            physical_workspace=physical_session,
+            physical_workspace=isolated_session,
             uid=10001,
             gid=10001,
             idle_timeout_seconds=max(30, int(request.timeout_seconds) + 15),
             readonly_paths=("files",),
         )
         if (
-            isolated.workspace_path != physical_session
+            isolated.workspace_path != isolated_session
             or isolated.profile != "strict"
             or isolated.uid != 10001
             or isolated.gid != 10001
@@ -569,13 +571,13 @@ class OpenSandboxWorkspaceProvider:
                 await self.compat.write(first_id, "/workspace/probe-session/persist", b"durable")
                 session = await self.compat.create_isolated_session(
                     first_id,
-                    physical_workspace="/workspace/probe-session",
+                    physical_workspace=f"{_WORKSPACE_ALIAS_ROOT}/probe-session",
                     uid=10001,
                     gid=10001,
                     idle_timeout_seconds=30,
                 )
                 if (
-                    session.workspace_path != "/workspace/probe-session"
+                    session.workspace_path != f"{_WORKSPACE_ALIAS_ROOT}/probe-session"
                     or session.profile != "strict"
                     or session.uid != 10001
                     or session.gid != 10001
@@ -639,7 +641,7 @@ PY
                 )
                 event_session = await self.compat.create_isolated_session(
                     first_id,
-                    physical_workspace="/workspace/probe-session",
+                    physical_workspace=f"{_WORKSPACE_ALIAS_ROOT}/probe-session",
                     uid=10001,
                     gid=10001,
                     idle_timeout_seconds=30,
@@ -671,7 +673,7 @@ PY
 
                 cancel_session = await self.compat.create_isolated_session(
                     first_id,
-                    physical_workspace="/workspace/probe-session",
+                    physical_workspace=f"{_WORKSPACE_ALIAS_ROOT}/probe-session",
                     uid=10001,
                     gid=10001,
                     idle_timeout_seconds=30,

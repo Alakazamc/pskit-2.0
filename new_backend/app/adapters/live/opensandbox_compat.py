@@ -429,17 +429,31 @@ class OpenSandboxCompat:
         )
         try:
             session = await handle.isolation.create(request)
+            state = await session.get()
         except Exception as exc:
             raise self._translate(exc, "create_isolated_session") from exc
         self._sessions[(sandbox_id, session.session_id)] = session
         info = session.info
+        workspace = getattr(state, "workspace", None) or getattr(info, "workspace", None)
         return CompatIsolatedSession(
             id=session.session_id,
-            workspace_path=getattr(getattr(info, "workspace", None), "path", None),
-            profile=getattr(info, "profile", None),
-            uid=getattr(info, "uid", None),
-            gid=getattr(info, "gid", None),
-            share_net=getattr(info, "share_net", None),
+            workspace_path=getattr(workspace, "path", None),
+            profile=getattr(state, "profile", None) or getattr(info, "profile", None),
+            uid=(
+                getattr(state, "uid", None)
+                if getattr(state, "uid", None) is not None
+                else getattr(info, "uid", None)
+            ),
+            gid=(
+                getattr(state, "gid", None)
+                if getattr(state, "gid", None) is not None
+                else getattr(info, "gid", None)
+            ),
+            share_net=(
+                getattr(state, "share_net", None)
+                if getattr(state, "share_net", None) is not None
+                else getattr(info, "share_net", None)
+            ),
         )
 
     async def run_isolated(
