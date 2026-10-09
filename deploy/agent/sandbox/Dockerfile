@@ -1,12 +1,18 @@
 ARG PYTHON_BASE_IMAGE
 FROM ${PYTHON_BASE_IMAGE}
+ARG DEBIAN_MIRROR=http://deb.debian.org/debian
+ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HOME=/home/pskit \
     PATH=/usr/local/bin:/usr/bin:/bin
 
-RUN apt-get update \
+RUN sed -i \
+      -e "s|http://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g" \
+      -e "s|http://deb.debian.org/debian|${DEBIAN_MIRROR}|g" \
+      /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends bubblewrap util-linux \
     && printf 'pskit:x:10001:\n' >> /etc/group \
     && printf 'pskit:x:10001:10001:PSKit workspace:/home/pskit:/bin/sh\n' >> /etc/passwd \
