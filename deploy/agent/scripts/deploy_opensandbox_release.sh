@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Cut a qualified Staging OpenSandbox release into production for one user.
+# Cut a qualified Staging OpenSandbox release into production for all users.
 set -Eeuo pipefail
 
 agent_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 repo_dir=$(cd -- "$agent_dir/../.." && pwd)
 
 manifest=
-allow_user=
 cloud_env=${STACK_CLOUD_ENV_FILE:-$agent_dir/cloud.env}
 backend_env=${STACK_BACKEND_ENV_FILE:-$agent_dir/cloud.backend.env}
 admin_env=${STACK_ADMIN_ENV_FILE:-$agent_dir/.env.stack-admin}
@@ -15,15 +14,14 @@ supabase_network=${STACK_SUPABASE_NETWORK:-pskit-agent-supabase_default}
 while (($#)); do
   case "$1" in
     --manifest) manifest=${2:-}; shift 2 ;;
-    --allow-user) allow_user=${2:-}; shift 2 ;;
     --cloud-env) cloud_env=${2:-}; shift 2 ;;
     --backend-env) backend_env=${2:-}; shift 2 ;;
     --admin-env) admin_env=${2:-}; shift 2 ;;
     *) echo "Unexpected argument" >&2; exit 2 ;;
   esac
 done
-[[ -n "$manifest" && -n "$allow_user" ]] || {
-  echo "Usage: deploy_opensandbox_release.sh --manifest PATH --allow-user USER_ID" >&2
+[[ -n "$manifest" ]] || {
+  echo "Usage: deploy_opensandbox_release.sh --manifest PATH" >&2
   exit 2
 }
 
@@ -205,12 +203,12 @@ PY
 rm -f "$report"
 
 python3 "$agent_dir/scripts/set_workspace_rollout.py" "$rollout_dir" \
-  --enabled --no-commands-enabled --user "$allow_user" \
+  --enabled --no-commands-enabled --user '*' \
   --capability-hash "$capability_hash"
 "${compose[@]}" up -d --no-deps --wait backend
 curl --noproxy '*' --fail --silent http://127.0.0.1:18088/health/ready >/dev/null
 
-python3 - "$manifest" "$rollout_dir" "$allow_user" <<'PY'
+python3 - "$manifest" "$rollout_dir" <<'PY'
 import datetime
 import hashlib
 import json
@@ -219,12 +217,12 @@ import pathlib
 import sys
 import tempfile
 
-manifest, rollout, user = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
+manifest, rollout = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
 record = {
     "deployed_at": datetime.datetime.now(datetime.UTC).isoformat(),
     "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
     "rollout": "files-only",
-    "allowlisted_users": [user],
+    "allowlisted_users": ["*"],
 }
 fd, temporary = tempfile.mkstemp(prefix=".production-active.", dir=rollout)
 with os.fdopen(fd, "w") as stream:
@@ -236,4 +234,4 @@ os.chmod(temporary, 0o600)
 os.replace(temporary, rollout / "production-active.json")
 PY
 trap - ERR
-echo "OpenSandbox production rollout enabled for one files-only user"
+echo "OpenSandbox production rollout enabled for all files-only users"

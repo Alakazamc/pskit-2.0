@@ -20,18 +20,17 @@
 | A6000 WireGuard | 已审核的 AF3 MCP | `10.9.8.2:18187/mcp`，必须使用服务端 Bearer 凭据 |
 | 4090 | CORAL MCP 模型服务 | 由已审核的服务绑定选择，不向浏览器暴露服务端凭据 |
 
-## OpenSandbox 生产灰度
+## OpenSandbox 生产发布
 
 生产只接受 Staging 生成的 `status=qualified` 私有 manifest。生产
 `cloud.env` 使用相同 backend、OpenSandbox Server 和 workspace 镜像 digest，
 但必须配置不同的 namespace、API key、runtime network、state volume 和 rollout
 目录。`opensandbox.private.toml` 的 execd/egress digest 与 Staging manifest 保持
-一致。首次只对一个明确的管理员 user ID 开文件能力：
+一致。文件能力默认对所有用户开放：
 
 ```bash
 bash deploy/agent/scripts/deploy_opensandbox_release.sh \
-  --manifest /home/ecs-user/pskit-agent-staging-private/opensandbox-release.json \
-  --allow-user '<Supabase user UUID>'
+  --manifest /home/ecs-user/pskit-agent-staging-private/opensandbox-release.json
 ```
 
 脚本依次执行静态预检、兼容数据库迁移、unknown/active attempt 检查、启动私有
@@ -40,6 +39,10 @@ rollout，再只重建 backend。它不会重建 Supabase、LiteLLM、AF3 proxy�
 receiver 或前端。命令和 Python 仍保持关闭；确认文件工具稳定后，运维人员才用
 `set_workspace_rollout.py` 写入同一 capability hash 并显式增加
 `--commands-enabled`。
+
+全量策略使用 `user_allowlist: ["*"]`，包括游客和正式账号。这个通配符
+只授予当前 Session `/workspace` 内的受控文件能力，不授予宿主文件系统、
+shell 或 Python 访问。
 
 Rollout 目录固定为 `0755`，`policy.json` 固定为 `0644`，因为 backend 以
 UID 10001 读取宿主机只读 bind mount。该文件只保存开关、能力哈希和用户 UUID，
