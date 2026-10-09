@@ -151,6 +151,13 @@ def _static_preflight(args: argparse.Namespace) -> dict[str, Any]:
                     "ALL",
                     "--security-opt",
                     "no-new-privileges",
+                    # A new ext4 root is owned by root until the trusted
+                    # OpenSandbox bootstrap creates the per-user workspace.
+                    # This no-network, cap-drop probe models only that volume
+                    # initialization step; user commands are verified by the
+                    # separate runsc/bwrap Staging smoke.
+                    "--user",
+                    "0:0",
                     "-v",
                     f"{probe_name}:/probe",
                     "--entrypoint",
@@ -177,6 +184,8 @@ def _static_preflight(args: argparse.Namespace) -> dict[str, Any]:
                 "ALL",
                 "--security-opt",
                 "no-new-privileges",
+                "--user",
+                "0:0",
                 "-v",
                 f"{probe_name}:/probe:ro",
                 "--entrypoint",
