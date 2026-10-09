@@ -198,7 +198,10 @@ class OpenSandboxCompat:
                 delete_on_sandbox_termination=False,
                 storage=f"{max(1, math.ceil(spec.disk_bytes / (1024**3)))}Gi",
             ),
-            mount_path="/tmp/pskit-workspace-root",
+            # Strict isolated sessions replace /tmp with a private tmpfs.
+            # Keep the execd-visible host path below /data so its background
+            # run control files remain visible inside the same namespace.
+            mount_path="/data/pskit-workspace-root",
             read_only=False,
         )
         metadata = {

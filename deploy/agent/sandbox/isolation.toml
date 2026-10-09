@@ -1,5 +1,5 @@
 upper_root = "/var/lib/execd/isolation"
-allowed_writable = ["/workspace", "/tmp/pskit-workspace-root"]
+allowed_writable = ["/workspace", "/data/pskit-workspace-root"]
 
 # OpenSandbox 1.1.0 cannot bind-pin a nested private network namespace under
 # gVisor because runsc does not implement the required namespace ioctls. The

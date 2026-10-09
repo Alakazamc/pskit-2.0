@@ -57,7 +57,7 @@ _RESERVED_ENV_PREFIXES = (
     "GOOGLE_",
     "AZURE_",
 )
-_WORKSPACE_ALIAS_ROOT = "/tmp/pskit-workspace-root"
+_WORKSPACE_ALIAS_ROOT = "/data/pskit-workspace-root"
 
 
 @dataclass(slots=True)
