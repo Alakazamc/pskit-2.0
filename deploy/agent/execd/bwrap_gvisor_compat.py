@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """Run native bubblewrap without the cgroup namespace gVisor already supplies."""
 
 from __future__ import annotations
