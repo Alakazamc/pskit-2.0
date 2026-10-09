@@ -108,7 +108,7 @@ def main(root: Path) -> None:
         docker_service,
         '                cap_add.add("SYS_ADMIN")\n',
         '                cap_add.update(\n'
-        '                    {"CHOWN", "DAC_OVERRIDE", "SETGID", "SETPCAP", "SETUID", "SYS_ADMIN"}\n'
+        '                    {"CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETPCAP", "SETUID", "SYS_ADMIN"}\n'
         '                )\n',
     )
     replace_once(

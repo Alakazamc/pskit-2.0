@@ -16,8 +16,9 @@
 非 `local` 配额卷驱动创建并验证 `size` 与 `inodes`；隔离 Session 的 execd
 引导进程只在请求明确设置 `bootstrap.execd.isolation=enable` 时以 root 启动，
 ceiling 只增加 `SYS_ADMIN`、`SETPCAP`、降权所需的 `SETUID`/`SETGID`、文件 API
-把目录归属到 UID 10001 所需的 `CHOWN`，以及读取该用户私有 lifecycle 配置所需的
-`DAC_OVERRIDE`。这样引导层才能创建 mount namespace、准备工作区并执行 `setpriv`；
+把目录归属到 UID 10001 所需的 `CHOWN`，修改工作区挂载目录模式所需的 `FOWNER`，
+以及读取该用户私有 lifecycle 配置所需的 `DAC_OVERRIDE`。这样引导层才能创建 mount
+namespace、准备工作区并执行 `setpriv`；
 用户命令随后固定降到 UID/GID 10001，由 hardening floor
 清空 capabilities 并启用 NoNewPrivs。补丁遇到非 1.1.0 源码形状会中止构建。
 
