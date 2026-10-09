@@ -11,13 +11,19 @@ RUN npm config set registry "${NPM_REGISTRY}" --location=project && \
 
 FROM ${PYTHON_BASE_IMAGE}
 ARG PYPI_INDEX_URL=https://pypi.org/simple
+ARG DEBIAN_MIRROR=http://deb.debian.org/debian
+ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH=/app/pi/node_modules/.bin:${PATH} \
     RESEARCH_AGENT_INTERNAL_API_URL=http://127.0.0.1:8000 \
     RESEARCH_AGENT_PI_SESSION_DIR=/data/pi-sessions
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 && \
+RUN sed -i \
+      -e "s|http://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g" \
+      -e "s|http://deb.debian.org/debian|${DEBIAN_MIRROR}|g" \
+      /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && apt-get install -y --no-install-recommends libstdc++6 && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd --gid 10001 agent && useradd --uid 10001 --gid 10001 --home-dir /home/agent --create-home agent && \
     mkdir -p /data /workspace && chown agent:agent /data /workspace

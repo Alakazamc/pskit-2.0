@@ -112,12 +112,14 @@ WSL NAT 访问 Docker Hub、PyPI 或 npm 较慢时，可以只替换下载入口
 docker build --label org.opencontainers.image.revision="$COMMIT" \
   --build-arg PYPI_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
   --build-arg NPM_REGISTRY=https://registry.npmmirror.com \
+  --build-arg DEBIAN_MIRROR=https://mirrors.aliyun.com/debian \
+  --build-arg DEBIAN_SECURITY_MIRROR=https://mirrors.aliyun.com/debian-security \
   --build-arg NODE_BASE_IMAGE="$PSKIT_NODE_BASE_IMAGE" \
   --build-arg PYTHON_BASE_IMAGE="$PSKIT_PYTHON_BASE_IMAGE" \
   -f deploy/agent/backend.Dockerfile -t "$IMAGE" new_backend
 ```
 
-两个基础镜像参数必须指向已经核对过 image ID 的固定镜像引用，不能使用 `latest`。未配置可信基础镜像缓存时省略这两个参数，继续使用 Dockerfile 中的官方 digest。PyPI 与 npm 参数只接受不含账号、Token 或密码的公开 HTTPS 镜像地址；构建参数会进入镜像历史。构建后记录 image ID、完整 revision label，并与上一生产镜像比较 `pip freeze`；镜像源变化不能作为依赖版本变化的理由。
+两个基础镜像参数必须指向已经核对过 image ID 的固定镜像引用，不能使用 `latest`。未配置可信基础镜像缓存时省略这两个参数，继续使用 Dockerfile 中的官方 digest。PyPI、npm 与 Debian 镜像参数只接受不含账号、Token 或密码的公开 HTTPS 地址；构建参数会进入镜像历史。构建后记录 image ID、完整 revision label，并与上一生产镜像比较 `pip freeze`；镜像源变化不能作为依赖版本变化的理由。
 
 ## 3. 前端和 Nginx
 
