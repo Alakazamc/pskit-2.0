@@ -6,6 +6,7 @@ import type { ArtifactRef, ResearchApi } from "../../api/types";
 import { DetailPanel } from "../../components/catalog/DetailPanel";
 import { useWorkspacePortalContainer } from "../../hooks/useWorkspacePortalContainer";
 import { useLanguage } from "../../i18n/LanguageProvider";
+import { ArtifactContentPreview } from "./ArtifactContentPreview";
 
 export function ConversationArtifacts({ api, userId, sessionId, sessionTitle, runActive }: {
   api: ResearchApi;
@@ -48,7 +49,7 @@ export function ConversationArtifacts({ api, userId, sessionId, sessionTitle, ru
         anchor.click();
         anchor.remove();
       } finally {
-        URL.revokeObjectURL(url);
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
       }
     } catch {
       setError(t("artifact.downloadFailed"));
@@ -88,7 +89,7 @@ export function ConversationArtifacts({ api, userId, sessionId, sessionTitle, ru
         {!selected.available ? <p className="mono-muted">{t("artifact.unavailable")}</p> : <>
           {preview.isPending && <p role="status">{t("artifact.previewLoading")}</p>}
           {preview.isError && <p role="alert" className="mono-form-error">{t("artifact.previewFailed")}</p>}
-          {preview.data && <pre className="artifact-preview-text">{preview.data.text}</pre>}
+          {preview.data && <ArtifactContentPreview name={preview.data.name} text={preview.data.text} />}
         </>}
       </>}
     </DetailPanel>

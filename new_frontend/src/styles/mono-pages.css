@@ -123,6 +123,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .mono-search-status{padding:12px;color:var(--mono-muted);font-size:13px}
 .artifact-preview-dialog{width:min(800px,calc(100vw - 28px))}
 .artifact-preview-text{max-height:55vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;border:1px solid var(--mono-border);border-radius:8px;background:var(--mono-bg);font-size:12px;line-height:1.6}
+.artifact-rich-preview{max-height:55vh;overflow:auto;overflow-wrap:anywhere;padding:16px;border:1px solid var(--mono-border);border-radius:8px;background:var(--mono-bg)}
+.artifact-rich-preview .message-markdown{font-size:13px;line-height:1.65}
 .mono-dialog-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .mono-dialog-heading h2{font-size:17px;margin:0;font-weight:620}
 .mono-dialog-heading button{border:0;background:transparent;color:var(--mono-muted);border-radius:7px;width:27px;height:27px;display:grid;place-items:center}

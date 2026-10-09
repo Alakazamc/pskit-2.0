@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { MessagePart } from "../../api/types";
 import { DetailPanel } from "../../components/catalog/DetailPanel";
 import { useLanguage } from "../../i18n/LanguageProvider";
+import { ArtifactContentPreview } from "./ArtifactContentPreview";
 
 export type ResourcePart = Extract<MessagePart, { type: "file" | "artifact" }>;
 
@@ -54,7 +55,7 @@ function saveBlob(blob: Blob, name: string): void {
     anchor.click();
     anchor.remove();
   } finally {
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 }
 
@@ -131,7 +132,7 @@ export function ResourceCard({ part, actions }: { part: ResourcePart; actions?: 
     </section>
     {canTextPreview && <DetailPanel open={previewOpen} onOpenChange={setPreviewOpen} title={part.name} description={t("conversation.resourcePreviewDescription")} className="message-resource-preview">
       {busy === "open" && previewText === null && <p role="status">{t("conversation.resourcePreviewLoading")}</p>}
-      {previewText !== null && <pre className="artifact-preview-text">{previewText}</pre>}
+      {previewText !== null && <ArtifactContentPreview name={part.name} text={previewText} />}
       {error && previewText === null && <p className="mono-form-error" role="alert">{error}</p>}
       {loader && <button type="button" className="mono-button" disabled={busy !== null} onClick={() => void download()}><Download size={16} aria-hidden="true" />{t("conversation.download")}</button>}
     </DetailPanel>}

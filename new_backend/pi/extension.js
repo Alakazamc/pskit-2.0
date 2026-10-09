@@ -121,34 +121,34 @@ export default function register(pi) {
         return { content: [{ type: "text", text: render(result) }], details: result };
       },
     });
-    fileTool("read", "Read a bounded file from the current Session /workspace.", {
+    fileTool("read_file", "Read a bounded file from the current Session /workspace. Call this tool to inspect a file; do not print a fake <read_file> block.", {
       path: { type: "string" }, offset: { type: "integer", minimum: 0 },
       limit: { type: "integer", minimum: 1, maximum: 1048576 },
     }, ["path"], "/internal/workspace/files/read", result =>
       result.encoding === "utf-8" ? result.content : `[base64 ${result.path}] ${result.content}`);
-    fileTool("write", "Write UTF-8 content under work/, attempts/<attempt>/, or artifacts/<attempt>/.", {
+    fileTool("write_file", "Write UTF-8 content under work/, attempts/<attempt>/, or artifacts/<attempt>/. Call this tool to create a file; do not print a fake <write_file> block.", {
       path: { type: "string" }, content: { type: "string" },
       expected_revision: { type: "string" },
     }, ["path", "content"], "/internal/workspace/files/write", result =>
       `Wrote ${result.path} (${result.size} bytes, revision ${result.revision}).`);
-    fileTool("edit", "Replace exact UTF-8 text using the revision returned by read.", {
+    fileTool("edit_file", "Replace exact UTF-8 text using the revision returned by read_file.", {
       path: { type: "string" }, old_text: { type: "string" }, new_text: { type: "string" },
       expected_revision: { type: "string" }, replace_all: { type: "boolean" },
     }, ["path", "old_text", "new_text", "expected_revision"],
     "/internal/workspace/files/edit", result =>
       `Edited ${result.path} (${result.size} bytes, revision ${result.revision}).`);
-    fileTool("ls", "List bounded entries in the current Session /workspace.", {
+    fileTool("list_files", "List bounded entries in the current Session /workspace.", {
       path: { type: "string" }, max_depth: { type: "integer", minimum: 1, maximum: 8 },
       max_entries: { type: "integer", minimum: 1, maximum: 1000 },
     }, [], "/internal/workspace/files/list", result =>
       result.entries.map(item => `${item.kind === "directory" ? "d" : "f"} ${item.path}`).join("\n") || "(empty)");
-    fileTool("find", "Find file names by a bounded glob in the current Session /workspace.", {
+    fileTool("find_files", "Find file names by a bounded glob in the current Session /workspace.", {
       path: { type: "string" }, pattern: { type: "string" },
       max_depth: { type: "integer", minimum: 1, maximum: 8 },
       max_entries: { type: "integer", minimum: 1, maximum: 1000 },
     }, ["pattern"], "/internal/workspace/files/find", result =>
       result.matches.map(item => item.path).join("\n") || "No matches.");
-    fileTool("grep", "Search UTF-8 workspace files for literal text with strict limits.", {
+    fileTool("search_files", "Search UTF-8 workspace files for literal text with strict limits.", {
       path: { type: "string" }, pattern: { type: "string" },
       max_depth: { type: "integer", minimum: 1, maximum: 8 },
       max_matches: { type: "integer", minimum: 1, maximum: 500 },
@@ -198,7 +198,9 @@ export default function register(pi) {
   for (const tool of mcpTools) {
     if (!/^[a-zA-Z0-9_]+$/.test(tool.name)) throw new Error("Invalid MCP tool name");
     if ([
-      "read", "write", "edit", "ls", "find", "grep", "bash", "python",
+      "read", "write", "edit", "ls", "find", "grep",
+      "read_file", "write_file", "edit_file", "list_files", "find_files", "search_files",
+      "bash", "python",
       "update_plan", "submit_af3", "submit_compute",
     ].includes(tool.name)) throw new Error("Reserved tool name");
     pi.registerTool({
