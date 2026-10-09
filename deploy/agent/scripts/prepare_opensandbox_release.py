@@ -17,7 +17,10 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parents[3]
 AGENT = ROOT / "deploy/agent"
-DIGEST = re.compile(r"^(?:[A-Za-z0-9][A-Za-z0-9._:/-]*@)?sha256:[a-f0-9]{64}$")
+NAMED_DIGEST = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._:/-]*@sha256:[a-f0-9]{64}$"
+)
+IMAGE_ID = re.compile(r"^sha256:[a-f0-9]{64}$")
 OPEN_SANDBOX_VERSION = "1.1.0"
 OPEN_SANDBOX_COMMIT = "b1a29cf93a823a95913f7943010febb3f29de05c"
 
@@ -61,8 +64,13 @@ def _atomic(path: Path, content: bytes, mode: int) -> None:
             os.unlink(temporary)
 
 
-def _require_digest(value: str, label: str) -> str:
-    if DIGEST.fullmatch(value) is None:
+def _require_digest(
+    value: str, label: str, *, allow_local_image_id: bool = False
+) -> str:
+    valid = NAMED_DIGEST.fullmatch(value) is not None
+    if allow_local_image_id:
+        valid = valid or IMAGE_ID.fullmatch(value) is not None
+    if not valid:
         raise Refusal(f"{label} must be an immutable sha256 image reference")
     return value
 
@@ -200,7 +208,9 @@ def prepare(args: argparse.Namespace) -> dict[str, object]:
         raise Refusal("Staging config directory must be private and not a symlink")
     cloud_path = config_dir / "cloud.env"
     cloud = _env(cloud_path)
-    backend = _require_digest(args.backend_image, "backend image")
+    backend = _require_digest(
+        args.backend_image, "backend image", allow_local_image_id=True
+    )
     server = _require_digest(args.server_image, "server image")
     sandbox = _require_digest(args.sandbox_image, "sandbox image")
     execd = _require_digest(args.execd_image, "execd image")

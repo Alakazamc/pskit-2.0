@@ -130,7 +130,7 @@ def validate_staging(
                     docker_socket = (
                         part == "agent"
                         and service_name == "opensandbox-server"
-                        and path == Path("/var/run/docker.sock")
+                        and path == Path("/var/run/docker.sock").resolve()
                     )
                     if not docker_socket and (
                         not allowed or mount.get("read_only") is not True

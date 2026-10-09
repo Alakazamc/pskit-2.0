@@ -89,7 +89,26 @@ docker build \
   deploy/agent/sandbox
 ```
 
-构建后用 `docker image inspect IMAGE --format '{{index .RepoDigests 0}}'` 记录最终 digest。把 `opensandbox.toml.example` 复制到部署私有目录，替换 execd、egress digest 和环境对应的 runtime network。把 `cloud.env.example` 中 OpenSandbox 字段复制到私有 `.env`；`OPENSANDBOX_VOLUME_DRIVER` 填已验收的配额驱动名。TOML 的 network name 必须与 `.env` 完全相同。
+本地构建只产生 image ID，不会产生 registry manifest digest。宿主运行一个固定版、
+仅监听 `127.0.0.1:5000` 的 release registry；它与用户运行时网络隔离，数据保存在
+独立卷中：
+
+```bash
+docker volume create pskit-opensandbox-release-registry
+docker compose -f deploy/agent/compose.release-registry.yaml \
+  -p pskit-opensandbox-release-registry up -d --wait
+python deploy/agent/scripts/publish_opensandbox_images.py \
+  --release <release> \
+  --server-image pskit-opensandbox-server:<release> \
+  --sandbox-image pskit-workspace:<release>
+```
+
+发布器输出的 `127.0.0.1:5000/...@sha256:<digest>` 才能写入 release manifest；
+禁止把本地 image ID 伪装成命名 digest。registry 卷是发布制品，回退与常规
+Compose 停止均不得删除。把 `opensandbox.toml.example` 复制到部署私有目录，替换
+execd、egress digest 和环境对应的 runtime network。把 `cloud.env.example` 中
+OpenSandbox 字段复制到私有 `.env`；`OPENSANDBOX_VOLUME_DRIVER` 填已验收的配额
+驱动名。TOML 的 network name 必须与 `.env` 完全相同。
 
 ## 失败关闭预检
 

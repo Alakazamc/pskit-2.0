@@ -88,7 +88,8 @@ if [[ -f "$unit" ]]; then
 fi
 install -o root -g root -m 0644 "$temporary" "$unit"
 systemctl daemon-reload
-systemctl enable --now pskit-quota-volume.service
+systemctl enable pskit-quota-volume.service
+systemctl restart pskit-quota-volume.service
 for _ in $(seq 1 30); do
   [[ -S "$socket" ]] && break
   sleep 0.1

@@ -20,10 +20,10 @@ from pathlib import Path
 from socketserver import ThreadingMixIn, UnixStreamServer
 from typing import Any
 
-PLUGIN_VERSION = "1.0.0"
+PLUGIN_VERSION = "1.0.1"
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
-SIZE_RE = re.compile(r"^([1-9][0-9]*)(KiB|MiB|GiB)$")
-SIZE_MULTIPLIERS = {"KiB": 1024, "MiB": 1024**2, "GiB": 1024**3}
+SIZE_RE = re.compile(r"^([1-9][0-9]*)(Ki|Mi|Gi)(?:B)?$")
+SIZE_MULTIPLIERS = {"Ki": 1024, "Mi": 1024**2, "Gi": 1024**3}
 MIN_SIZE = 64 * 1024**2
 MAX_SIZE = 100 * 1024**3
 MIN_INODES = 1024
@@ -64,7 +64,13 @@ class VolumeDriver:
         with self.lock:
             if metadata.exists():
                 existing = self._read_metadata(name)
-                if existing.get("size") != size_text or existing.get("inodes") != inode_text:
+                try:
+                    existing_size = int(existing.get("size_bytes", 0)) or self._size(
+                        str(existing.get("size", ""))
+                    )
+                except (TypeError, ValueError, DriverError) as exc:
+                    raise DriverError("existing volume metadata is invalid") from exc
+                if existing_size != size or existing.get("inodes") != inode_text:
                     raise DriverError("existing volume has different limits")
                 return
             if image.exists():
@@ -99,7 +105,13 @@ class VolumeDriver:
                 os.replace(temporary, image)
                 self._write_metadata(
                     name,
-                    {"name": name, "size": size_text, "inodes": inode_text, "mount_ids": []},
+                    {
+                        "name": name,
+                        "size": size_text,
+                        "size_bytes": size,
+                        "inodes": inode_text,
+                        "mount_ids": [],
+                    },
                 )
             except Exception:
                 temporary.unlink(missing_ok=True)
@@ -191,7 +203,7 @@ class VolumeDriver:
     def _size(value: str) -> int:
         match = SIZE_RE.fullmatch(value)
         if match is None:
-            raise DriverError("size must use KiB, MiB, or GiB")
+            raise DriverError("size must use Ki, Mi, Gi, KiB, MiB, or GiB")
         size = int(match.group(1)) * SIZE_MULTIPLIERS[match.group(2)]
         if not MIN_SIZE <= size <= MAX_SIZE:
             raise DriverError("size is outside the approved range")

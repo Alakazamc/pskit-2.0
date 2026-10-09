@@ -1,0 +1,21 @@
+services:
+  registry:
+    image: ${PSKIT_RELEASE_REGISTRY_IMAGE:-docker.m.daocloud.io/library/registry@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373}
+    container_name: pskit-opensandbox-release-registry
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - registry_data:/var/lib/registry
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+volumes:
+  registry_data:
+    name: pskit-opensandbox-release-registry
+    external: true
