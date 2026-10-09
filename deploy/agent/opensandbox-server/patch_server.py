@@ -107,7 +107,34 @@ def main(root: Path) -> None:
     replace_once(
         docker_service,
         '                cap_add.add("SYS_ADMIN")\n',
-        '                cap_add.update({"SETPCAP", "SYS_ADMIN"})\n',
+        '                cap_add.update(\n'
+        '                    {"DAC_OVERRIDE", "SETGID", "SETPCAP", "SETUID", "SYS_ADMIN"}\n'
+        '                )\n',
+    )
+    replace_once(
+        docker_service,
+        '                host_config_kwargs["cap_add"] = sorted(cap_add)\n',
+        '                host_config_kwargs["cap_add"] = sorted(cap_add)\n'
+        '                host_config_kwargs["pskit_bootstrap_as_root"] = True\n',
+    )
+    container_ops = root / "services/docker/container_ops.py"
+    replace_once(
+        container_ops,
+        "        host_config = self.docker_client.api.create_host_config(**host_config_kwargs)\n",
+        "        host_config_kwargs = dict(host_config_kwargs)\n"
+        "        bootstrap_as_root = bool(\n"
+        "            host_config_kwargs.pop(\"pskit_bootstrap_as_root\", False)\n"
+        "        )\n"
+        "        host_config = self.docker_client.api.create_host_config(**host_config_kwargs)\n",
+    )
+    replace_once(
+        container_ops,
+        '                if not requested_windows_platform:\n'
+        '                    container_kwargs["entrypoint"] = [BOOTSTRAP_PATH]\n',
+        '                if not requested_windows_platform:\n'
+        '                    container_kwargs["entrypoint"] = [BOOTSTRAP_PATH]\n'
+        '                if bootstrap_as_root:\n'
+        '                    container_kwargs["user"] = "0:0"\n',
     )
 
 

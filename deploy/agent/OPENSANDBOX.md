@@ -14,8 +14,12 @@
 
 派生 Server 的修订可审计：诊断输出实际 OCI runtime；Docker PVC 必须由指定的
 非 `local` 配额卷驱动创建并验证 `size` 与 `inodes`；隔离 Session 的 execd
-ceiling 只增加 `SYS_ADMIN` 与 `SETPCAP`。补丁遇到非 1.1.0 源码形状会中止构建。
-用户命令再由 hardening floor 清空 capabilities。
+引导进程只在请求明确设置 `bootstrap.execd.isolation=enable` 时以 root 启动，
+ceiling 只增加 `SYS_ADMIN`、`SETPCAP`、降权所需的 `SETUID`/`SETGID`，以及读取
+UID 10001 私有 lifecycle 配置所需的 `DAC_OVERRIDE`。这样引导层才能创建 mount
+namespace 并执行 `setpriv`；
+用户命令随后固定降到 UID/GID 10001，由 hardening floor
+清空 capabilities 并启用 NoNewPrivs。补丁遇到非 1.1.0 源码形状会中止构建。
 
 派生 execd 只把原生 bwrap 的 `--unshare-cgroup` 改为
 `--unshare-cgroup-try`，而且要求创建请求显式设置 PSKit gVisor 标记。gVisor 已
