@@ -300,40 +300,78 @@ class _WorkspaceCommands:
                 )
                 return
             await self._enforce_timeout(handle, state)
-            logs = await self.compat.run_logs(
-                handle.sandbox_id,
-                state.isolated_session_id,
-                state.run_id,
-                cursor=state.cursor,
+            if state.terminal is not None:
+                yield WorkspaceCommandEvent(
+                    sequence=state.sequence,
+                    type="exit",
+                    exit_code=state.terminal.exit_code,
+                )
+                return
+            output = await self._read_output(handle, state)
+            if output is not None:
+                yield output
+            provider_status = await self.compat.run_status(
+                handle.sandbox_id, state.isolated_session_id, state.run_id
             )
-            state.cursor = logs.cursor
-            if logs.content:
-                remaining = state.request.max_output_bytes - state.output_bytes
-                chunk = logs.content[: max(remaining, 0)]
-                if len(logs.content) > len(chunk):
-                    state.output_truncated = True
-                state.output_bytes += len(chunk)
-                if chunk:
-                    state.sequence += 1
-                    yield WorkspaceCommandEvent(
-                        sequence=state.sequence,
-                        type="output",
-                        data=chunk,
-                        truncated=state.output_truncated,
-                    )
-            status = await self.status(handle)
-            if status.state != "running":
+            if not provider_status.running:
+                # Execd writes the exit marker after the command has closed
+                # its log. Drain that final log segment before _finish deletes
+                # the per-attempt isolated Session.
+                output = await self._read_output(handle, state)
+                if output is not None:
+                    yield output
+                terminal_name = (
+                    "completed"
+                    if provider_status.exit_code == 0 and not provider_status.error
+                    else "failed"
+                )
+                terminal = WorkspaceCommandStatus(
+                    state=terminal_name,
+                    exit_code=provider_status.exit_code,
+                    termination_confirmed=True,
+                )
+                await self._finish(state, terminal)
                 state.sequence += 1
                 yield WorkspaceCommandEvent(
                     sequence=state.sequence,
                     type="exit",
-                    exit_code=status.exit_code,
+                    exit_code=terminal.exit_code,
                 )
                 return
+            await self._observe_metrics(state)
             await asyncio.sleep(0.15)
 
     def events(self, handle: WorkspaceCommandHandle):
         return self._events(handle)
+
+    async def _read_output(
+        self,
+        handle: WorkspaceCommandHandle,
+        state: _Process,
+    ) -> WorkspaceCommandEvent | None:
+        logs = await self.compat.run_logs(
+            handle.sandbox_id,
+            state.isolated_session_id,
+            state.run_id,
+            cursor=state.cursor,
+        )
+        state.cursor = logs.cursor
+        if not logs.content:
+            return None
+        remaining = state.request.max_output_bytes - state.output_bytes
+        chunk = logs.content[: max(remaining, 0)]
+        if len(logs.content) > len(chunk):
+            state.output_truncated = True
+        state.output_bytes += len(chunk)
+        if not chunk:
+            return None
+        state.sequence += 1
+        return WorkspaceCommandEvent(
+            sequence=state.sequence,
+            type="output",
+            data=chunk,
+            truncated=state.output_truncated,
+        )
 
     async def status(self, handle: WorkspaceCommandHandle) -> WorkspaceCommandStatus:
         state = self._required(handle)
