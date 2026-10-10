@@ -137,6 +137,19 @@ class PostgresStatements:
         with self.database.connection() as connection:
             return self._run(connection, statement, parameters)
 
+    def execute_native(self, statement: str, parameters: tuple = ()) -> QueryResult:
+        """Execute repository-owned PostgreSQL SQL without compatibility rewriting.
+
+        Native callers use ``%s`` placeholders and ``ordinal`` explicitly. An
+        active transaction stays on the current thread's connection; callers
+        move the complete repository operation across an async boundary.
+        """
+        stack = getattr(self._local, "stack", ())
+        if stack:
+            return self._run(stack[-1][1], statement, parameters)
+        with self.database.connection() as connection:
+            return self._run(connection, statement, parameters)
+
     @staticmethod
     def _run(connection: psycopg.Connection, statement: str, parameters: tuple) -> QueryResult:
         """Materialize rows before returning the connection to its pool."""

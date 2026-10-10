@@ -606,9 +606,11 @@ async def test_live_pi_can_use_a_shared_openai_compatible_gateway(tmp_path):
     class CapturingPi:
         def __init__(self):
             self.environments = []
+            self.started = asyncio.Event()
 
         async def prompt(self, session_id, message, on_event, **kwargs):
             self.environments.append(kwargs["environment"])
+            self.started.set()
             return {"session_file": f"/tmp/{session_id}.jsonl", "text": "完成"}
 
     def respond(request: httpx.Request) -> httpx.Response:
@@ -635,7 +637,9 @@ async def test_live_pi_can_use_a_shared_openai_compatible_gateway(tmp_path):
                                          json={"title": "Gateway test"})).json()
             sent = await client.post(f"/api/v1/c/{session['id']}/messages", headers=headers,
                                      json={"content": "hello"})
-            await asyncio.sleep(0.02)
+            # This checks gateway wiring, not a 20 ms performance contract.
+            # Durable admission is a nonblocking hint; observe real runner entry.
+            await asyncio.wait_for(runner.started.wait(), timeout=1)
 
     assert sent.status_code == 200
     assert len(runner.environments) == 1

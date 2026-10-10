@@ -107,44 +107,61 @@ class RecoveryMixin:
         Returns:
             Tuples of Run ID, user ID, session ID, and completed job ID.
         """
-        rows = self.db.execute(
-            "SELECT r.id,r.user_id,r.session_id,j.id FROM agent_runs r JOIN agent_jobs j ON j.run_id=r.id "
-            "WHERE r.status='waiting' AND j.status IN ('completed','failed','cancelled') AND r.resume_attempts<3 "
-            "AND (r.last_resumed_job_id IS NULL OR j.id<>r.last_resumed_job_id) "
-            "AND NOT EXISTS (SELECT 1 FROM agent_approvals a WHERE a.run_id=r.id "
-            "AND a.status='pending') "
-            "AND (r.retry_after IS NULL OR r.retry_after<=?) "
-            "AND NOT EXISTS (SELECT 1 FROM agent_jobs pending WHERE pending.run_id=r.id "
-            "AND pending.status IN ('queued','running','cancelling')) ORDER BY j.created_at DESC",
-            (_now().isoformat(),),
-        ).fetchall()
+        from .admission import (
+            CANDIDATE_WINDOW,
+            active_counts,
+            advance_cursor,
+            candidate_filter,
+            native_or_legacy,
+        )
+
         claimed: list[tuple[str, str, str, str]] = []
-        for run_id, user_id, session_id, job_id in rows:
-            with self._immediate_transaction():
-                now = _now().isoformat()
-                active = self.db.execute(
-                    "SELECT COUNT(*) FROM agent_runs WHERE status IN ('running','resume_queued') "
-                    "AND lease_expires_at>?", (now,),
-                ).fetchone()[0]
-                user_active = self.db.execute(
-                    "SELECT COUNT(*) FROM agent_runs WHERE user_id=? "
-                    "AND status IN ('running','resume_queued') AND lease_expires_at>?",
-                    (user_id, now),
-                ).fetchone()[0]
-                if active >= max_active or user_active >= self._max_active_for_user(
-                    user_id, max_user_active,
-                ):
+        with self._immediate_transaction():
+            now = _now().isoformat()
+            active, users = active_counts(self, now)
+            capacity = max(0, max_active - active)
+            if capacity == 0:
+                return []
+            filters, parameters = candidate_filter(self, "resume", users, max_user_active)
+            rows = native_or_legacy(self,
+                "SELECT r.id,r.user_id,r.session_id,j.id,r.created_at,r.ordinal FROM agent_runs r "
+                "JOIN agent_jobs j ON j.run_id=r.id "
+                "WHERE r.status='waiting' AND j.status IN ('completed','failed','cancelled') "
+                "AND r.resume_attempts<3 "
+                "AND (r.last_resumed_job_id IS NULL OR j.id<>r.last_resumed_job_id) "
+                "AND NOT EXISTS (SELECT 1 FROM agent_approvals a WHERE a.run_id=r.id "
+                "AND a.status='pending') "
+                "AND (r.retry_after IS NULL OR r.retry_after<=%s) "
+                "AND NOT EXISTS (SELECT 1 FROM agent_jobs pending WHERE pending.run_id=r.id "
+                "AND pending.status IN ('queued','running','cancelling')) "
+                "AND NOT EXISTS (SELECT 1 FROM agent_jobs newer WHERE newer.run_id=r.id "
+                "AND newer.status IN ('completed','failed','cancelled') "
+                "AND (r.last_resumed_job_id IS NULL OR newer.id<>r.last_resumed_job_id) "
+                "AND (newer.created_at>j.created_at OR "
+                "(newer.created_at=j.created_at AND newer.ordinal>j.ordinal))) "
+                "AND " + filters + " ORDER BY r.created_at,r.ordinal LIMIT %s",
+                (now, *parameters, CANDIDATE_WINDOW),
+            ).fetchall()
+            sessions: set[str] = set()
+            visited = 0
+            expires = (_now() + timedelta(seconds=lease_seconds)).isoformat()
+            for run_id, user_id, session_id, job_id, _created_at, _ordinal in rows:
+                visited += 1
+                if (session_id in sessions
+                        or users[user_id] >= self._max_active_for_user(user_id, max_user_active)):
                     continue
-                changed = self.db.execute(
-                    "UPDATE agent_runs SET status='resume_queued',active_resume_job_id=?,"
-                    "lease_owner=?,lease_expires_at=? "
-                    "WHERE id=? AND status='waiting' AND NOT EXISTS ("
-                    "SELECT 1 FROM agent_runs active WHERE active.session_id=agent_runs.session_id "
-                    "AND active.id<>agent_runs.id AND active.status IN ('running','resume_queued'))",
-                    (job_id, owner, (_now() + timedelta(seconds=lease_seconds)).isoformat(), run_id),
+                changed = native_or_legacy(self,
+                    "UPDATE agent_runs SET status='resume_queued',active_resume_job_id=%s,"
+                    "lease_owner=%s,lease_expires_at=%s WHERE id=%s AND status='waiting'",
+                    (job_id, owner, expires, run_id),
                 ).rowcount
-            if changed:
-                claimed.append((run_id, user_id, session_id, job_id))
+                if changed:
+                    users[user_id] += 1
+                    sessions.add(session_id)
+                    claimed.append((run_id, user_id, session_id, job_id))
+                    if len(claimed) == capacity:
+                        break
+            advance_cursor(self, "resume", rows, visited)
         return claimed
 
     def record_resume_failure(self, user_id: str, run_id: str, retry_seconds: float) -> bool:

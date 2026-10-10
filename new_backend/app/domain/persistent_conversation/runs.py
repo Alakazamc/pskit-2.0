@@ -131,19 +131,49 @@ class RunsMixin:
         Returns:
             Tuples of Run ID, user ID, session ID, and original prompt.
         """
-        rows = self.db.execute(
-            "SELECT id,user_id,session_id,context_json FROM agent_runs "
-            "WHERE status='queued' AND (retry_after IS NULL OR retry_after<=?) "
-            "ORDER BY created_at,rowid", (_now().isoformat(),),
-        ).fetchall()
+        from .admission import (
+            CANDIDATE_WINDOW,
+            active_counts,
+            advance_cursor,
+            candidate_filter,
+            native_or_legacy,
+        )
+
         claimed: list[tuple[str, str, str, str]] = []
-        for run_id, user_id, session_id, context_json in rows:
-            if len(claimed) >= limit:
-                break
-            if self.claim_initial_run(run_id, owner, lease_seconds,
-                                      max_active=max_active, max_user_active=max_user_active):
-                claimed.append((run_id, user_id, session_id,
-                                json.loads(context_json).get("user_prompt", "")))
+        with self._immediate_transaction():
+            now = _now().isoformat()
+            active, users = active_counts(self, now)
+            capacity = min(max(0, limit), max(0, max_active - active))
+            if capacity == 0:
+                return []
+            filters, parameters = candidate_filter(self, "queued", users, max_user_active)
+            rows = native_or_legacy(self,
+                "SELECT r.id,r.user_id,r.session_id,r.context_json,r.created_at,r.ordinal FROM agent_runs r "
+                "WHERE r.status='queued' AND (r.retry_after IS NULL OR r.retry_after<=%s) "
+                "AND " + filters + " ORDER BY r.created_at,r.ordinal LIMIT %s",
+                (now, *parameters, CANDIDATE_WINDOW),
+            ).fetchall()
+            sessions: set[str] = set()
+            visited = 0
+            expires = (_now() + timedelta(seconds=lease_seconds)).isoformat()
+            for run_id, user_id, session_id, context_json, _created_at, _ordinal in rows:
+                visited += 1
+                if (session_id in sessions
+                        or users[user_id] >= self._max_active_for_user(user_id, max_user_active)):
+                    continue
+                changed = native_or_legacy(self,
+                    "UPDATE agent_runs SET status='running',lease_owner=%s,lease_expires_at=%s "
+                    "WHERE id=%s AND status='queued'",
+                    (owner, expires, run_id),
+                ).rowcount
+                if changed:
+                    users[user_id] += 1
+                    sessions.add(session_id)
+                    claimed.append((run_id, user_id, session_id,
+                                    json.loads(context_json).get("user_prompt", "")))
+                    if len(claimed) == capacity:
+                        break
+            advance_cursor(self, "queued", rows, visited)
         return claimed
 
     def renew_leases(self, owner: str, run_ids: list[str], lease_seconds: int = 10) -> set[str]:
@@ -392,13 +422,51 @@ class RunsMixin:
         Raises:
             ValueError: The Run is absent or belongs to another user.
         """
-        if not self.owns_run(user_id, run_id):
-            raise ValueError("Run owner mismatch")
-        with self.db:
-            self._append_event_in_transaction(run_id, event)
+        self.append_events(user_id, run_id, [event])
 
-    def _append_event_in_transaction(self, run_id: str, event: RunEvent) -> None:
+    def append_events(
+        self, user_id: str, run_id: str, events: list[RunEvent],
+        *, lease_owner: str | None = None,
+    ) -> bool:
+        """Append ordered events atomically, optionally fencing the live Pi writer.
+
+        One row lock serializes event sequence assignment with cancellation and
+        turn commit. No individual SQL statement is moved across threads.
+        """
+        from app.db.postgres import PostgresStatements
+
+        if not events:
+            return True
+        if any(event.run_id != run_id for event in events):
+            raise ValueError("Event Run mismatch")
+        with self.db:
+            row = self.db.execute(
+                "SELECT user_id,status,lease_owner,lease_expires_at FROM agent_runs WHERE id=?"
+                + (" FOR UPDATE" if isinstance(self.db, PostgresStatements) else ""),
+                (run_id,),
+            ).fetchone()
+            if row is None or row[0] != user_id:
+                raise ValueError("Run owner mismatch")
+            if lease_owner is not None and (row[2] != lease_owner
+                    or row[1] not in {"running", "resume_queued"}
+                    or row[3] is None or row[3] <= _now().isoformat()):
+                return False
+            for event in events:
+                self._append_event_in_transaction(run_id, event, _run_locked=True)
+        return True
+
+    def _append_event_in_transaction(
+        self, run_id: str, event: RunEvent, *, _run_locked: bool = False,
+    ) -> None:
         """Assign the next Run sequence and persist an event inside a write transaction."""
+        from app.db.postgres import PostgresStatements
+
+        if isinstance(self.db, PostgresStatements) and not _run_locked:
+            # Repository paths such as compute callbacks also append directly
+            # inside their transaction. Serialize every writer on this row,
+            # including those not entering through append_events. Only the
+            # batch facade reuses the row lock it already holds.
+            self.db.execute_native("SELECT id FROM agent_runs WHERE id=%s FOR UPDATE", (run_id,))
         seq = self.db.execute(
             "SELECT COALESCE(MAX(seq), 0)+1 FROM agent_events WHERE run_id=?", (run_id,)
         ).fetchone()[0]
@@ -523,17 +591,22 @@ class RunsMixin:
                     "artifacts": json.loads(row[4]), "simulation": bool(row[5])},
         ) for row in rows]
 
-    def _compute_tool_results_for_run(self, user_id: str, run_id: str) -> list[ToolResultPart]:
+    def _compute_tool_results_for_run(
+        self, user_id: str, run_id: str, *, tool_names: dict[str, str] | None = None,
+    ) -> list[ToolResultPart]:
         """Project generic terminal reports without calling them AlphaFold outputs."""
         if getattr(self, "database", None) is None:
             return []
+        if tool_names is None:
+            tool_names = {part.tool_call_id: part.tool
+                          for part in self._tool_parts_for_run(user_id, run_id)}
         rows = self.db.execute(
             "SELECT j.tool_call_id,j.id,j.status,d.report_json FROM agent_jobs j "
             "JOIN compute_job_data d ON d.job_id=j.id WHERE j.user_id=? AND j.run_id=? "
             "AND j.status IN ('completed','failed','cancelled') ORDER BY j.ordinal",
             (user_id, run_id),
         ).fetchall()
-        return [ToolResultPart(tool_call_id=call_id, tool="submit_compute",
+        return [ToolResultPart(tool_call_id=call_id, tool=tool_names.get(call_id, "submit_compute"),
                               result={"job_id": job_id, "status": status, "report": report})
                 for call_id, job_id, status, report in rows if call_id]
 
@@ -643,11 +716,14 @@ class RunsMixin:
             )
             if not waiting:
                 self._queue_session_title(user_id, session_id, run_id, answer)
+                tool_parts = self._tool_parts_for_run(user_id, run_id)
                 parts: list[MessagePart] = [
-                    TextPart(text=answer), *self._tool_parts_for_run(user_id, run_id),
+                    TextPart(text=answer), *tool_parts,
                     *(tool_results or []),
                     *self._af3_tool_results_for_run(user_id, run_id),
-                    *self._compute_tool_results_for_run(user_id, run_id),
+                    *self._compute_tool_results_for_run(user_id, run_id, tool_names={
+                        part.tool_call_id: part.tool for part in tool_parts
+                    }),
                     *self._artifact_parts_for_run(user_id, run_id),
                 ]
                 self.db.execute(
