@@ -59,6 +59,7 @@ _POSTGRES_COMPUTE = {
 _POSTGRES_CONTROL_PLANE = {
     "workspace_sandboxes",
     "workspace_sandbox_leases",
+    "workspace_attempts",
     "sandbox_owners",
     "sandbox_leases",
     "sandbox_operations",
@@ -81,7 +82,30 @@ _POSTGRES_AUTH_ABUSE = {
     "auth_abuse_claims",
     "auth_abuse_claim_items",
 }
-_POSTGRES_ONLY = _POSTGRES_COMPUTE | _POSTGRES_CONTROL_PLANE | _POSTGRES_AUTH_ABUSE
+_POSTGRES_TOOL_PRODUCTS = {
+    "mcp_service_endpoints",
+    "mcp_service_revisions",
+    "mcp_probe_snapshots",
+    "mcp_discovery_snapshots",
+    "tool_products",
+    "tool_product_revisions",
+    "capability_bindings",
+    "acceptance_suites",
+    "acceptance_cases",
+    "qualification_reports",
+    "qualification_case_results",
+    "tool_product_releases",
+    "tool_product_release_capabilities",
+    "review_decisions",
+    "tool_product_runs",
+    "tool_product_run_steps",
+    "tool_run_events",
+    "tool_product_run_artifacts",
+    "tool_product_run_usage",
+}
+_POSTGRES_ONLY = (
+    _POSTGRES_COMPUTE | _POSTGRES_CONTROL_PLANE | _POSTGRES_AUTH_ABUSE | _POSTGRES_TOOL_PRODUCTS
+)
 
 
 @dataclass(frozen=True)
@@ -561,6 +585,7 @@ def export_sqlite_snapshot(
                     kind = (
                         "Compute" if table in _POSTGRES_COMPUTE
                         else "Auth abuse" if table in _POSTGRES_AUTH_ABUSE
+                        else "Tool product" if table in _POSTGRES_TOOL_PRODUCTS
                         else "Management or sandbox"
                     )
                     raise ValueError(

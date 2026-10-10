@@ -237,7 +237,7 @@ def test_sqlite_export_refuses_to_drop_compute_catalog(pg_schema, tmp_path):
         database.close()
 
 
-@pytest.mark.parametrize("kind", ["management", "sandbox"])
+@pytest.mark.parametrize("kind", ["management", "sandbox", "tool_product", "workspace_attempt"])
 def test_sqlite_export_preserves_new_control_plane_state(pg_schema, tmp_path, kind):
     """Legacy export must refuse to omit grants, audits or sandbox ownership."""
     from app.db.postgres import PostgresDatabase
@@ -251,10 +251,24 @@ def test_sqlite_export_preserves_new_control_plane_state(pg_schema, tmp_path, ki
         if kind == "management":
             AdminStore(database).grant("alice", "auditor", actor="test-operator",
                                        reason="Review experiment usage")
-        else:
+        elif kind == "sandbox":
             SandboxActivityStore(database).ensure_owner(
                 "alice", "sandbox-test", "sandbox-volume-test", "image:fixed-test",
             )
+        elif kind == "tool_product":
+            with database.transaction() as connection:
+                connection.execute(
+                    "INSERT INTO tool_products "
+                    "(product_id,slug,owner_user_id,revision,draft_json,updated_by) "
+                    "VALUES ('test-product','test-product','alice',1,'{}','test-operator')"
+                )
+        else:
+            with database.transaction() as connection:
+                connection.execute(
+                    "INSERT INTO workspace_attempts "
+                    "(attempt_id,run_id,session_id,user_id,status,fencing_token,created_at,updated_at) "
+                    "VALUES ('test-attempt','test-run','test-session','alice','queued',1,1,1)"
+                )
         destination = tmp_path / "rollback.sqlite3"
         with pytest.raises(ValueError, match="requires a PostgreSQL backup"):
             agent_data_migrate.export_sqlite_snapshot(dsn, destination, schema=schema)
