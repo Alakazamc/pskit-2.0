@@ -41,6 +41,35 @@ def test_qualified_manifest_uses_immutable_full_overlay(tmp_path):
     assert load_manifest(write(tmp_path, value), require_qualified=True) == value
 
 
+def test_manifest_preserves_optional_admission_qualification(tmp_path):
+    value = candidate()
+    value["admission"] = {
+        "component_version": 1,
+        "enforcement_version": "pskit.db-admission.v1",
+        "qualification_sha256": "a" * 64,
+    }
+    assert load_manifest(write(tmp_path, value), require_qualified=True) == value
+
+
+@pytest.mark.parametrize("admission", [
+    None, {},
+    {"component_version": 1, "enforcement_version": "pskit.db-admission.v1"},
+    {"component_version": 0, "enforcement_version": "pskit.db-admission.v1",
+     "qualification_sha256": "a" * 64},
+    {"component_version": 1, "enforcement_version": "unqualified-v2",
+     "qualification_sha256": "a" * 64},
+    {"component_version": 1, "enforcement_version": "pskit.db-admission.v1",
+     "qualification_sha256": "PLACEHOLDER"},
+    {"component_version": 1, "enforcement_version": "pskit.db-admission.v1",
+     "qualification_sha256": "a" * 64, "api_key": "forbidden"},
+])
+def test_manifest_rejects_incomplete_or_unknown_admission_evidence(tmp_path, admission):
+    value = candidate()
+    value["admission"] = admission
+    with pytest.raises(ValueError, match="pskit.release.v1"):
+        load_manifest(write(tmp_path, value))
+
+
 @pytest.mark.parametrize("mutation", [
     lambda m: m["backend"].update(reference="pskit-agent-backend:latest"),
     lambda m: m["checks"]["smoke"].update(evidence_sha256=None),

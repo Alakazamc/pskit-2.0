@@ -246,6 +246,27 @@
       "maxLength": 120,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
     },
+    "admission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component_version",
+        "enforcement_version",
+        "qualification_sha256"
+      ],
+      "properties": {
+        "component_version": {
+          "const": 1
+        },
+        "enforcement_version": {
+          "const": "pskit.db-admission.v1"
+        },
+        "qualification_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
     "opensandbox": {
       "type": [
         "object",
