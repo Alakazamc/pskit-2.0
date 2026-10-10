@@ -1,13 +1,20 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { RunEvent } from "./types";
 import { ApiError, createHttpApi } from "./http";
 
 describe("HTTP Research API", () => {
-  it("parses only positive integer Retry-After seconds", () => {
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  it("parses nonnegative Retry-After seconds and HTTP dates", () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-10T00:00:00Z"));
     expect(new ApiError(429, { code: "AUTH_RATE_LIMITED" }, "17").retryAfterSeconds).toBe(17);
-    expect(new ApiError(429, {}, "0").retryAfterSeconds).toBeUndefined();
+    expect(new ApiError(429, {}, "0").retryAfterSeconds).toBe(0);
+    expect(new ApiError(429, {}, " 42 ").retryAfterSeconds).toBe(42);
     expect(new ApiError(429, {}, "1.5").retryAfterSeconds).toBeUndefined();
-    expect(new ApiError(429, {}, "Wed, 21 Oct 2026 07:28:00 GMT").retryAfterSeconds)
-      .toBeUndefined();
+    expect(new ApiError(429, {}, "Sat, 10 Oct 2026 00:00:42 GMT").retryAfterSeconds).toBe(42);
+    expect(new ApiError(503, {}, "Fri, 09 Oct 2026 00:00:00 GMT").retryAfterSeconds).toBe(0);
+    expect(new ApiError(429, {}, "invalid").retryAfterSeconds).toBeUndefined();
+    expect(new ApiError(429, {}, "9007199254740992").retryAfterSeconds).toBeUndefined();
   });
 
   it("forwards captcha proof only to protected Python mail routes", async () => {
@@ -373,4 +380,232 @@ describe("HTTP Research API", () => {
       expect.objectContaining({ method: "DELETE" }),
     );
   });
+
+  it.each(["snapshot", "stream"])("preserves status, detail and Retry-After for %s errors", async (mode) => {
+    const api = createHttpApi({ token: () => null, fetcher: vi.fn(async () => new Response(
+      JSON.stringify({ detail: { code: "EVENTS_RATE_LIMITED", message: "Please wait" } }),
+      { status: 429, headers: { "Retry-After": "42" } },
+    )) });
+    const reading = mode === "snapshot" ? api.getRunEvents("run-1")
+      : api.streamRunEvents("run-1", undefined, vi.fn(), new AbortController().signal);
+    await expect(reading).rejects.toMatchObject({ name: "ApiError", status: 429,
+      message: "Please wait", code: "EVENTS_RATE_LIMITED", retryAfterSeconds: 42 });
+  });
+
+  it.each(["snapshot", "stream"])("preserves an HTTP date Retry-After on %s errors", async (mode) => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-10T00:00:00Z"));
+    const api = createHttpApi({ token: () => null, fetcher: vi.fn(async () => new Response("Unavailable", {
+      status: 503, statusText: "Service Unavailable", headers: { "Retry-After": "Sat, 10 Oct 2026 00:00:42 GMT" },
+    })) });
+    const reading = mode === "snapshot" ? api.getRunEvents("run-1")
+      : api.streamRunEvents("run-1", undefined, vi.fn(), new AbortController().signal);
+    await expect(reading).rejects.toMatchObject({ name: "ApiError", status: 503,
+      message: "Service Unavailable", retryAfterSeconds: 42 });
+  });
+
+  it.each(["snapshot", "stream"])("handles cross-chunk CRLF, comments and multiline JSON for %s", async (mode) => {
+    const event: RunEvent = { id: "3", run_id: "run-1", type: "message.delta", data: { delta: "中文🧬" } };
+    const encoded = new TextEncoder().encode(`: heartbeat\r\nid: 3\r\ndata: {"id":"3","run_id":"run-1",\r\ndata: "type":"message.delta","data":{"delta":"中文🧬"}}\r\n\r\n`);
+    const api = createHttpApi({ token: () => null, fetcher: vi.fn(async () => byteResponse(encoded)) });
+    const received: RunEvent[] = [];
+    if (mode === "snapshot") received.push(...await api.getRunEvents("run-1"));
+    else await api.streamRunEvents("run-1", undefined, (item) => received.push(item), new AbortController().signal);
+    expect(received).toEqual([event]);
+  });
+
+  it.each(["snapshot", "stream"])("skips bad JSON and continues to the next frame for %s", async (mode) => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const event: RunEvent = { id: "2", run_id: "run-1", type: "message.delta", data: { delta: "valid" } };
+    const api = createHttpApi({ token: () => null, fetcher: vi.fn(async () => new Response(
+      `data: invalid json\n\ndata: ${JSON.stringify(event)}\n\n`,
+    )) });
+    const received: RunEvent[] = [];
+    if (mode === "snapshot") received.push(...await api.getRunEvents("run-1"));
+    else await api.streamRunEvents("run-1", undefined, (item) => received.push(item), new AbortController().signal);
+    expect(received).toEqual([event]);
+    expect(log).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["snapshot", "stream"])("rejects a complete oversized frame before delivering it for %s", async (mode) => {
+    const event: RunEvent = { id: "1", run_id: "run-1", type: "message.delta", data: { delta: "x".repeat(1_000_000) } };
+    const onEvent = vi.fn();
+    const api = createHttpApi({ token: () => null, fetcher: vi.fn(async () => new Response(`data: ${JSON.stringify(event)}\n\n`)) });
+    const reading = mode === "snapshot" ? api.getRunEvents("run-1")
+      : api.streamRunEvents("run-1", undefined, onEvent, new AbortController().signal);
+    await expect(reading).rejects.toThrow("Event frame too large");
+    expect(onEvent).not.toHaveBeenCalled();
+  });
+
+  it("rejects an oversized partial frame and cancels the stream before EOF", async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(new TextEncoder().encode(`data: ${"中".repeat(333_332)}`));
+    }, cancel });
+    const api = createHttpApi({ token: () => null, fetcher: vi.fn(async () => new Response(body)) });
+    const onEvent = vi.fn();
+    await expect(api.streamRunEvents("run-1", undefined, onEvent, new AbortController().signal))
+      .rejects.toThrow("Event frame too large");
+    expect(onEvent).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(body.locked).toBe(false);
+  });
+
+  it.each(["same chunk", "separate chunks"])("delivers earlier tool, plan and artifact frames before an oversized tail in %s", async (partition) => {
+    const events: RunEvent[] = [
+      { id: "1", run_id: "run-1", type: "tool.finished", data: {
+        tool_call_id: "call-1", tool: "read_file", status: "completed", summary: "Read file",
+      } },
+      { id: "2", run_id: "run-1", type: "plan.updated", data: { steps: [
+        { id: "inspect", title: "Inspect", status: "completed" },
+      ] } },
+      { id: "3", run_id: "run-1", type: "artifact.created", data: {
+        artifact_id: "artifact-1", name: "report.md", kind: "document",
+      } },
+    ];
+    const prefix = events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("");
+    const tail = `data: ${"x".repeat(1_000_000)}\n\n`;
+    const body = new ReadableStream<Uint8Array>({ start(controller) {
+      for (const chunk of partition === "same chunk" ? [prefix + tail] : [prefix, tail]) {
+        controller.enqueue(new TextEncoder().encode(chunk));
+      }
+      controller.close();
+    } });
+    const api = createHttpApi({ token: () => null, fetcher: vi.fn(async () => new Response(body)) });
+    const received: RunEvent[] = [];
+    await expect(api.streamRunEvents("run-1", undefined, (event) => received.push(event), new AbortController().signal))
+      .rejects.toThrow("Event frame too large");
+    expect(received).toEqual(events);
+    expect(body.locked).toBe(false);
+  });
+
+  it("propagates the consumer error from an accepted prefix before its oversized tail", async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(new TextEncoder().encode(`data: {"id":"1"}\n\ndata: ${"x".repeat(1_000_000)}`));
+    }, cancel });
+    const api = createHttpApi({ token: () => null, fetcher: vi.fn(async () => new Response(body)) });
+    const error = new Error("consumer failed");
+    await expect(api.streamRunEvents("run-1", undefined, () => { throw error; }, new AbortController().signal))
+      .rejects.toBe(error);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(body.locked).toBe(false);
+  });
+
+  it("quietly aborts on an accepted terminal event before its oversized tail", async () => {
+    const cancel = vi.fn();
+    const event: RunEvent = { id: "1", run_id: "run-1", type: "run.completed", data: { status: "completed" } };
+    const body = new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\ndata: ${"x".repeat(1_000_000)}`));
+    }, cancel });
+    const api = createHttpApi({ token: () => null, fetcher: vi.fn(async () => new Response(body)) });
+    const controller = new AbortController();
+    const received: RunEvent[] = [];
+    await expect(api.streamRunEvents("run-1", undefined, (item) => {
+      received.push(item);
+      controller.abort();
+    }, controller.signal)).resolves.toBeUndefined();
+    expect(received).toEqual([event]);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(body.locked).toBe(false);
+  });
+
+  it("propagates consumer errors and cancels the reader", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode('data: {"id":"1"}\n\n')); }, cancel,
+    });
+    const api = createHttpApi({ token: () => null, fetcher: vi.fn(async () => new Response(body)) });
+    const error = new Error("consumer failed");
+    await expect(api.streamRunEvents("run-1", undefined, () => { throw error; }, new AbortController().signal)).rejects.toBe(error);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(body.locked).toBe(false);
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("cancels a pending read on abort and never delivers subsequent events", async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ cancel });
+    const api = createHttpApi({ token: () => null, fetcher: vi.fn(async () => new Response(body)) });
+    const controller = new AbortController();
+    const onEvent = vi.fn();
+    const reading = api.streamRunEvents("run-1", undefined, onEvent, controller.signal);
+    await Promise.resolve();
+    controller.abort();
+    await reading;
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(body.locked).toBe(false);
+    expect(onEvent).not.toHaveBeenCalled();
+  });
+
+  it("reports a healthy EOF using established reader time after comment-only heartbeats", async () => {
+    vi.useFakeTimers();
+    const body = new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(new TextEncoder().encode(": heartbeat\n\n"));
+      setTimeout(() => controller.close(), 45_000);
+    } });
+    const api = createHttpApi({ token: () => null, fetcher: vi.fn(async () => new Response(body)) });
+    const onEvent = vi.fn();
+    const reading = api.streamRunEvents("run-1", undefined, onEvent, new AbortController().signal)
+      .then(() => undefined, (error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(await reading).toMatchObject({ name: "SseTransportError", healthy: true, readerDurationMs: 45_000 });
+    expect(onEvent).not.toHaveBeenCalled();
+    expect(body.locked).toBe(false);
+  });
+
+  it("excludes slow response headers from reader failure health and preserves its cause", async () => {
+    vi.useFakeTimers();
+    const error = new TypeError("Short connection interrupted");
+    const api = createHttpApi({ token: () => null, fetcher: vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 45_000));
+      return new Response(new ReadableStream<Uint8Array>({ start(controller) {
+        controller.enqueue(new TextEncoder().encode(": heartbeat\n\n"));
+        setTimeout(() => controller.error(error), 1_000);
+      } }));
+    }) });
+    const reading = api.streamRunEvents("run-1", undefined, vi.fn(), new AbortController().signal)
+      .then(() => undefined, (caught: unknown) => caught);
+    await vi.advanceTimersByTimeAsync(46_000);
+    expect(await reading).toMatchObject({ name: "SseTransportError", healthy: false, readerDurationMs: 1_000, cause: error });
+  });
+
+  it("preserves consumer errors after a long healthy reader without transport wrapping", async () => {
+    vi.useFakeTimers();
+    const error = new TypeError("Consumer interrupted");
+    const body = new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(new TextEncoder().encode(": heartbeat\n\n"));
+      setTimeout(() => controller.enqueue(new TextEncoder().encode('data: {"id":"1"}\n\n')), 45_000);
+    } });
+    const api = createHttpApi({ token: () => null, fetcher: vi.fn(async () => new Response(body)) });
+    const reading = api.streamRunEvents("run-1", undefined, () => { throw error; }, new AbortController().signal)
+      .then(() => undefined, (caught: unknown) => caught);
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(await reading).toBe(error);
+    expect(body.locked).toBe(false);
+  });
+
+  it("keeps a terminal EOF successful after a long established reader", async () => {
+    vi.useFakeTimers();
+    const event: RunEvent = { id: "1", run_id: "run-1", type: "run.completed", data: { status: "completed" } };
+    const body = new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
+      setTimeout(() => controller.close(), 45_000);
+    } });
+    const api = createHttpApi({ token: () => null, fetcher: vi.fn(async () => new Response(body)) });
+    const received: RunEvent[] = [];
+    const reading = api.streamRunEvents("run-1", undefined, (item) => received.push(item), new AbortController().signal)
+      .then(() => undefined, (error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(await reading).toBeUndefined();
+    expect(received).toEqual([event]);
+    expect(body.locked).toBe(false);
+  });
 });
+
+function byteResponse(bytes: Uint8Array): Response {
+  return new Response(new ReadableStream<Uint8Array>({ start(controller) {
+    for (const byte of bytes) controller.enqueue(new Uint8Array([byte]));
+    controller.close();
+  } }));
+}

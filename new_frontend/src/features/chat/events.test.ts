@@ -44,7 +44,7 @@ describe("run event projection", () => {
     ]);
     expect(view.text).toBe("complete");
     expect(view.plan).toHaveLength(1);
-    expect(view.tools).toEqual([{ id: "call-1", name: "af3", status: "completed" }]);
+    expect(view.tools).toEqual([{ id: "call-1", name: "af3", status: "completed", summary: "Done" }]);
     expect(view.status).toBe("running");
   });
   it("tracks typed tool lifecycle without exposing arguments or results", () => {
@@ -53,7 +53,7 @@ describe("run event projection", () => {
       { id: "2", run_id: "run-1", type: "tool.updated", data: { tool_call_id: "call-1", tool: "search_pdb" } },
       { id: "3", run_id: "run-1", type: "tool.finished", data: { tool_call_id: "call-1", tool: "search_pdb", status: "completed", summary: "Tool completed" } },
     ]);
-    expect(view.tools).toEqual([{ id: "call-1", name: "search_pdb", status: "completed" }]);
+    expect(view.tools).toEqual([{ id: "call-1", name: "search_pdb", status: "completed", summary: "Tool completed" }]);
     expect(view.cursor).toBe("3");
   });
   it("deduplicates replayed events and tracks task completion", () => {
@@ -91,4 +91,83 @@ describe("run event projection", () => {
     expect(view.status).toBe("cancelled");
     expect(view.cursor).toBe("2");
   });
+
+  it("replaces text across old, reset and new batches without mutating the old view", () => {
+    const old = projectEvents(emptyRun, [delta("1", "old")]);
+    const reset = projectEvents(old, [retry("2")]);
+    const next = projectEvents(reset, [delta("3", "new")]);
+    expect(reset.text).toBe("");
+    expect(next.text).toBe("new");
+    expect(next.cursor).toBe("3");
+    expect(next.retry).toEqual({ attempt: 1, maxAttempts: 3 });
+    expect(old.text).toBe("old");
+  });
+
+  it("clears an earlier error on reset and keeps a failure occurring after that reset", () => {
+    const failed = projectEvents(emptyRun, [{ id: "1", run_id: "run-1", type: "run.failed", data: {
+      code: "PI_RUN_FAILED", message: "old error",
+    } }]);
+    const reset = projectEvents(failed, [retry("2")]);
+    expect(reset.error).toBeUndefined();
+    expect(reset.status).toBe("running");
+    const next = projectEvents(failed, [retry("2"), { id: "3", run_id: "run-1", type: "run.failed", data: {
+      code: "PI_RUN_FAILED", message: "new error",
+    } }]);
+    expect(next.error).toBe("new error");
+    expect(next.status).toBe("failed");
+  });
+
+  it("deduplicates event ids within a batch and across replays without regressing the cursor", () => {
+    const event = delta("1", "x");
+    const first = projectEvents(emptyRun, [event, event]);
+    expect(first.text).toBe("x");
+    expect(first.events).toHaveLength(1);
+    const next = projectEvents(first, [event, delta("2", "y"), event, delta("2", "y")]);
+    expect(next.text).toBe("xy");
+    expect(next.events.map((item) => item.id)).toEqual(["1", "2"]);
+    expect(next.cursor).toBe("2");
+    expect(projectEvents(next, [event, delta("2", "y")])).toBe(next);
+  });
+
+  it("applies multiple resets in order while retaining plan, tools and artifacts", () => {
+    const previous = projectEvents(emptyRun, [
+      { id: "p", run_id: "run-1", type: "plan.created", data: { steps: [
+        { id: "inspect", title: "Inspect", status: "completed" },
+      ] } },
+      { id: "t", run_id: "run-1", type: "tool.finished", data: {
+        tool_call_id: "call-1", tool: "search_pdb", status: "completed", summary: "Found structure",
+      } },
+      { id: "a", run_id: "run-1", type: "artifact.created", data: {
+        artifact_id: "artifact-1", name: "report.md", kind: "document",
+      } },
+      delta("1", "old"),
+    ]);
+    const next = projectEvents(previous, [delta("2", "partial"), retry("3"), delta("4", "retry partial"),
+      retry("5"), delta("6", "final")]);
+    expect(next.text).toBe("final");
+    expect(next.plan).toEqual([{ id: "inspect", title: "Inspect", status: "completed" }]);
+    expect(next.tools).toEqual([{ id: "call-1", name: "search_pdb", status: "completed", summary: "Found structure" }]);
+    expect(next.artifacts).toEqual([{ id: "artifact-1", name: "report.md", kind: "document" }]);
+    expect(next.cursor).toBe("6");
+  });
+
+  it("retains text and errors for retries that do not reset the message", () => {
+    const previous = projectEvents(emptyRun, [delta("1", "partial"), {
+      id: "2", run_id: "run-1", type: "run.failed", data: { code: "PI_RUN_FAILED", message: "failure" },
+    }]);
+    const event = retry("3");
+    const next = projectEvents(previous, [{ ...event, data: { ...event.data, reset_message: false } }]);
+    expect(next.text).toBe("partial");
+    expect(next.error).toBe("failure");
+  });
 });
+
+function delta(id: string, text: string): RunEvent {
+  return { id, run_id: "run-1", type: "message.delta", data: { delta: text } };
+}
+
+function retry(id: string): Extract<RunEvent, { type: "run.retrying" }> {
+  return { id, run_id: "run-1", type: "run.retrying", data: {
+    attempt: 1, max_attempts: 3, delay_ms: 1000, reset_message: true,
+  } };
+}

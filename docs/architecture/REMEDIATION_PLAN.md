@@ -42,23 +42,23 @@
 
 **Interfaces:** `SseFrameDecoder.push(chunk: Uint8Array): SseFrame[]` / `finish(): SseFrame[]`，维护UTF-8与跨块CR状态，单帧限1,000,000 bytes；HTTP适配仍向业务交付既有RunEvent。重连策略消费既有 `ApiError.status/retryAfterSeconds`，返回stop或有界delay；保留cursor。
 
-- [ ] 增加跨三批old/reset/new、清旧error、同/跨批去重、多次reset及plan/tool/artifact保留回归，确认先失败。
-- [ ] 按事件顺序清累积正文和错误；本批也更新seen，现有事件字段不变。
-- [ ] 增加CR/LF每个拆分边界、UTF-8、comment、多行data、bad JSON、完整/半帧超限回归；在消费前控制最大帧。
-- [ ] 保留ApiError及Retry-After（秒和HTTP日期）；401/403/404停止盲重试，429按服务器等待，503/网络有上限backoff+jitter；Abort/terminal不告警。
-- [ ] fake timer验证重连、cursor续接和卸载；更新已漂移summary断言而非删除内容检查。
-- [ ] 运行目标Vitest、typecheck/lint；独立提交 `fix(frontend-events): ...`。
+- [x] 增加跨三批old/reset/new、清旧error、同/跨批去重、多次reset及plan/tool/artifact保留回归，确认先失败。
+- [x] 按事件顺序清累积正文和错误；本批也更新seen，现有事件字段不变。
+- [x] 增加CR/LF每个拆分边界、UTF-8、comment、多行data、bad JSON、完整/半帧超限回归；在消费前控制最大帧。
+- [x] 保留ApiError及Retry-After（秒和HTTP日期）；401/403/404停止盲重试，429按服务器等待，503/网络有上限backoff+jitter；Abort/terminal不告警。
+- [x] fake timer验证重连、cursor续接和卸载；更新已漂移summary断言而非删除内容检查。
+- [x] 运行目标Vitest、typecheck/lint；独立提交 `fix(frontend-events): ...`。
 
 ### 1B. 封闭不安全旧发布路径（D-01..03/S-01）
 
 **Files:** `deploy_to_cloud.sh`、`deploy/agent/tests/test_safe_release_entrypoint.py`；`deploy/agent/stack.sh`和生产env示例的纯预检；`docs/runbooks/DEPLOYMENT.md`与发布runbook。
 
-- [ ] 将根旧脚本变为无副作用的非零弃用入口，指向现行app-only操作；不能执行SSH/full down/provision/migrate/rsync-delete/test-key fallback。
-- [ ] stub PATH测试旧入口所有历史参数（含rollback/帮助），证明未执行外部命令；弃用是行为安全修复，不伪称新完整发布器已实现。
-- [ ] 生产captcha配置校验覆盖全部官方公开测试key，缺配置拒绝；核对可信proxy和明确执行限流层。保留Nginx dry-run供观测，不能把模板当生产限流验收。
-- [ ] 文档中的API-only命令显式保留OpenSandbox overlays并使用 `/health/ready`；smoke失败必须非零，DB迁移单独执行。
-- [ ] 现有auth enforce/429、CSRF/匿名/owner边界回归；生产有效限流列needs_live_validation，不在线改Nginx。
-- [ ] bash语法/部署单测完成；独立提交 `fix(deploy-release): ...`。
+- [x] 将根旧脚本变为无副作用的非零弃用入口，指向现行app-only操作；不能执行SSH/full down/provision/migrate/rsync-delete/test-key fallback。
+- [x] stub PATH测试旧入口所有历史参数（含rollback/帮助），证明未执行外部命令；弃用是行为安全修复，不伪称新完整发布器已实现。
+- [x] 生产captcha配置校验覆盖全部官方公开测试key，缺配置拒绝；核对可信proxy和明确执行限流层。保留Nginx dry-run供观测，不能把模板当生产限流验收。
+- [x] 文档中的API-only命令显式保留OpenSandbox overlays并使用 `/health/ready`；smoke失败必须非零，DB迁移单独执行。
+- [x] 现有auth enforce/429、CSRF/匿名/owner边界回归；生产有效限流列needs_live_validation，不在线改Nginx。
+- [x] bash语法/部署单测完成；独立提交 `fix(deploy-release): ...`。
 
 **Gate:** 1A/1B目标回归通过，静态和stub证明日常旧入口不能停库；未满足真实线上防护的部分只列待授权。**Rollback:** revert对应小提交；安全入口不建议恢复unsafe执行，保留已知好制品的手册回退，无DB迁移。
 

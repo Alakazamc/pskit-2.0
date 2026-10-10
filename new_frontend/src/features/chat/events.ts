@@ -8,7 +8,11 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
 
   // Filter out duplicate events first
   const seen = new Set(previous.events.map((event) => event.id));
-  const newEvents = incoming.filter((event) => !seen.has(event.id));
+  const newEvents = incoming.filter((event) => {
+    if (seen.has(event.id)) return false;
+    seen.add(event.id);
+    return true;
+  });
 
   if (newEvents.length === 0) return previous;
 
@@ -25,8 +29,8 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
   const toolUpdates = new Map<string, { id: string; name: string; status: string; summary: string }>();
   let newPlan: PlanStep[] | undefined;
   let statusChange: RunView["status"] | undefined;
-  let textDelta = "";
-  let errorMessage: string | undefined;
+  let text = previous.text;
+  let errorMessage = previous.error;
   let newRetry: RunView["retry"] | undefined;
   let newApproval: RunView["approval"] | undefined;
   let approvalCleared = false;
@@ -42,7 +46,7 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
       case "message.end":
         break;
       case "message.delta":
-        textDelta += event.data.delta;
+        text += event.data.delta;
         break;
       case "tool.started":
         toolUpdates.set(event.data.tool_call_id, {
@@ -113,7 +117,7 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
           maxAttempts: event.data.max_attempts
         };
         if (event.data.reset_message) {
-          textDelta = "";
+          text = "";
           errorMessage = undefined;
           statusChange = "running";
         }
@@ -141,8 +145,8 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
     eventsChanged = true;
   }
 
-  if (textDelta) {
-    next = { ...next, text: next.text + textDelta };
+  if (text !== previous.text) {
+    next = { ...next, text };
   }
 
   if (artifactsChanged) {
@@ -162,7 +166,7 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
     next = { ...next, status: statusChange };
   }
 
-  if (errorMessage !== undefined) {
+  if (errorMessage !== previous.error) {
     next = { ...next, error: errorMessage };
   }
 

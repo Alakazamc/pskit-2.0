@@ -1,8 +1,22 @@
 import type { ResearchApi, RunEvent } from "./types";
 import { projectRouteKey } from "./routeKeys";
 import { createAdminApi } from "./admin";
+import { SseFrameDecoder, SseFrameError, type SseFrame } from "./sse";
 
 type Options = { baseUrl?: string; token: () => string | null; fetcher?: typeof fetch; onUnauthorized?: () => Promise<string | null> };
+
+const HEALTHY_STREAM_MS = 30_000;
+
+/** Health metadata for an established response reader, never a pending fetch. */
+export class SseTransportError extends Error {
+  readonly healthy: boolean;
+
+  constructor(message: string, readonly readerDurationMs: number, receivedData: boolean, cause?: unknown) {
+    super(message, { cause });
+    this.name = "SseTransportError";
+    this.healthy = receivedData && readerDurationMs >= HEALTHY_STREAM_MS;
+  }
+}
 
 export class ApiError extends Error {
   readonly code?: string;
@@ -13,10 +27,83 @@ export class ApiError extends Error {
     super(typeof detail === "string" ? detail : typeof data?.message === "string" ? data.message : `HTTP ${status}`);
     this.name = "ApiError";
     if (typeof data?.code === "string") this.code = data.code;
-    if (retryAfterHeader && /^[1-9][0-9]*$/.test(retryAfterHeader)) {
-      const seconds = Number(retryAfterHeader);
+    const retryAfter = retryAfterHeader?.trim();
+    if (retryAfter && /^[0-9]+$/.test(retryAfter)) {
+      const seconds = Number(retryAfter);
       if (Number.isSafeInteger(seconds)) this.retryAfterSeconds = seconds;
+    } else if (retryAfter && /^[A-Za-z]{3},? /.test(retryAfter)) {
+      const deadline = Date.parse(retryAfter);
+      if (Number.isFinite(deadline)) this.retryAfterSeconds = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
     }
+  }
+}
+
+async function responseError(response: Response): Promise<ApiError> {
+  const payload: unknown = await response.json().catch(() => null);
+  const detail = payload && typeof payload === "object" && "detail" in payload ? payload.detail : response.statusText;
+  return new ApiError(response.status, detail, response.headers.get("Retry-After"));
+}
+
+async function readRunEvents(response: Response, onEvent: (event: RunEvent) => void, signal?: AbortSignal) {
+  if (!response.body) throw new Error("Event stream has no body");
+  const reader = response.body.getReader();
+  const readerStartedAt = Date.now();
+  const decoder = new SseFrameDecoder();
+  let done = false;
+  let receivedData = false;
+  let terminal = false;
+  const abort = () => { void reader.cancel().catch(() => {}); };
+  const consume = (frames: SseFrame[]) => {
+    for (const frame of frames) {
+      if (signal?.aborted) break;
+      let event: RunEvent;
+      try {
+        event = JSON.parse(frame.data) as RunEvent;
+      } catch (error) {
+        console.error("Failed to parse SSE event:", error);
+        continue;
+      }
+      if (event?.type === "run.completed" || event?.type === "run.failed" || event?.type === "run.cancelled") terminal = true;
+      // Consumer failures must propagate; they are not malformed JSON.
+      onEvent(event);
+    }
+  };
+  signal?.addEventListener("abort", abort, { once: true });
+  try {
+    while (!signal?.aborted) {
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        chunk = await reader.read();
+      } catch (error) {
+        if (signal?.aborted || (typeof error === "object" && error !== null && "name" in error && error.name === "AbortError")) {
+          throw error;
+        }
+        // Wrap only reader failures; parser and consumer exceptions stay unchanged.
+        throw new SseTransportError(error instanceof Error ? error.message : "Event stream interrupted",
+          Math.max(0, Date.now() - readerStartedAt), receivedData, error);
+      }
+      if (chunk.done) { done = true; break; }
+      if (signal?.aborted) break;
+      receivedData ||= chunk.value.byteLength > 0;
+      let frames: SseFrame[];
+      try {
+        frames = decoder.push(chunk.value);
+      } catch (error) {
+        if (!(error instanceof SseFrameError)) throw error;
+        // Deliver the valid prefix even when the same network chunk has a bad tail.
+        // Consumer errors propagate, and a terminal callback may abort the reader.
+        consume(error.acceptedFrames);
+        if (signal?.aborted) break;
+        throw error;
+      }
+      consume(frames);
+    }
+    if (!signal?.aborted) consume(decoder.finish());
+    return { readerDurationMs: Math.max(0, Date.now() - readerStartedAt), receivedData, terminal };
+  } finally {
+    signal?.removeEventListener("abort", abort);
+    if (!done) await reader.cancel().catch(() => {});
+    reader.releaseLock();
   }
 }
 
@@ -57,11 +144,7 @@ export function createHttpApi({ baseUrl = "/api/v1", token, fetcher = fetch, onU
   };
   const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
     const response = await send(path, init);
-    if (!response.ok) {
-      const payload: unknown = await response.json().catch(() => null);
-      const detail = payload && typeof payload === "object" && "detail" in payload ? payload.detail : response.statusText;
-      throw new ApiError(response.status, detail, response.headers.get("Retry-After"));
-    }
+    if (!response.ok) throw await responseError(response);
     return response.json() as Promise<T>;
   };
   const post = <T>(path: string, body: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(body) });
@@ -171,59 +254,21 @@ export function createHttpApi({ baseUrl = "/api/v1", token, fetcher = fetch, onU
     async getRunEvents(runId, after) {
       const path = `/runs/${encodeURIComponent(runId)}/events?follow=false${after ? `&after=${encodeURIComponent(after)}` : ""}`;
       const response = await send(path);
-      if (!response.ok) throw new Error(`Event stream HTTP ${response.status}`);
-      const body = await response.text();
-      return body.split("\n\n").flatMap((block): RunEvent[] => {
-        const line = block.split("\n").find((part) => part.startsWith("data: "));
-        return line ? [JSON.parse(line.slice(6)) as RunEvent] : [];
-      });
+      if (!response.ok) throw await responseError(response);
+      const events: RunEvent[] = [];
+      await readRunEvents(response, (event) => events.push(event));
+      return events;
     },
     async streamRunEvents(runId, after, onEvent, signal) {
       const path = `/runs/${encodeURIComponent(runId)}/events${after ? `?after=${encodeURIComponent(after)}` : ""}`;
       const response = await send(path, { signal });
-      if (!response.ok) throw new Error(`Event stream HTTP ${response.status}`);
-      if (!response.body) throw new Error("Event stream has no body");
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      const consume = () => {
-        let boundary: number;
-        while ((boundary = buffer.indexOf("\n\n")) !== -1) {
-          const frame = buffer.slice(0, boundary);
-          buffer = buffer.slice(boundary + 2);
-
-          // Parse SSE frame: support multi-line data fields
-          const lines = frame.split("\n");
-          let eventData = "";
-
-          for (const line of lines) {
-            if (line.startsWith("data:")) {
-              const content = line.slice(5).trimStart();
-              eventData += (eventData ? "\n" : "") + content;
-            }
-          }
-
-          if (eventData && !signal.aborted) {
-            try {
-              onEvent(JSON.parse(eventData) as RunEvent);
-            } catch (e) {
-              console.error("Failed to parse SSE event:", eventData, e);
-            }
-          }
-        }
-        if (buffer.length > 1_000_000) throw new Error("Event frame too large");
-      };
-      try {
-        while (!signal.aborted) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true }).replaceAll("\r\n", "\n");
-          consume();
-        }
-        buffer += decoder.decode();
-        consume();
-      } finally {
-        reader.releaseLock();
+      if (!response.ok) throw await responseError(response);
+      const observed = await readRunEvents(response, onEvent, signal);
+      if (!signal.aborted && !observed.terminal) {
+        const closed = new SseTransportError("Event stream closed before the run ended",
+          observed.readerDurationMs, observed.receivedData);
+        // Preserve healthy EOF metadata through the existing rejection channel.
+        if (closed.healthy) throw closed;
       }
     },
     getMcpTools: () => request("/mcp/tools"),
