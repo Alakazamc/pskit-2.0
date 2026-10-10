@@ -18,6 +18,8 @@ import httpx
 
 from app.contracts.compute import ComputeClaimRequest, WorkerResources
 from app.services.structured_logging import compute_logger
+from pskit_compute.activity import ActivityObserver, LiveActivity, ObservedReceiver
+from pskit_compute.activity_http import ActivitySettings, activity_listener
 from pskit_compute.dynamic_mcp import DynamicMcpExecutor
 from pskit_compute.journal import Journal
 from pskit_compute.receiver import ControlClient, Receiver
@@ -164,6 +166,13 @@ async def local_af3_mcp(spool, port, *, host="127.0.0.1", token=""):
 
 
 async def run(args) -> None:
+    activity_settings = ActivitySettings.from_environment(os.environ)
+    if activity_settings.enabled and (not args.af3_backend_url or not args.af3_spool_dir):
+        raise ValueError("ACTIVITY_CONFIG_INVALID")
+    product_enabled = bool(os.environ.get("PSKIT_AF3_COMPUTE_SERVICE_KEY"))
+    live = LiveActivity({"generic": True, "compatibility": bool(args.af3_backend_url), "product": product_enabled})
+    def observed(worker, lane):
+        return ObservedReceiver(worker, live, lane) if activity_settings.enabled else worker
     endpoint, credential = configured_resolvers()
     executor = DynamicMcpExecutor(endpoint, credential)
     if args.af3_backend_url and not args.af3_spool_dir:
@@ -178,7 +187,7 @@ async def run(args) -> None:
                 service_id=args.service_id,
                 service_key=os.environ["PSKIT_COMPUTE_SERVICE_KEY"],
             )
-            receiver = Receiver(
+            receiver = observed(Receiver(
                 executor,
                 control,
                 journal,
@@ -187,7 +196,7 @@ async def run(args) -> None:
                     worker_id=args.worker_id,
                     resources=WorkerResources(gpu_uuids=args.gpu_uuid),
                 ),
-            )
+            ), "generic")
             if not args.af3_backend_url:
                 await receive(receiver, args.poll_seconds)
                 return
@@ -205,10 +214,10 @@ async def run(args) -> None:
                 gpu_memory_mb=args.af3_gpu_memory_mb,
                 mcp_credential_ref="af3-mcp-key" if os.environ.get("PSKIT_AF3_MCP_TOKEN") else None,
             )
-            af3_receiver = Receiver(
+            af3_receiver = observed(Receiver(
                 Af3McpExecutor(endpoint, credential, spool=spool), af3_control, af3_journal,
                 ComputeClaimRequest(service_id="af3-mcp", worker_id=args.af3_worker_id),
-            )
+            ), "compatibility")
             af3_lane = af3_receiver
             cleanup = af3_control.cleanup
             if generic_key := os.environ.get("PSKIT_AF3_COMPUTE_SERVICE_KEY"):
@@ -218,10 +227,10 @@ async def run(args) -> None:
                 stack.callback(product_journal.close)
                 product_control = ControlClient(client, base_url=args.backend_url,
                     service_id="af3-mcp", service_key=generic_key)
-                product_receiver = Receiver(Af3McpExecutor(endpoint, credential, spool=spool),
+                product_receiver = observed(Receiver(Af3McpExecutor(endpoint, credential, spool=spool),
                     product_control, product_journal,
                     ComputeClaimRequest(service_id="af3-mcp", worker_id="a6000-af3-product-1",
-                                        resources=WorkerResources(gpu_uuids=args.af3_gpu_uuid)))
+                                        resources=WorkerResources(gpu_uuids=args.af3_gpu_uuid))), "product")
 
                 def product_cleanup(job_id):
                     import shutil
@@ -232,7 +241,11 @@ async def run(args) -> None:
                 af3_lane = Af3ReceiverLane(product_receiver, af3_receiver,
                     generic_cleanup=product_cleanup, compatibility_cleanup=cleanup)
                 cleanup = None
-            async with local_af3_mcp(spool, args.af3_mcp_port, host=args.af3_mcp_host,
+            observer = (ActivityObserver((Path(args.journal),
+                Path(args.af3_journal or str(Path(args.journal).with_name("af3.sqlite3"))),
+                Path(args.journal).with_name("af3-product.sqlite3")), args.af3_spool_dir, live)
+                if activity_settings.enabled else None)
+            async with activity_listener(observer, activity_settings), local_af3_mcp(spool, args.af3_mcp_port, host=args.af3_mcp_host,
                                     token=os.environ.get("PSKIT_AF3_MCP_TOKEN", "")), asyncio.TaskGroup() as group:
                 group.create_task(receive(receiver, args.poll_seconds, isolate_failures=True))
                 group.create_task(receive(af3_lane, args.poll_seconds,
