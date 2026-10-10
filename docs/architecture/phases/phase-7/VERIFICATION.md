@@ -97,3 +97,7 @@ host roles/permissions or every database-probe table. Fake Docker tests verify
 command boundaries and intended handling, not actual host Compose-label/runtime
 compatibility or actual admission enforcement. A real qualification must use the
 runbook before enabling the controller; absent the adapter, API mutation is blocked.
+
+## 最终跨阶段部署整合
+
+当前全部部署/CI runner测试由 canonical isolated runner重跑，**349 passed / 18.23s**；包含上面的19项真实本地PG accounting测试与最后一项cloud.env字节竞争回归。合成Compose九个组合通过，仅render未up。正式new_backend context构建的 `ff873b2` 镜像三项契约通过（4.83s），未发布。

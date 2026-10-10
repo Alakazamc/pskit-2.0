@@ -79,3 +79,7 @@ Phase 0 源码审计已完成，基线并非全绿。先实施 Phase 1：F-01/F-
 扩大前端检查发现 11 个旧测试失败及 1 个不完整 SkillDetail fixture 引起的未捕获异常。Phase1 定向修复范围之外，归 Phase2 测试基线处理。
 
 契约生成物滞后源码：已有 Skill API/可选 Catalog 字段与 ToolUpdatedData.summary 未同步。Phase2 单独更新这些生成物；不把生成物更新算新增服务行为。
+
+## 本地整改结果索引
+
+本报告保留Phase0的原始问题状态与失败证据。后续实现、独立复核、最终测试和未通过的外部门禁汇总在[整合报告](COMPLETION_REPORT.md)；各阶段都提供CHANGE_SUMMARY、VERIFICATION、MIGRATION_AND_ROLLBACK。不能把后续源码修复反写成“基线已经修复”。生产限流、真实新provider、Staging、跨节点隔离和RPO/RTO仍没有本次在线证据。

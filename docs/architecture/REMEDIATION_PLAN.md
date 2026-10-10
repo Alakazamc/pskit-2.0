@@ -89,25 +89,25 @@
 - [x] 结构化上游错误status/code归一化，脱敏稳定错误码；保留原公开错误合同映射。未识别保持unknown，不虚构usage=0。
 - [x] qualification离线矩阵：text/stream/tool_calls碎片/tool result继续/429/usage缺失/图片/reasoning各声明；记录alias/deployment/网关版本/URL指纹/证据，无密钥或私密输入。
 - [x] 新profile未passed不Agent Ready；旧已发布路由显式兼容，不悄然隐藏用户现有模型。公开新增信息为可选、契约生成与旧客户端兼容单独验证。
-- [ ] 接入受控真实host driver：逐部署/每次调用独立账本/Pi写读和产物所有权验证；默认关闭，离线证据不得签发Agent Ready。
-- [ ] PinCC限定patch不扩展；通用OpenAI-route不修改工具body。生成真实新供应商Staging验收手册，未授权时not tested。
+- [x] 接入受控真实host driver：逐部署/每次调用独立账本/Pi写读和产物所有权验证；默认关闭，离线证据不得签发Agent Ready。
+- [x] PinCC限定patch不扩展；通用OpenAI-route不修改工具body。生成真实新供应商Staging验收手册，未授权时not tested。
 
 **Gate:** 本地协议/账本/旧模型回归通过；新provider真实Pi文件/Artifact资格需另授权，在此之前不宣称生产支持已验收。**Rollback:** revert各模型小提交；Profile新revision停用旧revision仍可用，无自动真实DB迁移或credential变更。
 
-**当前：** 核心边界冻结版本 `bba1ee6` 全量969通过/PG170零跳过；实际资格driver仍在实现，完整阶段门禁pending。详见[阶段记录](phases/phase-3/VERIFICATION.md)。
+**当前：** 本地 driver 与崩溃隔离已在 `ff873b2` 补齐；最终后端1079通过/PG199零跳过。真实供应商与Staging资格仍pending，默认不启用driver。详见[阶段记录](phases/phase-3/VERIFICATION.md)。
 
 ## Phase 4 — Backend运行时与模块边界（A-01/02/DB-01/C-01/A-03/X-01）
 
 **Files:** 原路径下新建 `services/session_locks.py`、`services/agent_scheduler.py`、`services/agent_events.py`、`domain/catalog_skills.py`、`domain/catalog_files.py`、`domain/catalog_tools.py`；现有AgentService/CatalogStore保留facade；runs/recovery的原生PG候选查询独立patch；Pi业务Tool投影独立patch。
 
-- [ ] 先建立隔离PG17的idle/query/write/100与1000排队/首增量P50/P95基准，记录命令、环境和分位；测量未通过不声称性能提升。
-- [ ] refcount SessionLockRegistry保留等待者；不同session并发、同session排他、取消waiter、任务结束回收回归。
-- [ ] 公平有界候选窗口+cursor，保留admission advisory lock、global/user/session quota和lease；不用直接LIMIT导致前面满用户阻塞后面用户。
-- [ ] event wake signal+fallback空闲退避；有界delta合并在工具/Artifact/retry/terminal前flush；critical事件及时持久；崩溃丢失范围需明确，最终账本无退化。
-- [ ] 逐事务而非逐SQL迁移异步边界；原生PG只先替高频候选/分页，不扩兼容字符串规则。
-- [ ] scheduler/projector/context/executor/resume和Skill/File/Tool内部职责拆分，facade现有签名/导入保持；逐组件回归和提交，不同时搬目录。
-- [ ] per-release业务Tool只向模型暴露业务参数；预算/version服务端绑定，保持submit_compute兼容入口、幂等call_id、Pending与trusted resume协议。
-- [ ] 记录单机transcript卷与OpenSandbox控制面权限；取消ACK/unknown/隔离mock回归；不做执行节点迁移或HA。
+- [x] 先建立隔离PG17的idle/query/write/100与1000排队/首增量P50/P95基准，记录命令、环境和分位；测量未通过不声称性能提升。
+- [x] refcount SessionLockRegistry保留等待者；不同session并发、同session排他、取消waiter、任务结束回收回归。
+- [x] 公平有界候选窗口+cursor，保留admission advisory lock、global/user/session quota和lease；不用直接LIMIT导致前面满用户阻塞后面用户。
+- [x] event wake signal+fallback空闲退避；有界delta合并在工具/Artifact/retry/terminal前flush；critical事件及时持久；崩溃丢失范围需明确，最终账本无退化。
+- [x] 逐事务而非逐SQL迁移异步边界；原生PG只先替高频候选/分页，不扩兼容字符串规则。
+- [x] scheduler/projector/context/executor/resume和Skill/File/Tool内部职责拆分，facade现有签名/导入保持；逐组件回归和提交，不同时搬目录。
+- [x] per-release业务Tool只向模型暴露业务参数；预算/version服务端绑定，保持submit_compute兼容入口、幂等call_id、Pending与trusted resume协议。
+- [x] 记录单机transcript卷与OpenSandbox控制面权限；取消ACK/unknown/隔离mock回归；不做执行节点迁移或HA。
 
 **Gate:** PG并发/幂等/恢复/账本实际通过，给出前后基准；新拆分性能不能只靠行数证明。**Rollback:** 小模块revert，保持DB schema/数据不变；任何确需schema索引变动单列迁移手册，不执行真实DB。
 
@@ -115,18 +115,18 @@
 
 **Files:** ModelPicker/MonoWorkspace内部hooks、composerDrafts/设置隐私组件、Conversation分页适配、styles语义token源和回归；保持现有路由/富UI/草稿存储兼容。
 
-- [ ] 使用服务端权威展示信息，不解析alias为provider；已有模型/推理本地偏好不丢失。
-- [ ] 上传保留已通过的不定进度，不新增假百分比；按用户提供草稿清理/保留说明，旧草稿兼容且不静默删除。
-- [ ] 先增加兼容可选pagination参数且默认旧合同不变，再分批加载历史，验证滚动anchor、展开状态、Artifact/Molstar；不强行虚拟列表。
-- [ ] MonoWorkspace拆query/send/run lifecycle/Sidebar，小步保留壳；SSE事件辅助信息先projection后有界保留。
-- [ ] semantic tokens单一明暗源，小范围组件迁移；桌面/手机、中英文、键盘与dark/light截图回归，记录实际验证范围。
+- [x] 使用服务端权威展示信息，不解析alias为provider；已有模型/推理本地偏好不丢失。
+- [x] 上传保留已通过的不定进度，不新增假百分比；按用户提供草稿清理/保留说明，旧草稿兼容且不静默删除。
+- [x] 先增加兼容可选pagination参数且默认旧合同不变，再分批加载历史，验证滚动anchor、展开状态、Artifact/Molstar；不强行虚拟列表。
+- [x] MonoWorkspace拆query/send/run lifecycle/Sidebar，小步保留壳；SSE事件辅助信息先projection后有界保留。
+- [x] semantic tokens单一明暗源，小范围组件迁移；桌面/手机、中英文、键盘与dark/light截图回归，记录实际验证范围。
 
 **Gate:** Vitest/typecheck/lint/build、必要浏览器回归实际通过。**Rollback:** 独立前端提交/旧dist可回退；浏览器存储版本兼容，不删旧数据。
 
 ## Phase 6 — 独立纯目录迁移（R-01）
 
 - [ ] 检查Phase1–5门禁、全部引用/Compose等价和现行回滚路径；形成迁移前source-bind/import清单。
-- [ ] 风险仍高则保留new_backend/new_frontend（规格明确允许），只补归档索引与未来映射，标迁移Gate pending，不能把准备当已搬迁。
+- [x] 风险仍高则保留new_backend/new_frontend（规格明确允许），只补归档索引与未来映射，标迁移Gate pending，不能把准备当已搬迁。
 - [ ] 条件满足才在独立纯迁移提交将新栈搬apps/api、apps/web；同时只改路径/import/workdir/COPY/tests/contracts/export引用，不改业务函数。
 - [ ] 旧栈需先证明引用方迁好，再归档legacy；不物理删除历史/运维恢复工具。
 - [ ] 全套本地CI/Compose/build/import/smoke验证，diff以rename/path变动为主。
@@ -137,14 +137,20 @@
 
 **Files:** `deploy/agent/pskitctl`薄入口及`deploy/agent/scripts/release_control.py`、Manifest校验、状态preflight、web原子发布/回滚函数、`docs/runbooks/DEPLOYMENT.md`；复用现有stack/staging配置解析，不新建daemon。
 
-- [ ] doctor/status/render/logs只读；release/rollback明确target env/component/version和不可变Manifest；bootstrap/migrate/executor是独立边界。
-- [ ] API只允许同项目完整overlays `up -d --no-deps --wait backend`；检查固定digest/Run/Job/Attempt/unknown、schema只读、ready/smoke；失败返回非零并应用回退，不能降级DB。
-- [ ] Web先新assets后原子index/版本指针，保留旧hash资源；模拟中断、缺key、502、stale manifest、OpenSandbox overlay丢失、rollback回归。
-- [ ] 总runbook覆盖新维护者从README找到唯一现行开发/发布/回滚入口；旧安装/迁移/历史文档标用途并保留。
-- [ ] 生成Staging演练与RPO/RTO/执行节点边界计划；本次不执行云端演练或生产切换。
+- [x] doctor/status/render/logs只读；release/rollback明确target env/component/version和不可变Manifest；bootstrap/migrate/executor是独立边界。
+- [x] API只允许同项目完整overlays `up -d --no-deps --wait backend`；检查固定digest/Run/Job/Attempt/unknown、schema只读、ready/smoke；失败返回非零并应用回退，不能降级DB。
+- [x] Web先新assets后原子index/版本指针，保留旧hash资源；模拟中断、缺key、502、stale manifest、OpenSandbox overlay丢失、rollback回归。
+- [x] 总runbook覆盖新维护者从README找到唯一现行开发/发布/回滚入口；旧安装/迁移/历史文档标用途并保留。
+- [x] 生成Staging演练与RPO/RTO/执行节点边界计划；本次不执行云端演练或生产切换。
 
 **Gate:** 本地fake docker/HTTP/临时静态目录故障注入通过，真实Staging与production均pending授权。**Rollback:** Manifest指向旧应用镜像/dist，仅服务/文件回退，state/卷不变。
 
 ## 执行顺序与并行归属
 
 Phase1前端与部署可并行、文件不交叉；完成后Phase2由CI负责人整合所有gate。Phase3内transport与Profile通过明确接口依赖推进；Phase4运行时先基准后优化；Phase5依赖Profile展示合同，组件拆分独立；Phase6严格最后纯迁移；Phase7命令可先做设计/fixture，执行上线永远等待独立授权。新增发现先归ID/优先级，不扩大成新框架或微服务。
+
+## 最终本地交接（2026-10-10）
+
+已完成当前授权下的本地整改、独立审查、隔离测试和正式 context 镜像构建；逐阶段证据见 [整合报告](COMPLETION_REPORT.md)。最终业务源码 `ff873b20cdc5ecd81149f2e63542b76a32537c89`：backend1079 passed/1 external-Supabase skip，其中PG199零skip；frontend387、deployment349、Pi9、固定LiteLLM容器5、当前镜像3通过；9个合成Compose、契约再生、8组实际浏览器通过。
+
+勾选表示实现/本地验证完成，不表示外部Gate已通过。Phase3真实模型与OpenSandbox Staging、Phase6 source-bind/回退实机门禁、Phase7准入/Receiver适配器与Staging/RPO/RTO演练仍未执行。本轮没有云端发布、push、真实数据库修改、历史数据删除或目录搬迁。

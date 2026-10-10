@@ -185,6 +185,8 @@ A6000 升级或恢复前核对唯一接收器、活动任务、journal/outbox/sp
 
 ## 7. 当前交接与维护
 
+**2026-10-10 当前任务交接（仅本地架构整改）：** 本分支 `codex/new-stack-baseline` 从 `5d70395` 完成Phase0审计及P0→P1→P2整改，最终业务源码 `ff873b20cdc5ecd81149f2e63542b76a32537c89`；独立提交业务、契约、README归档和阶段证据。后端1079通过/1外部Supabase跳过（PG199零跳过）、前端387、部署349、Pi9、固定LiteLLM容器5及当前镜像3通过，9个合成Compose与8组浏览器检查通过。本地镜像 `pskit-agent-backend:remediation-ff873b2`，ID `sha256:a86ea08523b415f31a7ce4fbbe81fd2d2f6ab0b9555b9f5a30dd1f0bb8d7045e`。详细审计、命令、性能回归、回滚和外部门禁见 [整改整合报告](architecture/COMPLETION_REPORT.md)。本轮不SSH、不push、不发布、不改真实数据库/密钥或删除历史；下面云端信息来自既有交接，未重新在线核对。资格driver默认关闭，真实供应商/OpenSandbox Staging、生产限流、发布准入/Receiver适配器及RPO/RTO待独立验收；保留new_backend/new_frontend，不搬apps/*。此前未提交All in Luna配置和docs/performance资料保留。
+
 快照日期：2026-10-10（Asia/Shanghai）。OpenSandbox 生产基础工具仍全量开放；最新 [PinCC 工具协议兼容发布](releases/2026-10-10-pincc-tool-compatibility.md) 已通过真实模型写入、读回和下载，前端沿用 [workspace file tools / rich artifacts 记录](releases/2026-10-10-workspace-file-tools-rich-artifacts.md) 中的制品。
 
 - **已确认的用户偏好：** 本地前后端一起运行，完成开发与验证后部署云端。
