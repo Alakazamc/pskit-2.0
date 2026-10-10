@@ -4936,6 +4936,64 @@
         }
       }
     },
+    "/api/v1/admin/llm-aliases/{alias}/qualify": {
+      "post": {
+        "tags": [
+          "admin-models"
+        ],
+        "summary": "Qualify Alias",
+        "description": "Run only a host-configured budgeted probe; admin JSON cannot assert success.",
+        "operationId": "qualify_alias_api_v1_admin_llm_aliases__alias__qualify_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "alias",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Alias"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/services": {
       "get": {
         "tags": [
@@ -10691,6 +10749,16 @@
             },
             "type": "array",
             "title": "Default For Purposes"
+          },
+          "runtime_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelRuntimeProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -10729,6 +10797,38 @@
             },
             "type": "array",
             "title": "Reasoning Levels"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "provider_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Label"
+          },
+          "runtime_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelRuntimeProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -10737,6 +10837,353 @@
         ],
         "title": "ModelOption",
         "description": "Public metadata for one gateway-visible model alias."
+      },
+      "ModelQualificationCase": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Case Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "not_tested",
+              "unknown"
+            ],
+            "title": "Status"
+          },
+          "request_fingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Request Fingerprint"
+          },
+          "response_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Fingerprint"
+          },
+          "usage_known": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage Known"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "case_id",
+          "status",
+          "request_fingerprint"
+        ],
+        "title": "ModelQualificationCase"
+      },
+      "ModelQualificationEvidence": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Evidence Id"
+          },
+          "alias": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Alias"
+          },
+          "profile_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Profile Revision"
+          },
+          "profile_fingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Profile Fingerprint"
+          },
+          "deployment_fingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Deployment Fingerprint"
+          },
+          "provider_url_fingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Provider Url Fingerprint"
+          },
+          "pi_version": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Pi Version"
+          },
+          "gateway_version": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Gateway Version"
+          },
+          "checked_at": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Checked At"
+          },
+          "verification_scope": {
+            "type": "string",
+            "enum": [
+              "offline",
+              "gateway",
+              "staging"
+            ],
+            "title": "Verification Scope"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "degraded"
+            ],
+            "title": "Status"
+          },
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/ModelQualificationCase"
+            },
+            "type": "array",
+            "maxItems": 40,
+            "title": "Cases"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "evidence_id",
+          "alias",
+          "profile_revision",
+          "profile_fingerprint",
+          "deployment_fingerprint",
+          "provider_url_fingerprint",
+          "pi_version",
+          "gateway_version",
+          "checked_at",
+          "verification_scope",
+          "status",
+          "cases"
+        ],
+        "title": "ModelQualificationEvidence"
+      },
+      "ModelRuntimeProfile": {
+        "properties": {
+          "alias": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Alias"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "chat_completions",
+              "responses"
+            ],
+            "title": "Protocol",
+            "default": "chat_completions"
+          },
+          "provider_label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Label"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "supports_tools": {
+            "type": "boolean",
+            "title": "Supports Tools",
+            "default": false
+          },
+          "supports_tool_streaming": {
+            "type": "boolean",
+            "title": "Supports Tool Streaming",
+            "default": false
+          },
+          "supports_images": {
+            "type": "boolean",
+            "title": "Supports Images",
+            "default": false
+          },
+          "reasoning_levels": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "off",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            },
+            "type": "array",
+            "maxItems": 7,
+            "title": "Reasoning Levels"
+          },
+          "context_window": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Window"
+          },
+          "max_output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Output Tokens"
+          },
+          "wire_policy": {
+            "$ref": "#/components/schemas/ModelWirePolicy"
+          },
+          "qualification_status": {
+            "type": "string",
+            "enum": [
+              "untested",
+              "passed",
+              "failed",
+              "degraded"
+            ],
+            "title": "Qualification Status",
+            "default": "untested"
+          },
+          "qualification_evidence_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qualification Evidence Id"
+          },
+          "qualification_evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelQualificationEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "alias",
+          "revision"
+        ],
+        "title": "ModelRuntimeProfile"
+      },
+      "ModelWirePolicy": {
+        "properties": {
+          "chat_max_tokens_field": {
+            "type": "string",
+            "enum": [
+              "max_tokens",
+              "max_completion_tokens"
+            ],
+            "title": "Chat Max Tokens Field",
+            "default": "max_tokens"
+          },
+          "stream_usage_mode": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "not_supported",
+              "unknown"
+            ],
+            "title": "Stream Usage Mode",
+            "default": "unknown"
+          },
+          "developer_role_mode": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "system_fallback",
+              "unknown"
+            ],
+            "title": "Developer Role Mode",
+            "default": "unknown"
+          },
+          "reasoning_mode": {
+            "type": "string",
+            "enum": [
+              "omit",
+              "reasoning_effort"
+            ],
+            "title": "Reasoning Mode",
+            "default": "omit"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ModelWirePolicy"
       },
       "OtpVerifyRequest": {
         "properties": {

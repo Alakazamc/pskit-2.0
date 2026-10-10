@@ -2061,6 +2061,7 @@ export type ModelDraft = {
      * Default For Purposes
      */
     default_for_purposes?: Array<'chat' | 'analysis'>;
+    runtime_profile?: ModelRuntimeProfile | null;
 };
 
 /**
@@ -2081,6 +2082,177 @@ export type ModelOption = {
      * Reasoning Levels
      */
     reasoning_levels?: Array<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>;
+    /**
+     * Display Name
+     */
+    display_name?: string | null;
+    /**
+     * Provider Label
+     */
+    provider_label?: string | null;
+    runtime_profile?: ModelRuntimeProfile | null;
+};
+
+/**
+ * ModelQualificationCase
+ */
+export type ModelQualificationCase = {
+    /**
+     * Case Id
+     */
+    case_id: string;
+    /**
+     * Status
+     */
+    status: 'passed' | 'failed' | 'not_tested' | 'unknown';
+    /**
+     * Request Fingerprint
+     */
+    request_fingerprint: string;
+    /**
+     * Response Fingerprint
+     */
+    response_fingerprint?: string | null;
+    /**
+     * Usage Known
+     */
+    usage_known?: boolean | null;
+};
+
+/**
+ * ModelQualificationEvidence
+ */
+export type ModelQualificationEvidence = {
+    /**
+     * Evidence Id
+     */
+    evidence_id: string;
+    /**
+     * Alias
+     */
+    alias: string;
+    /**
+     * Profile Revision
+     */
+    profile_revision: number;
+    /**
+     * Profile Fingerprint
+     */
+    profile_fingerprint: string;
+    /**
+     * Deployment Fingerprint
+     */
+    deployment_fingerprint: string;
+    /**
+     * Provider Url Fingerprint
+     */
+    provider_url_fingerprint: string;
+    /**
+     * Pi Version
+     */
+    pi_version: string;
+    /**
+     * Gateway Version
+     */
+    gateway_version: string;
+    /**
+     * Checked At
+     */
+    checked_at: string;
+    /**
+     * Verification Scope
+     */
+    verification_scope: 'offline' | 'gateway' | 'staging';
+    /**
+     * Status
+     */
+    status: 'passed' | 'failed' | 'degraded';
+    /**
+     * Cases
+     */
+    cases: Array<ModelQualificationCase>;
+};
+
+/**
+ * ModelRuntimeProfile
+ */
+export type ModelRuntimeProfile = {
+    /**
+     * Alias
+     */
+    alias: string;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Protocol
+     */
+    protocol?: 'chat_completions' | 'responses';
+    /**
+     * Provider Label
+     */
+    provider_label?: string | null;
+    /**
+     * Display Name
+     */
+    display_name?: string | null;
+    /**
+     * Supports Tools
+     */
+    supports_tools?: boolean;
+    /**
+     * Supports Tool Streaming
+     */
+    supports_tool_streaming?: boolean;
+    /**
+     * Supports Images
+     */
+    supports_images?: boolean;
+    /**
+     * Reasoning Levels
+     */
+    reasoning_levels?: Array<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>;
+    /**
+     * Context Window
+     */
+    context_window?: number | null;
+    /**
+     * Max Output Tokens
+     */
+    max_output_tokens?: number | null;
+    wire_policy?: ModelWirePolicy;
+    /**
+     * Qualification Status
+     */
+    qualification_status?: 'untested' | 'passed' | 'failed' | 'degraded';
+    /**
+     * Qualification Evidence Id
+     */
+    qualification_evidence_id?: string | null;
+    qualification_evidence?: ModelQualificationEvidence | null;
+};
+
+/**
+ * ModelWirePolicy
+ */
+export type ModelWirePolicy = {
+    /**
+     * Chat Max Tokens Field
+     */
+    chat_max_tokens_field?: 'max_tokens' | 'max_completion_tokens';
+    /**
+     * Stream Usage Mode
+     */
+    stream_usage_mode?: 'supported' | 'not_supported' | 'unknown';
+    /**
+     * Developer Role Mode
+     */
+    developer_role_mode?: 'supported' | 'system_fallback' | 'unknown';
+    /**
+     * Reasoning Mode
+     */
+    reasoning_mode?: 'omit' | 'reasoning_effort';
 };
 
 /**
@@ -6999,6 +7171,36 @@ export type RetireAliasApiV1AdminLlmAliasesAliasRetirePostResponses = {
 };
 
 export type RetireAliasApiV1AdminLlmAliasesAliasRetirePostResponse = RetireAliasApiV1AdminLlmAliasesAliasRetirePostResponses[keyof RetireAliasApiV1AdminLlmAliasesAliasRetirePostResponses];
+
+export type QualifyAliasApiV1AdminLlmAliasesAliasQualifyPostData = {
+    body: RevisionRequest;
+    path: {
+        /**
+         * Alias
+         */
+        alias: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/llm-aliases/{alias}/qualify';
+};
+
+export type QualifyAliasApiV1AdminLlmAliasesAliasQualifyPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type QualifyAliasApiV1AdminLlmAliasesAliasQualifyPostError = QualifyAliasApiV1AdminLlmAliasesAliasQualifyPostErrors[keyof QualifyAliasApiV1AdminLlmAliasesAliasQualifyPostErrors];
+
+export type QualifyAliasApiV1AdminLlmAliasesAliasQualifyPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminModel;
+};
+
+export type QualifyAliasApiV1AdminLlmAliasesAliasQualifyPostResponse = QualifyAliasApiV1AdminLlmAliasesAliasQualifyPostResponses[keyof QualifyAliasApiV1AdminLlmAliasesAliasQualifyPostResponses];
 
 export type ListServicesApiV1AdminServicesGetData = {
     body?: never;
