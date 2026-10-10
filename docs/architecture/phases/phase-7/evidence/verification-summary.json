@@ -1,0 +1,96 @@
+{
+  "format": "pskit.local-remediation-verification.v1",
+  "source_revision": "5ccc25965cd1abd689196a2dfb998f499f83a051",
+  "date": "2026-10-10",
+  "environment": "isolated local loopback PostgreSQL17.6/tmpfs; no paid model or GPU",
+  "results": {
+    "backend": {
+      "passed": 1204,
+      "skipped": 1,
+      "postgres_passed": 232,
+      "postgres_skipped": 0,
+      "seconds": 266.24,
+      "skip_reason": "Requires separate disposable Supabase Auth/Storage account"
+    },
+    "frontend": {
+      "passed": 387,
+      "files": 53,
+      "seconds": 50.73,
+      "typecheck": true,
+      "lint": true,
+      "build": true
+    },
+    "deployment": {
+      "passed": 448,
+      "seconds": 20.89
+    },
+    "pi": {
+      "passed": 9,
+      "skipped": 0
+    },
+    "compose": {
+      "rendered": 9,
+      "started": 0
+    },
+    "contracts": {
+      "regenerated_without_drift": true
+    },
+    "image": {
+      "passed": 3,
+      "seconds": 4.01,
+      "network": "none",
+      "key_files_matched": 11
+    },
+    "explicit_install_smoke": {
+      "completed_turns": 1,
+      "performance_measurement": false
+    }
+  },
+  "original_evidence": {
+    "backend_log": {
+      "local_path": "/tmp/pskit-adapter-final-backend-verified/backend.log",
+      "sha256": "4d613a3ab6ff66494cb2513fdf4581ddebcf99d0f19147acf37edee6bd5318b6"
+    },
+    "backend_junit": {
+      "local_path": "/tmp/pskit-adapter-final-backend-verified/backend.xml",
+      "sha256": "3a084c33a8212199cdf0d6d5b071eb4e2d4755e13b64ec51adfcb6980b998d9a"
+    },
+    "frontend_log": {
+      "local_path": "/tmp/pskit-adapter-final-frontend/frontend.log",
+      "sha256": "d603857e910aa17d5387868e4943b928620849c9c9ffd8346164cbc8bd128c90"
+    },
+    "deployment_log": {
+      "local_path": "/tmp/pskit-adapter-final-deployment-verified/deployment.log",
+      "sha256": "008b0e7f429de45ba960065e7f3c15d3c38d22896ddbddc6779a4aa8fff7e3d1"
+    },
+    "pi_log": {
+      "local_path": "/tmp/pskit-adapter-final-pi/pi.log",
+      "sha256": "d2aa6d4630b862c06c4959e54e613bd10be572c0335ae03d126779e765997005"
+    },
+    "compose_log": {
+      "local_path": "/tmp/pskit-adapter-final-compose.log",
+      "sha256": "c3472b406d5b7cfa4c5fae169421d69e910bb18a2a1fb7789230daf2816a73bc"
+    },
+    "image_junit": {
+      "local_path": "/tmp/pskit-adapter-image-verified.xml",
+      "sha256": "f0c498f82c0ad1e8192ce4baa0f9b76609f790ba9414e00f448d0c5f1869e9e2"
+    },
+    "image_build_log": {
+      "local_path": "/tmp/pskit-adapter-image-build-verified.log",
+      "sha256": "6f5712d6f46d9e82a35b309268867e7a2cfc40df3a74d80285ddb74474c4c19c"
+    },
+    "contracts_log": {
+      "local_path": "/tmp/pskit-adapter-contracts-verified.log",
+      "sha256": "53d669bd1342a69bfa8359b794c21ff5468075709a9b0de06a64562e0f40df8d"
+    }
+  },
+  "not_executed": [
+    "SSH",
+    "production or Staging deployment",
+    "real database or credentials mutation",
+    "provider/OpenSandbox host qualification",
+    "RPO/RTO host rehearsal",
+    "directory migration",
+    "push"
+  ]
+}

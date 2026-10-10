@@ -101,3 +101,7 @@ runbook before enabling the controller; absent the adapter, API mutation is bloc
 ## 最终跨阶段部署整合
 
 当前全部部署/CI runner测试由 canonical isolated runner重跑，**349 passed / 18.23s**；包含上面的19项真实本地PG accounting测试与最后一项cloud.env字节竞争回归。合成Compose九个组合通过，仅render未up。正式new_backend context构建的 `ff873b2` 镜像三项契约通过（4.83s），未发布。
+
+## 本地适配器续作
+
+上述数字属于第一轮源码。用户授权继续后的持久准入、实际 CLI/应用证明、认证 Receiver 及新增审查回归见[独立验证记录](ADAPTER_VERIFICATION.md)；该记录区分本地真实PG/SQLite/HTTP证据和仍未执行的宿主 adoption、真实Staging及RPO/RTO。不能用早期349项或旧镜像证明续作源码通过。

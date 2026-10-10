@@ -1,7 +1,7 @@
 # PSKit application release controller
 
-Status: **local controller fault injection passed; API host enablement blocked pending
-qualified admission and receiver adapters; no host release executed** (2026-10-10).
+Status: **local controller, durable admission and receiver adapters implemented;
+target-host qualification/adoption remains pending; no host release executed** (2026-10-10).
 The controller is `deploy/agent/pskitctl`, backed by
 `deploy/agent/scripts/release_control.py`. It reuses the existing
 `pskit.release.v1` Manifest and literal production configuration validator.
@@ -46,13 +46,14 @@ Before real use, a reviewed installation/adoption operation must:
    adopt mutable historical image tags or assume that the newest Git commit is live.
 4. Install a private controller configuration and state directory, supply the
    approved synthetic Pi/SSE/Artifact/auth smoke command, and validate its behavior.
-5. Provide automatically observed Receiver journal/outbox evidence for production
-   API changes. The current receiver has no qualified aggregate HTTP endpoint of this
-   shape; that adapter and its access restrictions are **pending separate work**.
+5. Enable and independently qualify the receiver's optional private `/activity`
+   listener, with a distinct bearer token, actual retained journals and spool. Local
+   implementation is available; no A6000 listener was enabled by this task.
 6. Independently qualify and install a **server-enforced admission adapter** covering
    user/API submissions and scheduler claims. Its durable hold must survive backend
    recreation and controller failure, and remain closed until the same owner's explicit
-   release. No real adapter has been implemented or qualified by this task. A missing
+   release. The local implementation is `pskit-admission-adapter`; host installation,
+   deployed configuration and qualification are still pending. A missing
    adapter blocks every API release/rollback in both environments; Web and read-only
    operations do not acquire it.
 
@@ -81,14 +82,19 @@ Example shape (placeholders are intentionally non-operational):
   "backend_url": "http://127.0.0.1:18088",
   "public_url": "https://agent.bioailab.net",
   "critical_smoke_command": ["/absolute/approved/synthetic-release-smoke"],
-  "receiver_activity_urls": ["http://127.0.0.1:PRIVATE_EVIDENCE_PORT/activity"],
+  "receiver_activity_urls": ["http://10.9.8.2:18188/activity"],
+  "receiver_activity_auth": {
+    "http://10.9.8.2:18188/activity": {
+      "token_file": "/absolute/private/receiver-activity.token"
+    }
+  },
   "receiver_activity_required": true,
   "admission_barrier": {
     "adapter_id": "qualified-host-admission",
     "qualification_sha256": "<64 lowercase hex characters of independently reviewed evidence>",
-    "enter_command": ["/absolute/approved/admission-adapter", "enter"],
-    "verify_command": ["/absolute/approved/admission-adapter", "verify"],
-    "release_command": ["/absolute/approved/admission-adapter", "release"]
+    "enter_command": ["/absolute/checkout/deploy/agent/pskit-admission-adapter", "enter", "--config", "/absolute/private/admission.json"],
+    "verify_command": ["/absolute/checkout/deploy/agent/pskit-admission-adapter", "verify", "--config", "/absolute/private/admission.json"],
+    "release_command": ["/absolute/checkout/deploy/agent/pskit-admission-adapter", "release", "--config", "/absolute/private/admission.json"]
   }
 }
 ```
@@ -109,6 +115,9 @@ SSE replay or Artifact behavior fails. The controller additionally requires back
 route. No real GPU inference or paid provider request belongs in the default smoke.
 An operator smoke's correctness is separately reviewed; exit zero alone does not
 prove that a newly written script exercises these flows.
+Under the admission hold, use previously seeded synthetic terminal Runs and files
+for authenticated reads, SSE replay and Artifact download. Ordinary new Run creation
+must remain denied; do not add an administrator bypass to make the smoke pass.
 
 The controller inherits only the small existing Docker operator environment allowlist;
 Compose interpolation comes from the designated literal cloud file. Private backend
@@ -243,6 +252,23 @@ integer counters. A missing endpoint, stale timestamp or omitted counter never m
 zero. Transport/authentication and trusted observation of the receiver remain a
 separate integration gate; do not hand-write an all-zero response for a real release.
 
+The optional listener lives in the existing unified receiver process. Its three
+server-selected journal files (`coral.sqlite3`, `af3.sqlite3`, `af3-product.sqlite3`)
+and AF3 spool are observed read-only, including uncheckpointed WAL. Missing, corrupt,
+unrecognized, changed or unobservable state reports `unknown` rather than zero.
+Retained outputs remain pending until the existing delivery/ACK path removes them.
+No payload, sequence, model key or file content is exposed. It also tracks live lane
+polls so unready, active or failed polls cannot produce clean evidence.
+
+`PSKIT_RECEIVER_ACTIVITY_ENABLED=false` remains the default. After a separate host
+review, bind to loopback or the literal private WireGuard address, set the distinct
+32–256 character `PSKIT_RECEIVER_ACTIVITY_TOKEN`, and choose an available private port.
+No Compose public port is added. Restrict host ingress to the authorized controller.
+Controller `receiver_activity_auth` binds each exact configured URL to an owned
+regular `0600` token file; the file's parent is `0700` and paths reject symlinks.
+The HTTP client ignores ambient proxies and redirects. Tokens never enter argv,
+Manifest, receipts or logs.
+
 The activity probe alone is a snapshot. API mutation additionally requires the held
 admission protocol below, fresh central/receiver checks, and a second ownership check
 immediately before each candidate or rollback backend recreation. The controller
@@ -250,7 +276,7 @@ serializes operator releases on one host; actual user and scheduler exclusion is
 separately qualified adapter's responsibility. Do not promise graceful SSE draining
 or zero downtime from the protocol's fake tests.
 
-## Mandatory admission adapter protocol (host implementation pending)
+## Mandatory admission adapter protocol (local implementation; host adoption pending)
 
 `admission_barrier` is an optional private configuration member to preserve existing
 read-only/Web setup; omission or `null` makes **API mutation unavailable**. A boolean
@@ -320,9 +346,103 @@ The independently reviewed adapter must:
   the activity check and backend recreation. Bind the reviewed report to the deployed
   adapter implementation/configuration and the configured qualification digest.
 
-No Nginx adapter, runtime maintenance switch or new service is installed by this
-phase. The configured qualification digest identifies externally reviewed evidence;
+No Nginx adapter or new service is installed by this phase. The configured qualification digest identifies externally reviewed evidence;
 its presence and a well-formed receipt are not independent proof of enforcement.
+
+### Local adapter implementation and adoption boundaries
+
+`new_backend/app/domain/release_admission.py` stores one durable deployment binding
+and hold owner in the existing private PostgreSQL schema. Component version 1 is
+installed only by the explicit migration entrypoints; application startup never runs
+DDL. Core schema version 13 and the ordinary `migrate_postgres` table set are
+unchanged. Install the component separately through `migrate_admission_postgres`
+only after reviewing its DDL, database grants and host qualification. Do not run
+either procedure against an existing host as part of a daily release. The legacy
+SQLite import/export path refuses any installed admission state: preserve the
+component with a complete PostgreSQL backup instead of omitting its owner/nonce.
+The legacy migration's final activation holds migration locks for both staging and
+target through its checks and rename. Failure cleanup holds the staging migration
+lock and retains the schema if any admission component table appeared. Investigate
+that retained schema using the recorded owner; never delete it merely to retry.
+
+The backend remains compatible with old deployments because enforcement defaults
+to disabled. Enabling it requires live PostgreSQL, persistent Pi runtime, an installed
+component and a 32-character-or-longer private key. Legacy sandbox lifecycle paths
+without durable workspace records cannot be used with enforcement. Startup binds an
+unbound open component once, preserves an existing closed hold and rejects a different
+deployment/qualification binding.
+
+Configure these backend settings in its private environment after qualification:
+
+```ini
+RESEARCH_AGENT_RELEASE_ADMISSION_ENABLED=true
+RESEARCH_AGENT_RELEASE_ADMISSION_ENVIRONMENT=staging
+RESEARCH_AGENT_RELEASE_ADMISSION_PROJECT=pskit-agent-staging
+RESEARCH_AGENT_RELEASE_ADMISSION_KEY=<distinct private proof key>
+RESEARCH_AGENT_RELEASE_ADMISSION_QUALIFICATION_SHA256=<reviewed evidence digest>
+```
+
+Use `prod` / `pskit-agent-cloud` for production. The key stays in private files; it is
+not a user, model or receiver credential. The private adapter config has this exact shape:
+
+```json
+{
+  "schema_version": "pskit.admission-adapter.v1",
+  "database_url": "<private PostgreSQL DSN>",
+  "database_schema": "pskit",
+  "backend_url": "http://127.0.0.1:18090",
+  "backend_token": "<same backend proof key>",
+  "adapter_id": "qualified-host-admission",
+  "qualification_sha256": "<reviewed evidence digest>",
+  "environment": "staging",
+  "project": "pskit-agent-staging"
+}
+```
+
+Keep its parent directory `0700` and file `0600`, owned by the operator. Use an
+explicit loopback IP and port. `backend_url` addresses the app directly (no `/api/v1`
+prefix); the application observation route is `/internal/release-admission`.
+The thin entry defaults to the checkout's `new_backend/.venv/bin/python`. On a host
+using another approved environment, configure the command arrays with that absolute
+interpreter followed by the absolute `admission_adapter.py` path. The controller
+does not forward arbitrary interpreter environment variables and never installs a
+virtual environment as part of a release.
+The adapter verifies a fresh challenge against the actual running backend before
+and after each operation and compares the response with the database deployment ID,
+state, generation and owner. A missing/disabled/older backend, incorrect credential or
+different database cannot emit a successful receipt. If post-close verification fails,
+the durable hold remains closed and the controller retains its recovery marker.
+
+Every new admission and claim checks the gate while holding the existing transaction
+advisory lock until quota/record/lease commit. Run/title/compute/workspace dispatch,
+direct MCP calls and PDF execution are covered. Completion, cancellation, delivery
+ACK and reconciliation remain available. Receipt expiry and process restarts never
+release the hold. Calls rejected before provider dispatch release their idempotency
+claim; uncertain dispatched calls remain unknown.
+
+API current, candidate and rollback Manifests must include identical independently
+qualified admission metadata:
+
+```json
+{
+  "admission": {
+    "component_version": 1,
+    "enforcement_version": "pskit.db-admission.v1",
+    "qualification_sha256": "<same reviewed evidence digest>"
+  }
+}
+```
+
+This field is optional for old Manifest validation and Web-only compatibility, but
+API mutation refuses its absence or mismatch. The backend private environment and
+resolved Compose must also enable the same binding. An old gate-unaware image is
+not a safe API rollback target. Initial host adoption needs a separate maintenance
+operation; do not disable the flag, delete/reset the component row or downgrade the
+database to bypass a pending hold. Preserve unknown accounting and all journals.
+
+Local tests exercise actual PostgreSQL, the app's private HTTP handler and CLI
+processes, including interruption before acknowledgement. They do not substitute
+for a qualified host Compose recreation, actual WireGuard routing or RPO/RTO drill.
 
 `pending.json` is fsynced **before** `enter`, including nonce, adapter/qualification,
 project/environment, bound Manifest hashes and admission phase. A command might close
@@ -364,6 +484,14 @@ again. A pre-recreation failure makes no backend `up` call. The original release
 exits nonzero when rollback succeeds. If rollback
 also fails, `pending.json` is retained and further releases are refused. Inspect private
 state/logs and perform the explicit previous-version rollback.
+
+The real adapter requires a running backend's private enforcement proof for enter,
+verify and release. If the candidate cannot start at all, that proof is unavailable:
+automatic and explicit controller rollback preserve the closed hold and pending
+marker, and perform no unverified backend recreation. Recover qualified backend
+observability through a separately reviewed host recovery procedure before resuming
+the recorded owner's workflow. Successful fake startup-failure rollback tests do not
+promise recovery from every actual container startup failure.
 
 For Web, every non-index asset is published without replacing an existing filename.
 Identical bytes are accepted; a collision with different bytes is rejected. Rename

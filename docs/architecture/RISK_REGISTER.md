@@ -35,7 +35,16 @@
 - D-01..03/F-01/F-02/CI-01：旧危险入口禁用、SSE正确性/边界修复、新栈隔离CI/镜像/契约门禁已实现并验证；S-01的配置与本地enforce保护通过，但生产有效限流仍needs_live_validation。
 - M-01..05/C-01：Profile资格、受控driver、共享transport、结构化错误和服务端业务工具绑定已实现；旧已发布模型兼容。新增review发现的并发测试预算、退出后代理和崩溃自动重试均修复，未知预占保留。真实provider/OpenSandbox Staging仍not tested。
 - A-01/02/DB-01/F-03：模块拆分、有界公平候选、delta合并、锁回收、兼容消息分页、草稿隐私和主题源已实现并验证。首持久增量P50/P95测量有回归，后续优化不能用查询量减少代替延迟证据；大历史PG EXPLAIN、真实Molstar视觉锚点仍待测。
-- D/R：受控发布器本地故障与真实PG会计查询通过；缺少独立准入/Receiver适配器及Staging演练时禁止API更新，不能直接当作生产已验收工具。
+- D/R：受控发布器本地故障与真实PG会计查询通过；准入/Receiver适配器本地续作见下文，缺少独立宿主资格及Staging演练时仍禁止API更新，不能直接当作生产已验收工具。
 - R-01/X-01/A-03：README/归档索引及控制面/恢复文档完成；目录不搬，执行节点不迁移，未实现HA。单机恢复/RPO/RTO需要实际授权演练。
 
 所有当前结果、命令、提交边界及回滚入口见[整合报告](COMPLETION_REPORT.md)。真实数据库、用户历史、生产/Staging运行配置均未改动。
+
+## 本地适配器续作后的状态
+
+- D/R：持久准入与认证 Receiver observer 已实现并做真实本地 PG/SQLite WAL/CLI/HTTP 合成验证。审查发现的旧快照、目录替换、未确认 MCP 及管理资格绕过均有回归。独立宿主资格与真实 Staging 演练继续 pending，不能把本地组件当作生产已经启用。
+- A-01/DB-01：重复 lease preflight 已去掉，提交内 fencing 保留；优化对照与开启门禁的同源 ABBA 原始数据公开保留。门禁有可测中位开销，没有声称生产首 token 或所有P95均改善。
+- 新组件：独立 admission version 1 只能显式安装，核心 version13 不变。回退保留所有状态；闭锁 owner/nonce、未知调用、journal/outbox 不可清空。未验收旧镜像不能作为已启用门禁的API回退目标。
+- 历史迁移：SQLite 转换拒绝已有准入组件，要求 PostgreSQL 备份；staging/target 的最终切换及失败清理与组件安装串行，意外出现组件时保留 staging。删除或搬移闭锁状态的两个竞态已实际复现并修复。
+
+最新测试及仍待宿主验收的边界见[续作验证](phases/phase-7/ADAPTER_VERIFICATION.md)。

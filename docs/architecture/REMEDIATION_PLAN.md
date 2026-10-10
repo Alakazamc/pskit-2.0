@@ -154,3 +154,7 @@ Phase1前端与部署可并行、文件不交叉；完成后Phase2由CI负责人
 已完成当前授权下的本地整改、独立审查、隔离测试和正式 context 镜像构建；逐阶段证据见 [整合报告](COMPLETION_REPORT.md)。最终业务源码 `ff873b20cdc5ecd81149f2e63542b76a32537c89`：backend1079 passed/1 external-Supabase skip，其中PG199零skip；frontend387、deployment349、Pi9、固定LiteLLM容器5、当前镜像3通过；9个合成Compose、契约再生、8组实际浏览器通过。
 
 勾选表示实现/本地验证完成，不表示外部Gate已通过。Phase3真实模型与OpenSandbox Staging、Phase6 source-bind/回退实机门禁、Phase7准入/Receiver适配器与Staging/RPO/RTO演练仍未执行。本轮没有云端发布、push、真实数据库修改、历史数据删除或目录搬迁。
+
+## 授权继续后的本地适配器
+
+用户随后授权继续，按[补充计划](phases/phase-7/ADAPTER_IMPLEMENTATION_PLAN.md)完成真实持久准入、接收器观察、MCP/PDF及管理资格执行保护与首持久增量修复；最新验证见[续作证据](phases/phase-7/ADAPTER_VERIFICATION.md)。上一节的“适配器未执行”是第一轮交接状态；现在本地实现完成，独立宿主资格、真实Staging/Pending/回退/RPO/RTO仍未执行。纯目录迁移继续独立且 pending。

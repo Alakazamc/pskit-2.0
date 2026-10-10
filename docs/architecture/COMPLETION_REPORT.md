@@ -1,6 +1,6 @@
 # PSKit 2.0 整改整合报告
 
-日期：2026-10-10（Asia/Shanghai）。分支 `codex/new-stack-baseline`；原基线 `5d703951d5ed50302e59c1f91e181ada05af81bd`，最终业务源码 `ff873b20cdc5ecd81149f2e63542b76a32537c89`。本报告之后的交接提交仅补文档、测量脚本与截图，不改变已测试业务源码。
+日期：2026-10-10（Asia/Shanghai）。分支 `codex/new-stack-baseline`；原基线 `5d703951d5ed50302e59c1f91e181ada05af81bd`。下文第一轮结果对应业务源码 `ff873b20cdc5ecd81149f2e63542b76a32537c89`；用户随后授权继续，本地准入、接收器与延迟修复见末尾续作及其独立证据。
 
 ## 审计与实施顺序
 
@@ -20,9 +20,9 @@
 | Phase6 / 独立目录决策 | 按规格例外保留new_*；仅独立提交新README和原文归档，未搬目录/删除旧代码 | [决策/引用清单](phases/phase-6/CHANGE_SUMMARY.md) · [验证](phases/phase-6/VERIFICATION.md) · [回滚](phases/phase-6/MIGRATION_AND_ROLLBACK.md) |
 | Phase7 / 受控运维准备 | pskitctl只读入口与Manifest驱动API/Web发布器、准入保护/保守会计、崩溃恢复/旧assets保留、故障注入 | [变更](phases/phase-7/CHANGE_SUMMARY.md) · [验证](phases/phase-7/VERIFICATION.md) · [回滚](phases/phase-7/MIGRATION_AND_ROLLBACK.md) |
 
-所有业务提交与契约再生、纯目录文档决策分别提交。没有新增数据库schema/迁移、框架、微服务或平行模型权限/账本系统。
+第一轮业务提交与契约再生、纯目录文档决策分别提交。第一轮没有新增数据库schema/迁移、框架、微服务或平行模型权限/账本系统。续作显式增加单独 version 1 的发布准入组件，核心 schema 仍为13；仅在专用合成数据库安装，没有迁移真实数据库。
 
-## 最终本地验收
+## 第一轮本地验收（源码 ff873b2）
 
 环境：WSL，Python3.12.9、Node24.13.0、npm11.6.2；实际安装Pi0.87.1；专用loopback/tmpfs PostgreSQL17.6、每组随机schema。源码快照排除私有.env、数据、用户文件，测试不读取生产配置。
 
@@ -47,7 +47,7 @@
 
 本机命令需 `PATH=/tmp/pskit-ci-docker-bin:$PATH` 适配Snap CLI；GitHub普通Docker无需此包装。Backend/deployment测试只接受专用loopback PG17 DSN。远端GitHub CI未运行，本次没有push。
 
-## 本地镜像与回退边界
+## 第一轮本地镜像与回退边界
 
 - 本地tag：`pskit-agent-backend:remediation-ff873b2`。
 - ID/RepoDigest：`sha256:a86ea08523b415f31a7ce4fbbe81fd2d2f6ab0b9555b9f5a30dd1f0bb8d7045e`。
@@ -65,9 +65,19 @@
 
 1. 新供应商真实工具/Pi/OpenSandbox Staging资格、费用和路由头；当前driver默认关闭，离线证据不授予Agent Ready。Responses-only协议有明确拒绝/界面，未实现未经需求验证的转换。
 2. 生产真正生效的限流、可信代理链、管理入口/内部404及实际云端配置，未在线核对。
-3. API发布的独立准入与Receiver activity适配器、真实host adoption、Staging API/Web/Pending/回滚演练和RPO/RTO；缺适配器时发布器拒绝API更新。
+3. API发布适配器的独立宿主资格、真实host adoption、Staging API/Web/Pending/回滚演练和RPO/RTO；本地实现及合成回归不能替代宿主验收。缺少有效适配器证明时发布器拒绝API更新。
 4. apps/*与legacy/*纯路径搬迁：source binds、旧回退和实机smoke未验收，按规格例外不执行。
 5. 大历史PG EXPLAIN、真实WebGL/Molstar异步展开视觉锚点、真实Supabase/上传性能、DB长期阻塞的取消延迟；本地mock浏览器检查不替代这些。
 6. OpenSandbox高权限Docker控制面仍是受信任单机边界，执行节点隔离及transcript HA只写方案，没有在线迁移。
 
 本轮没有SSH/生产发布、真实数据库/密钥修改、历史数据删除、执行节点升级或目录大迁移。上述外部门禁不是代码任务遗漏的成功证明，须在独立授权环境中完成后才可启用相关上线操作。
+
+## 用户授权后的本地续作
+
+按[续作计划](phases/phase-7/ADAPTER_IMPLEMENTATION_PLAN.md)实现持久发布准入 CLI、实际应用的私有证明接口、统一接收器的认证只读观察和首增量重复查询修复。新工具沿用当前 PostgreSQL、接收器进程和 MCP/PDF 共享容量，没有新增微服务或第二套计算账本。默认不启用准入及 Receiver observer；正式启用要求独立资格和宿主 adoption。
+
+最终业务源码为 `5ccc25965cd1abd689196a2dfb998f499f83a051`。本轮整合：Backend **1204 passed / 1 外部 Supabase skipped**（PG **232 passed / 0 skipped**）、Frontend **387**、部署 **448**、Pi **9**、当前镜像 **3** 通过；9 个合成 Compose 通过、契约再生无漂移。镜像 `pskit-agent-backend:remediation-5ccc259` 仅保留本地。提交划分、制品 ID、原始证据、回退与仍待宿主验收的边界见下方续作记录；本轮专用 tmpfs PG17 已精准移除。
+
+独立审查补齐了高隔离级别旧快照、接收器父目录替换、无幂等键 MCP 未知结果、管理台资格执行绕过、解除暂停后确认丢失及错误接线证明问题。全量测试还发现可选组件自动安装破坏历史 SQLite 迁移，现已改为独立显式安装，并在 schema 切换和失败清理时保留意外出现的闭锁记录。公开 DTO/SSE 契约、目录、现有功能入口保持兼容。变更、最新全量验证和各项回退边界见[续作变更](phases/phase-7/ADAPTER_CHANGE_SUMMARY.md)与[续作验证](phases/phase-7/ADAPTER_VERIFICATION.md)。
+
+首增量重新按 ABBA 测量：文本路径删去提交前重复 lease SELECT，保留事务内 owner/user/status/expiry fencing；在同一源码的200次完整合成对话中，持久门禁增加约3.971ms的 admission 中位延迟。P95 波动没有被解释为改善。原始样本、源码摘要和测量后私有证明补丁的边界见[延迟诊断](phases/phase-4/FIRST_DELTA_DIAGNOSIS.md)。真实供应商、云端网络、RPO/RTO和路径迁移仍待独立验收；未push或部署。

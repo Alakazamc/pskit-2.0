@@ -1,0 +1,22 @@
+{
+  "image": "pskit-agent-backend:remediation-adapters-local-20261010",
+  "image_id": "sha256:bf71cd30122d304079a6be5c7f832b2e48ac4d6503fafb51d36156bbcd9493ad",
+  "source_hashes": {
+    "app/api/release_admission.py": "baecf86be3205eae62c13875fc40475647e2f81d04037dffb282d9d7485a8a06",
+    "app/db/postgres_migrations/__init__.py": "2c19fdd690703f6484cde109bc7bf6c2e895f11dcae36dd5bc1896a3b25d1049",
+    "app/db/release_admission_migrations.py": "90b008fd6ff5bb9e7ef8d4c4fc7a009a4e748aabc1eb373f2ee572b7194a06a2",
+    "app/db/release_admission_v1.sql": "16ea683e3813905b4656d507897de5cd56f715cbd88a0aafe7f0ced234b5c1a3",
+    "app/domain/release_admission.py": "0bc6c3bb84919f8e2108a1d7e42332b026f49afd15288997f4c82abb828fda2b",
+    "app/services/agent_events.py": "36547655fe1a929897e5eda90a05f1f3177eb18a153625490999387cbc1261d6",
+    "app/services/qualification_admission.py": "b6585a76590429c916b6374d05c36dec726504994baef82c26f50ecd40ec73db",
+    "pskit_compute/activity.py": "5017e698666b6f79d1af7d5856436d2d1677ec37753f1f18c4efabd1ed59e575",
+    "pskit_compute/activity_http.py": "6b5fb584822bfe7682cdb92c25ce8e174d0de081b77be849ef4a3a686e2140d1",
+    "scripts/agent_data_migrate.py": "196605452abd5a6a0472c7001b237082e4c4378c8441f0164289aff6da3433be",
+    "scripts/mcp_compute_receiver.py": "4254d92b2184010f6c33eafe92480427349f040e44e27bd4269ecae7f6d8cf2e"
+  },
+  "matched_files": 11,
+  "network": "none",
+  "read_only": true,
+  "source_revision": "5ccc25965cd1abd689196a2dfb998f499f83a051",
+  "version_alias": "pskit-agent-backend:remediation-5ccc259"
+}
