@@ -170,8 +170,12 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
   }
 
   if (toolsChanged) {
-    const updatedTools = next.tools.filter(tool => !toolUpdates.has(tool.id));
-    next = { ...next, tools: [...updatedTools, ...Array.from(toolUpdates.values())] };
+    const existingIds = new Set(next.tools.map(tool => tool.id));
+    const updatedTools = next.tools.map(tool => toolUpdates.get(tool.id) ?? tool);
+    for (const tool of toolUpdates.values()) {
+      if (!existingIds.has(tool.id)) updatedTools.push(tool);
+    }
+    next = { ...next, tools: updatedTools };
   }
 
   if (planChanged && newPlan) {

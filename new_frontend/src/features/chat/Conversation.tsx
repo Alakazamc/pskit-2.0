@@ -159,7 +159,7 @@ export function Conversation({ messages, run, runId, awaitingEvents = false, onC
           {message.role === "assistant" && <div className="message-actions"><ReplyCopyButton text={message.parts.filter((part) => part.type === "text").map((part) => part.text).join("\n\n")} /></div>}
         </div>
       </article>)}
-      {showRunReply && <article className="message-row assistant">
+      {showRunReply && <article className="message-row assistant" key={runId ?? "live-run"}>
         <div className="message-body">
           {runActive && liveParts.length === 0 && <AssistantWaitingIndicator />}
           <MessageParts parts={liveParts} markdown streaming={runActive} resourceActions={resourceActions} />

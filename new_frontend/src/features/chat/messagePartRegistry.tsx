@@ -20,6 +20,10 @@ export function registerMessagePartRenderer(type: string, renderer: ComponentTyp
   renderers.set(type, renderer);
 }
 
+export function hasMessagePartRenderer(type: string): boolean {
+  return renderers.has(type);
+}
+
 function BuiltInMessagePart({ part, markdown, streaming, resourceActions }: MessagePartRendererProps) {
   switch (part.type) {
     case "text": return markdown

@@ -74,6 +74,7 @@
 - Treat resource IDs as the authority. File and artifact cards use authenticated API methods for open, preview and download, and never resolve model-authored local paths such as `sandbox:/...`. Missing actions or unknown future part types retain a readable, noninteractive fallback.
 - Reuse `ResourceCard.tsx` for conversation files and outputs. Keep the card compact with format, full filename access, explicit open/download controls and local error feedback. Tool-specific result UI registers by tool name; the generic result stays compact and reveals structured JSON only on request.
 - Project live Run events into the same typed parts used by saved messages so text, tools, progress and artifacts do not change component families after persistence. Keep live Markdown streaming and saved-message replacement behavior intact to avoid duplicate replies.
+- Render conversation tool calls as compact, transparent activity rows through `ToolActivityGroup.tsx` and `toolRegistry.tsx`. Group adjacent tool parts, pair calls/results by nonempty invocation ID, and preserve each call's first position during status updates. Use a foldable list capped at 240 px for multiple activities; open per-call details on demand and keep files/downloads outside the group. Derive status and counts from reported parts, keep failures and approval requests visible when folded, and preserve the user's expansion choice. Reuse native disclosure controls, Lucide icons, theme tokens and shared scrollbars; retain custom renderer registration.
 
 ## Sidebar
 
