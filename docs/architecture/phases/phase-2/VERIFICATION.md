@@ -15,7 +15,7 @@ PG 使用本任务新建的 loopback/tmpfs 容器；每组测试创建独立 sch
 | 真实 PG auth namespace | 7 passed，含两个业务角色实际 SELECT 被拒绝 | `/tmp/pskit-phase2-auth-pg.log` |
 | Manifest | 12 passed，含旧歧义哈希反例、安全字段与 overlay 门禁 | `deploy/agent/tests/test_release_manifest.py` |
 | 契约 | Python/OpenAPI/Event/Compute/TS 在临时目录再生逐字节一致 | `scripts/check_new_stack_contracts.py` |
-| 固定 LiteLLM callback | **pending**，镜像仍在下载，未以普通单测替代 | 固定镜像离线入口见 `infra/litellm/COMPATIBILITY.md` |
+| 固定 LiteLLM callback | **5 passed**，1.965s；同步/异步、流/非流对照共 12 个 wire 子场景，实际 SDK/callback，容器禁网 | `/tmp/pskit-phase2-litellm-final.log`；固定镜像离线入口见 `infra/litellm/COMPATIBILITY.md` |
 
 镜像为本地未发布验证快照 `pskit-agent-backend:remediation-local-20261010`，Docker 实际 ID/RepoDigest：
 `sha256:8dd93e18fc18a69e349bfd36474dcea12f41fb19685d55a0a2928a9141b214a1`。
@@ -27,6 +27,7 @@ PG 使用本任务新建的 loopback/tmpfs 容器；每组测试创建独立 sch
 - 首次 canonical runner 为 856 passed / 3 failed / 3 errors / 1 skip。六项错误均为本地 Snap Docker 无法读取 `/tmp` 合成配置。使用本地 config-only 非 Snap Compose wrapper 重跑后得到上表结果，代码没有宽泛 skip 或调整业务逻辑。
 - 本地 sandbox 拒绝 asyncio 自唤醒 socket，使线程池测试挂起；获准在独立本地测试进程执行同一测试通过，未修改应用规避机制。
 - 审查发现 Manifest 哈希缺少分帧：构造两个不同文件树得到旧相同输入，修为路径长度 + UTF-8 路径 + 文件 SHA256，反例通过。
+- 固定 LiteLLM 容器初次检查：5 tests / 4 OpenAI 子场景 error，原因为客户端 fixture 类型错误；保留真实 callback 和所有断言，使用 OpenAI SDK + MockTransport 后全部通过。镜像下载后实际 digest 为 `sha256:a68b34df312f1e72914f0886384517fa4fdb09013480460b80a4e3a40104376b`。
 
 远端 GitHub CI、真实 Supabase integration、新模型供应商、云端 preflight/smoke、Staging 和生产均 **not tested**。
 依赖目录隔离的最后修正后，前端全套与 Pi 协议已重跑；后端其他测试源码未变，未把这次定向重跑写成第二次全量运行。

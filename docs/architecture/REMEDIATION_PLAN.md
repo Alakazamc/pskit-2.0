@@ -70,12 +70,12 @@
 - [x] Backend运行ruff/compile/单元/PG17；提供独立service DSN，确认PG suite实际执行而非静默skip。定位Phase0中断的组合，逐文件timeout+trace，不猜原因。
 - [x] React npm ci/typecheck/lint/vitest/build（含Molstar verifier）；Pi npm ci + extension.test.js。
 - [x] 运行OpenAPI/Event/Compute导出与TS再生，git diff契约须为零；如基线生成物已漂移，独立列差异审核，不能与业务改动混淆。
-- [ ] 固定LiteLLM1.100.3容器执行真实callback的离线PinCC/官方Anthropic/OpenAI对照；不给provider key、不跑付费调用。
+- [x] 固定LiteLLM1.100.3容器执行真实callback的离线PinCC/官方Anthropic/OpenAI对照；不给provider key、不跑付费调用。
 - [x] synthetic env渲染本地/Staging/生产/optionalOpenSandbox，检查overlay与隔离；修Dockerfile期待漂移，构建正式context new_backend、非root/Python/Pi/import检查。
 - [x] Release Manifest schema校验固定source SHA/image digest/dist hash/schema/Pi/LiteLLM/compat/Compose/checks；manifest不能虚报未执行的ci/preflight/smoke。
-- [ ] 新CI本地等价命令通过后提交 `test(new-stack-ci): ...`；GitHub远端CI只有push后才有执行证据，不把本地通过写成远端green。
+- [x] 新CI本地等价命令通过后提交 `test(new-stack-ci): ...`；GitHub远端CI只有push后才有执行证据，不把本地通过写成远端green。
 
-**当前：** 代码与独立审查通过，后端862/PG170零跳过、前端357、部署248、新镜像3通过；固定LiteLLM下载仍pending，完整资格未签发。详见[阶段记录](phases/phase-2/VERIFICATION.md)。
+**当前：** 代码与独立审查通过，后端862/PG170零跳过、前端357、部署248、新镜像3和固定LiteLLM容器5 tests/12 wire子场景通过。远端CI和云端验收not tested。详见[阶段记录](phases/phase-2/VERIFICATION.md)。
 
 **Gate:** 独立PG/协议/构建/契约检查有实际结果；失败/不可用明确保留。**Rollback:** revert新workflow/校验工具，无线上和DB变更，旧workflow保留。
 

@@ -9,8 +9,12 @@ from unittest.mock import patch
 import httpx
 import litellm
 from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler, HTTPHandler
-
-from provider_compat import PinccToolCompatibility, normalize_pincc_tools, pincc_tool_compatibility
+from openai import AsyncOpenAI, OpenAI
+from provider_compat import (
+    PinccToolCompatibility,
+    normalize_pincc_tools,
+    pincc_tool_compatibility,
+)
 
 
 class CompatibilityTests(unittest.TestCase):
@@ -94,7 +98,9 @@ class CompatibilityTests(unittest.TestCase):
                         if asynchronous:
                             async def invoke():
                                 async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
-                                    result = await litellm.acompletion(**params, client=client)
+                                    sdk = AsyncOpenAI(api_key="offline-only", max_retries=0,
+                                                      http_client=client)
+                                    result = await litellm.acompletion(**params, client=sdk)
                                     if stream:
                                         chunks = [chunk async for chunk in result]
                                         self.assertTrue(any(c.choices[0].delta.tool_calls for c in chunks if c.choices))
@@ -104,7 +110,9 @@ class CompatibilityTests(unittest.TestCase):
                             asyncio.run(invoke())
                         else:
                             with httpx.Client(transport=httpx.MockTransport(respond)) as client:
-                                result = litellm.completion(**params, client=client)
+                                sdk = OpenAI(api_key="offline-only", max_retries=0,
+                                             http_client=client)
+                                result = litellm.completion(**params, client=sdk)
                                 if stream:
                                     self.assertTrue(any(c.choices[0].delta.tool_calls for c in result if c.choices))
                                 else:
