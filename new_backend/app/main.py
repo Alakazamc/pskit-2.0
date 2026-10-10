@@ -90,6 +90,7 @@ from app.services.auth_protection import AuthProtection
 from app.services.client_ip import TrustedClientIpResolver
 from app.services.csrf import CsrfProtector
 from app.services.model_catalog import ModelCatalog
+from app.services.model_gateway import gateway_client_lifespan
 from app.services.observability import ObservabilityMiddleware, RequestMetrics
 from app.services.pdf_processing import PdfProcessingPool
 from app.services.sandbox_operations import (
@@ -353,7 +354,7 @@ def create_app(
         )
 
     @asynccontextmanager
-    async def lifespan(application: FastAPI):
+    async def application_lifespan(application: FastAPI):
         """Start discovery and background schedulers, then release them on exit."""
         service = application.state.agent_service
         mock_scheduler = None
@@ -460,6 +461,12 @@ def create_app(
                     pass
             if database is not None:
                 database.close()
+
+    @asynccontextmanager
+    async def lifespan(application: FastAPI):
+        """Own one model HTTP pool across startup, request streams and shutdown."""
+        async with gateway_client_lifespan(application.state), application_lifespan(application):
+            yield
 
     app = FastAPI(title="PSKit Research Agent API", version="0.1.0", lifespan=lifespan)
 
@@ -754,6 +761,7 @@ def create_app(
             model=settings.title_model,
             timeout=settings.title_timeout_seconds,
             gateway_kind=settings.model_gateway_kind,
+            http_client=lambda: getattr(app.state, "model_gateway_http_client", None),
         )
         if settings.agent_runtime == "pi"
         else None

@@ -2,11 +2,17 @@ import asyncio
 import inspect
 import json
 import os
+import re
 import shutil
 import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+from pydantic import ValidationError
+
+from app.adapters.live.pi_model_config import PiModelConfigBuilder, PiModelConfigError
+from app.contracts.model_runtime import ModelRuntimeProfile
 
 # Pi echoes up to ten 4 MiB images as base64 in a single JSONL user event.
 # Keep the pipe bounded while allowing those valid turns and event metadata.
@@ -28,7 +34,18 @@ class PiRpcError(Exception):
 
 
 def _provider_error_code(message: str) -> str:
-    """Classify a provider error message into a stable public failure code."""
+    """Prefer the proxy's structured code; retain legacy direct-route classification."""
+    tokens = set(re.findall(r"\b[A-Z][A-Z_]+\b", message))
+    if "PSKIT_TOKEN_QUOTA_EXCEEDED" in tokens:
+        return "TOKEN_QUOTA_EXCEEDED"
+    known = {"MODEL_GATEWAY_QUOTA_EXHAUSTED", "MODEL_GATEWAY_AUTH_FAILED",
+             "MODEL_GATEWAY_RATE_LIMITED", "MODEL_GATEWAY_INVALID_REQUEST"}
+    for code in sorted(known):
+        if code in tokens:
+            return code
+    if tokens & {"UNKNOWN_UPSTREAM_ERROR", "MODEL_GATEWAY_UNAVAILABLE"}:
+        # Existing settlement treats PI_RUN_FAILED as ambiguous, retaining its hold.
+        return "PI_RUN_FAILED"
     lowered = message.lower()
     if "pskit_token_quota_exceeded" in lowered:
         return "TOKEN_QUOTA_EXCEEDED"
@@ -163,28 +180,22 @@ class PiRpcRunner:
         if gateway_url:
             if not gateway_model or not child_env.get(key_env):
                 raise PiRpcError("Model gateway model or key is missing")
-            model_config = {
-                "id": gateway_model,
-                "input": ["text", "image"]
-                if child_env.get("PSKIT_MODEL_SUPPORTS_IMAGES") == "1"
-                else ["text"],
-            }
-            if requested_level:
-                model_config["reasoning"] = True
-                if requested_level in {"xhigh", "max"}:
-                    model_config["thinkingLevelMap"] = {requested_level: requested_level}
-                elif requested_level == "off":
-                    model_config["thinkingLevelMap"] = {"off": "none"}
-            config = {
-                "providers": {
-                    provider_name: {
-                        "baseUrl": f"{gateway_url.rstrip('/').removesuffix('/v1')}/v1",
-                        "api": "openai-completions",
-                        "apiKey": f"${key_env}",
-                        "models": [model_config],
-                    },
-                },
-            }
+            try:
+                raw_profile = (environment or {}).get("PSKIT_MODEL_RUNTIME_PROFILE")
+                if raw_profile is not None and len(raw_profile.encode()) > 64 * 1024:
+                    raise PiModelConfigError("MODEL_PROFILE_INVALID")
+                profile = ModelRuntimeProfile.model_validate_json(raw_profile) if raw_profile else None
+                config = PiModelConfigBuilder().build(
+                    base_url=gateway_url, alias=gateway_model, provider_name=provider_name,
+                    supports_images=child_env.get("PSKIT_MODEL_SUPPORTS_IMAGES") == "1",
+                    reasoning_effort=requested_level, profile=profile,
+                )
+            except (ValidationError, PiModelConfigError) as exc:
+                if branch_file is not None:
+                    branch_file.unlink(missing_ok=True)
+                raise PiRpcError("Model profile is incompatible", code=(
+                    exc.code if isinstance(exc, PiModelConfigError) else "MODEL_PROFILE_INVALID"
+                )) from exc
             self._write_config(config_dir / "models.json", config)
         args = [
             self.executable,

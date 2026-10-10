@@ -5,7 +5,7 @@ import json
 import logging
 import re
 
-import httpx
+from app.services.model_gateway import acquire_gateway_client, read_gateway_error
 
 logger = logging.getLogger(__name__)
 
@@ -32,12 +32,13 @@ def _title_text(content: object) -> str | None:
 
 class SessionTitleService:
     def __init__(self, store, model_policy, *, model: str = "", timeout: float = 15,
-                 gateway_kind: str = "generic"):
+                 gateway_kind: str = "generic", http_client=None):
         self.store = store
         self.model_policy = model_policy
         self.model = model
         self.timeout = timeout
         self.gateway_kind = gateway_kind
+        self.http_client = http_client
         self._task = None
 
     async def start(self) -> None:
@@ -77,6 +78,13 @@ class SessionTitleService:
                         {"role": "user", "content": prompt},
                     ],
                 }
+                profile = getattr(selected, "runtime_profile", None)
+                if profile is not None:
+                    if profile.protocol != "chat_completions":
+                        return
+                    field = profile.wire_policy.chat_max_tokens_field
+                    body.pop("max_tokens")
+                    body[field] = min(128, profile.max_output_tokens or 128)
                 headers = {"Authorization": f"Bearer {gateway.api_key}"}
                 if self.gateway_kind == "litellm":
                     body["user"] = user_id
@@ -84,15 +92,30 @@ class SessionTitleService:
                 # A separate hold keeps this auxiliary call out of the completed Pi turn.
                 budget = len(json.dumps(body, ensure_ascii=False).encode()) * 2 + 128
                 self.store.reserve_resume_tokens(user_id, run_id, budget)
-                async with httpx.AsyncClient(
-                    transport=gateway.transport, timeout=self.timeout, trust_env=False,
-                ) as client:
-                    response = await client.post(
-                        f"{gateway.base_url}/v1/chat/completions", json=body, headers=headers,
-                    )
-                if 400 <= response.status_code < 500:
-                    self.store.settle_current_tokens(user_id, run_id, refund_if_unreported=True)
-                response.raise_for_status()
+                lease = acquire_gateway_client(
+                    client=self.http_client() if self.http_client else None,
+                    transport=gateway.transport,
+                )
+                response = None
+                try:
+                    response = await lease.client.send(lease.client.build_request(
+                        "POST", f"{gateway.base_url}/v1/chat/completions", json=body,
+                        headers=headers, timeout=self.timeout,
+                    ), stream=True)
+                    if response.status_code != 200:
+                        error = await read_gateway_error(response)
+                        if error.definite_rejection:
+                            self.store.settle_current_tokens(
+                                user_id, run_id, refund_if_unreported=True,
+                            )
+                        response.raise_for_status()
+                    await response.aread()
+                finally:
+                    try:
+                        if response is not None:
+                            await response.aclose()
+                    finally:
+                        await lease.aclose()
                 data = response.json()
                 usage = data.get("usage") or {}
                 tokens = usage.get("total_tokens")

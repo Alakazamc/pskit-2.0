@@ -20,12 +20,25 @@ from app.contracts.capabilities import (
 )
 from app.contracts.catalog import ArtifactRef
 from app.contracts.conversation import ApprovalRef, PlanSnapshot
+from app.contracts.model_runtime import (
+    ModelRuntimeProfile,
+    reasoning_logical_value,
+    reasoning_wire_value,
+)
 from app.domain.persistent_conversation import ComputeLeaseConflict, GpuReconciliationConflict
 from app.domain.quota import GpuQuotaExceeded, TokenQuotaExceeded
 from app.ports.providers import ProviderUnavailable
+from app.services.model_gateway import acquire_gateway_client, read_gateway_error
 
 router = APIRouter(prefix="/internal", tags=["internal"], include_in_schema=False)
 MAX_ARTIFACT_BYTES = 20 * 1024 * 1024
+# These configure the gateway/provider route or its credentials, not a model's
+# sampling request. A sandbox's Run token does not grant either authority.
+MODEL_ROUTE_OVERRIDE_FIELDS = frozenset({
+    "api_base", "base_url", "api_key", "custom_llm_provider", "litellm_params",
+    "api_type", "api_version", "extra_headers", "headers", "model_list",
+    "deployment_id", "provider", "provider_options", "providerOptions",
+})
 
 
 class InternalAf3Request(BaseModel):
@@ -147,10 +160,13 @@ async def proxy_model_call(
         payload = json.loads(raw)
     except (ValueError, UnicodeDecodeError) as exc:
         raise HTTPException(status_code=400, detail="Invalid model request") from exc
-    expected_model = (store.run_context(run_id).get("model_id")
+    context = store.run_context(run_id)
+    expected_model = (context.get("model_id")
                       or settings.model_gateway_model or settings.new_api_model)
     if not isinstance(payload, dict) or payload.get("model") != expected_model:
         raise HTTPException(status_code=400, detail="Model is not configured")
+    if MODEL_ROUTE_OVERRIDE_FIELDS.intersection(payload):
+        raise HTTPException(400, detail={"code": "MODEL_REQUEST_OVERRIDE_FORBIDDEN"})
     policy = getattr(request.app.state, 'model_policy', None)
     allowed_model = None
     if policy and policy.managed:
@@ -158,12 +174,46 @@ async def proxy_model_call(
             allowed_model = await policy.authorize(owner, expected_model, 'chat')
         except PermissionError as exc:
             raise HTTPException(403, detail={'code': 'MODEL_FORBIDDEN'}) from exc
-    if allowed_model and payload.get("reasoning_effort") and payload["reasoning_effort"] not in allowed_model.reasoning_levels:
+    effort = payload.get("reasoning_effort")
+    logical_effort = reasoning_logical_value(effort) if effort else None
+    if effort and (logical_effort is None or (
+        allowed_model is not None and logical_effort not in allowed_model.reasoning_levels
+    )):
         raise HTTPException(422, detail={"code": "MODEL_REASONING_UNAVAILABLE"})
+    snapshot = context.get("model_runtime_profile")
+    try:
+        profile = ModelRuntimeProfile.model_validate(snapshot) if snapshot is not None else (
+            getattr(allowed_model, "runtime_profile", None)
+        )
+    except ValueError as exc:
+        raise HTTPException(403, detail={"code": "MODEL_PROFILE_INVALID"}) from exc
+    if profile is not None and (profile.alias != expected_model or profile.protocol != "chat_completions"):
+        raise HTTPException(422, detail={"code": "MODEL_PROTOCOL_UNSUPPORTED"})
+    if profile is not None and effort and (
+        logical_effort not in profile.reasoning_levels
+        or profile.wire_policy.reasoning_mode == "omit"
+    ):
+        raise HTTPException(422, detail={"code": "MODEL_REASONING_UNAVAILABLE"})
+    if effort:
+        payload["reasoning_effort"] = reasoning_wire_value(logical_effort)
+    if "max_completion_tokens" in payload and "max_tokens" in payload:
+        raise HTTPException(400, detail="Conflicting model output limits")
     field = "max_completion_tokens" if "max_completion_tokens" in payload else "max_tokens"
     requested = payload.get(field, 4096)
     if type(requested) is not int or requested < 1:
         raise HTTPException(status_code=400, detail="Invalid model output limit")
+    if profile is not None:
+        payload.pop(field, None)
+        field = profile.wire_policy.chat_max_tokens_field
+        if profile.max_output_tokens is not None:
+            requested = min(requested, profile.max_output_tokens)
+        if profile.wire_policy.stream_usage_mode != "supported":
+            payload.pop("stream_options", None)
+        if profile.wire_policy.developer_role_mode != "supported":
+            messages = payload.get("messages")
+            for message in messages if isinstance(messages, list) else []:
+                if isinstance(message, dict) and message.get("role") == "developer":
+                    message["role"] = "system"
     # Image data is base64 transport, not text tokens. Reserve a conservative
     # image allowance while the provider's reported usage remains authoritative.
     image_data_bytes: list[int] = []
@@ -186,6 +236,8 @@ async def proxy_model_call(
 
     count_image_data(payload.get("messages", []))
     if allowed_model and image_count and not allowed_model.supports_images:
+        raise HTTPException(422, detail={"code": "MODEL_DOES_NOT_SUPPORT_IMAGES"})
+    if profile is not None and image_count and not profile.supports_images:
         raise HTTPException(422, detail={"code": "MODEL_DOES_NOT_SUPPORT_IMAGES"})
     if image_count > 10:
         raise HTTPException(status_code=413, detail="Too many images")
@@ -213,29 +265,32 @@ async def proxy_model_call(
         payload["user"] = owner
         headers["x-litellm-end-user-id"] = owner
     url = f"{base_url.rstrip('/').removesuffix('/v1')}/v1/chat/completions"
-    client = getattr(request.app.state, "model_gateway_http_client", None)
-    owned_client = client is None
-    if client is None:
-        client = httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=10.0))
+    lease = acquire_gateway_client(request.app.state)
+    client = lease.client
     try:
         upstream = await client.send(client.build_request(
             "POST", url, json=payload,
             headers=headers,
         ), stream=True)
     except httpx.HTTPError as exc:
-        if owned_client:
-            await client.aclose()
+        await lease.aclose()
         raise HTTPException(status_code=502, detail="Model gateway request failed") from exc
+    except BaseException:
+        await lease.aclose()
+        raise
 
-    if upstream.status_code in {400, 401, 403, 404, 422, 429}:
-        store.release_model_call(owner, run_id, call_id)
     if upstream.status_code != 200:
-        body = await upstream.aread()
-        media_type = upstream.headers.get("content-type", "application/json")
-        await upstream.aclose()
-        if owned_client:
-            await client.aclose()
-        return Response(body, status_code=upstream.status_code, media_type=media_type)
+        try:
+            error = await read_gateway_error(upstream)
+            if error.definite_rejection:
+                store.release_model_call(owner, run_id, call_id)
+            return Response(json.dumps(error.body()), status_code=error.status_code,
+                            media_type="application/json", headers=error.headers)
+        finally:
+            try:
+                await upstream.aclose()
+            finally:
+                await lease.aclose()
 
     async def stream():
         """Relay an upstream model stream and close its HTTP resources."""
@@ -246,9 +301,10 @@ async def proxy_model_call(
                 async for chunk in upstream.aiter_raw():
                     yield chunk
         finally:
-            await upstream.aclose()
-            if owned_client:
-                await client.aclose()
+            try:
+                await upstream.aclose()
+            finally:
+                await lease.aclose()
 
     return StreamingResponse(
         stream(), status_code=upstream.status_code,
