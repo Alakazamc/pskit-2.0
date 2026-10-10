@@ -14,7 +14,60 @@ export const emptyComposerDraft = (): ComposerDraft => ({
 const efforts = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 const storageKey = (scope: ComposerDraftScope) =>
   `pskit.composer.v1:${encodeURIComponent(scope.userId)}:${encodeURIComponent(scope.conversationId)}`;
+export type BrowserDraftPolicy = { enabled: boolean; clearOnSignOut: boolean };
+const policyKey = (userId: string) => `pskit.composer.policy.v1:${encodeURIComponent(userId)}`;
+const draftPrefix = (userId: string) => `pskit.composer.v1:${encodeURIComponent(userId)}:`;
+const volatileDrafts = new Map<string, ComposerDraft>();
 const observers = new Map<string, Set<(draft: ComposerDraft) => void>>();
+
+export function readBrowserDraftPolicy(userId: string): BrowserDraftPolicy {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(policyKey(userId)) ?? "null");
+    if (saved?.version === 1) return { enabled: saved.enabled !== false, clearOnSignOut: saved.clearOnSignOut === true };
+  } catch { /* Existing drafts remain intact if the preference cannot be read. */ }
+  return { enabled: true, clearOnSignOut: false };
+}
+
+export function writeBrowserDraftPolicy(userId: string, policy: BrowserDraftPolicy): boolean {
+  try {
+    window.localStorage.setItem(policyKey(userId), JSON.stringify({ version: 1, enabled: policy.enabled, clearOnSignOut: policy.clearOnSignOut }));
+    return true;
+  } catch { return false; }
+}
+
+export function storedDraftScopes(userId: string): ComposerDraftScope[] {
+  try {
+    const prefix = draftPrefix(userId);
+    const keys = new Set([...Object.keys(window.localStorage), ...volatileDrafts.keys()]);
+    return [...keys].filter((key) => key.startsWith(prefix)).flatMap((key) => {
+      try { return [{ userId, conversationId: decodeURIComponent(key.slice(prefix.length)) }]; }
+      catch { return []; }
+    });
+  } catch { return []; }
+}
+
+export function clearComposerDraft(scope: ComposerDraftScope): void {
+  const key = storageKey(scope);
+  try { window.localStorage.removeItem(key); } catch { /* Memory is still cleared. */ }
+  volatileDrafts.delete(key);
+  observers.get(key)?.forEach((listener) => listener(emptyComposerDraft()));
+}
+
+export function clearUserComposerDrafts(userId: string): void {
+  const prefix = draftPrefix(userId);
+  const keys = new Set([...volatileDrafts.keys(), ...observers.keys()]);
+  try { for (const key of Object.keys(window.localStorage)) keys.add(key); } catch { /* Clear accessible memory only. */ }
+  for (const key of keys) if (key.startsWith(prefix)) {
+    try { window.localStorage.removeItem(key); } catch { /* Memory is still cleared. */ }
+    volatileDrafts.delete(key);
+    observers.get(key)?.forEach((listener) => listener(emptyComposerDraft()));
+  }
+}
+
+export function handleComposerSignOut(userId: string): void {
+  if (readBrowserDraftPolicy(userId).clearOnSignOut) clearUserComposerDrafts(userId);
+  for (const key of volatileDrafts.keys()) if (key.startsWith(draftPrefix(userId))) volatileDrafts.delete(key);
+}
 
 export function observeComposerDraft(scope: ComposerDraftScope, listener: (draft: ComposerDraft) => void): () => void {
   const key = storageKey(scope);
@@ -33,6 +86,10 @@ function refs(value: unknown): ContextRef[] {
 
 // Store only the draft and ready context IDs, never files, credentials, or blob URLs.
 export function readComposerDraft(scope: ComposerDraftScope, fallback = emptyComposerDraft()): ComposerDraft {
+  if (!readBrowserDraftPolicy(scope.userId).enabled) {
+    const working = volatileDrafts.get(storageKey(scope));
+    if (working) return working;
+  }
   try {
     const raw = window.localStorage.getItem(storageKey(scope));
     const saved: unknown = raw ? JSON.parse(raw) : null;
@@ -50,8 +107,14 @@ export function readComposerDraft(scope: ComposerDraftScope, fallback = emptyCom
 
 export function writeComposerDraft(scope: ComposerDraftScope, draft: ComposerDraft): boolean {
   let persisted = false;
+  const sanitized = {
+    content: draft.content, model: draft.model, reasoning_effort: draft.reasoning_effort,
+    attachments: refs(draft.attachments), skills: refs(draft.skills), resources: refs(draft.resources),
+  };
+  const retain = readBrowserDraftPolicy(scope.userId).enabled;
+  if (!retain) { volatileDrafts.set(storageKey(scope), sanitized); persisted = true; }
   try {
-    window.localStorage.setItem(storageKey(scope), JSON.stringify({
+    if (retain) window.localStorage.setItem(storageKey(scope), JSON.stringify({
       version: 1, content: draft.content, model: draft.model, reasoning_effort: draft.reasoning_effort,
       attachments: refs(draft.attachments), skills: refs(draft.skills), resources: refs(draft.resources),
     }));

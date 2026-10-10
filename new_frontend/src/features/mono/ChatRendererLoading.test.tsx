@@ -23,6 +23,7 @@ it("keeps history hidden until its Markdown chunk is ready instead of flashing r
   window.history.replaceState(null, "", "/session/history");
   const fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(String(input), "http://test").pathname;
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return Response.json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/c")) return Response.json([{ id: "history", project_id: "project-alice", title: "History", status: "completed" }]);
     if (path.endsWith("/messages")) return Response.json([{ id: "reply", session_id: "history", role: "assistant", created_at: "2026-10-07T00:00:00Z", parts: [{ type: "text", text: "**Historical reply**" }] }]);

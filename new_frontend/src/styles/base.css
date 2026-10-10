@@ -6,8 +6,8 @@
 @source "../../node_modules/@streamdown/cjk/dist/*.js";
 :root {
   font-family:Inter,"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
-  color:#20302b;
-  background:#f7fbf9;
+  color:var(--color-text);
+  background:var(--color-bg);
   font-synthesis:none
 }
 .auth-restore-screen {
@@ -50,23 +50,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   outline:2px solid #2f9f83;
   outline-offset:2px
 }
-:root {
-  --bg:#f7fbf9;
-  --surface:#fff;
-  --soft:#f1f7f4;
-  --hover:#eaf3ef;
-  --border:#dce9e3;
-  --border-strong:#cbdcd4;
-  --text:#20302b;
-  --secondary:#566a63;
-  --muted:#82938d;
-  --primary:#2f9f83;
-  --primary-dark:#278a72;
-  --primary-soft:#def3eb;
-  --blue:#5796df;
-  --warning:#d59a3a;
-  --danger:#d86464
-}
+
 .eyebrow {
   font-size:11px;
   font-weight:800;

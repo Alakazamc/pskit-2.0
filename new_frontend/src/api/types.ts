@@ -60,6 +60,8 @@ export type MessagePart =
   | Tagged<Api.ProgressPart>
   | Tagged<Api.ErrorPart>;
 export type Message = Omit<Api.Message, "parts"> & { parts: MessagePart[] };
+export type MessagePage = { items: Message[]; next_before: string | null };
+export type MessagePageOptions = { limit?: number; before?: string };
 export type PlanStep = Events.PlanStep;
 export type RunEvent = Events.RunEvent;
 export type McpTool = Required<Api.McpTool>;
@@ -118,6 +120,7 @@ export interface ResearchApi extends AdminApi {
   archiveSession(id: string, projectId?: string | null): Promise<void>;
   moveSession(id: string, targetProjectId: string, sourceProjectId?: string | null): Promise<Session>;
   getMessages(sessionId: string, projectId?: string | null): Promise<Message[]>;
+  getMessagePage?(sessionId: string, projectId?: string | null, options?: MessagePageOptions): Promise<MessagePage>;
   getSkills(): Promise<CatalogItem[]>;
   getSkill(id: string): Promise<SkillDetail>;
   uploadSkill(file: File, visibility: "private" | "public"): Promise<CatalogItem>;

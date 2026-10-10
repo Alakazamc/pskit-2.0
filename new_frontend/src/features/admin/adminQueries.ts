@@ -30,6 +30,11 @@ export function adminErrorKey(error: unknown) {
     if (error.status === 403) return "admin.forbidden";
     if (error.status === 401) return "error.authRequired";
     if (error.status === 409) return "admin.conflict";
+    if (error.code === "MODEL_QUALIFIER_UNAVAILABLE") return "admin.modelQualifierUnavailable";
+    if (error.code === "MODEL_QUALIFICATION_TIMEOUT") return "admin.modelQualificationTimeout";
+    if (error.code === "MODEL_QUALIFICATION_BUDGET_EXHAUSTED") return "admin.modelQualificationBudget";
+    if (error.code === "MODEL_NOT_QUALIFIED" || error.code === "MODEL_RUNTIME_PROFILE_REQUIRED") return "admin.modelQualificationRequired";
+    if (error.code === "MODEL_QUALIFICATION_STALE") return "admin.modelQualificationStale";
     if (error.status === 422) return "admin.invalid";
   }
   return error instanceof SyntaxError ? "admin.invalidJson" : "admin.unavailable";

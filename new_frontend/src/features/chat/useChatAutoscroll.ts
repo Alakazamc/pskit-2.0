@@ -62,4 +62,5 @@ export function useChatAutoscroll(
   useLayoutEffect(() => {
     followNow.current();
   }, [scroller, changeKey]);
+  return { suspendFollowing: () => { following.current = false; } };
 }

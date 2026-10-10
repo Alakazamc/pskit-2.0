@@ -21,16 +21,11 @@ export function useRunEvents(api: ResearchApi, runId: string | null, onCompleted
       if (cancelled || terminal || events.length === 0) return;
       const next = projectEvents(view, events);
       if (next === view) return;
-      const accepted = next.events.slice(view.events.length);
       view = next;
       cursor = view.cursor;
       failures = 0;
       setState({ runId, view });
-      for (const event of accepted) {
-        if (event.type === "run.completed" || event.type === "run.failed" || event.type === "run.cancelled") {
-          terminal = true;
-        }
-      }
+      terminal = Boolean(next.ended);
       if (terminal) {
         controller.abort();
         onCompleted();

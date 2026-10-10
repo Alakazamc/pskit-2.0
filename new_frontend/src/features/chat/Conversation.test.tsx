@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { emptyRun, projectEvents } from "./events";
 import { Conversation } from "./Conversation";
@@ -270,4 +270,59 @@ it("copies the raw text of each assistant reply from its lower-left action", asy
   await waitFor(() => expect(writeText).toHaveBeenCalledWith("**复制这段**"));
   expect(screen.getByRole("button", { name: "已复制" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "已复制" }).closest(".message-actions")).toBeInTheDocument();
+});
+
+it("preserves the visible message anchor and expanded state when older history is prepended", async () => {
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get() { return this.classList?.contains("user-message-text") ? 600 : 1200; } });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get() { return this.classList?.contains("user-message-text") ? 120 : 400; } });
+  let finish!: () => void;
+  const onLoadEarlier = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+  const view = (messages: Message[], hasEarlier = true) => <LanguageProvider><Conversation messages={messages} run={emptyRun} hasEarlier={hasEarlier} onLoadEarlier={onLoadEarlier} /></LanguageProvider>;
+  const rendered = render(view([longMessage]));
+  const scroller = rendered.container.querySelector<HTMLElement>(".conversation-scroll")!;
+  const row = rendered.container.querySelector<HTMLElement>("[data-message-id='user-1']")!;
+  let top = 40;
+  vi.spyOn(row, "getBoundingClientRect").mockImplementation(() => ({ top, bottom: top + 200 }) as DOMRect);
+  fireEvent.click(screen.getByRole("button", { name: "展开" }));
+  scroller.scrollTop = 250;
+  fireEvent.click(screen.getByRole("button", { name: "加载更早的消息" }));
+  await waitFor(() => expect(onLoadEarlier).toHaveBeenCalledTimes(1));
+  top = 440;
+  await act(async () => {
+    rendered.rerender(view([{ ...longMessage, id: "older", created_at: "2026-09-01T00:00:00Z", parts: [{ type: "text", text: "Older question" }] }, longMessage], false));
+    finish();
+  });
+  expect(scroller.scrollTop).toBe(650);
+  expect(rendered.container.querySelector("[data-message-id='user-1']")).toBe(row);
+  expect(within(row).getByRole("button", { name: "收起" })).toHaveAttribute("aria-expanded", "true");
+});
+
+it("keeps the visible anchor while recovering a middle gap and receiving a concurrent latest append", async () => {
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get() { return 1500; } });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get() { return 400; } });
+  let finish!: () => void;
+  const onLoadEarlier = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+  const old = { ...longMessage, id: "old", parts: [{ type: "text" as const, text: "Old cached question" }] };
+  const visible = { ...longMessage, id: "visible", parts: [{ type: "text" as const, text: "Visible question" }] };
+  const gap = { ...longMessage, id: "gap", parts: [{ type: "text" as const, text: "Recovered gap" }] };
+  const appended = { ...longMessage, id: "appended", parts: [{ type: "text" as const, text: "Latest append" }] };
+  const view = (messages: Message[], loadingEarlier = false) => <LanguageProvider><Conversation messages={messages} run={emptyRun} hasEarlier loadingEarlier={loadingEarlier} onLoadEarlier={onLoadEarlier} /></LanguageProvider>;
+  const rendered = render(view([old, visible]));
+  const scroller = rendered.container.querySelector<HTMLElement>(".conversation-scroll")!;
+  const oldRow = rendered.container.querySelector<HTMLElement>("[data-message-id='old']")!;
+  const visibleRow = rendered.container.querySelector<HTMLElement>("[data-message-id='visible']")!;
+  vi.spyOn(oldRow, "getBoundingClientRect").mockReturnValue({ top: -300, bottom: -100 } as DOMRect);
+  let top = 40;
+  vi.spyOn(visibleRow, "getBoundingClientRect").mockImplementation(() => ({ top, bottom: top + 100 }) as DOMRect);
+  scroller.scrollTop = 250;
+  fireEvent.click(screen.getByRole("button", { name: "加载更早的消息" }));
+  rendered.rerender(view([old, visible, appended], true));
+  expect(scroller.scrollTop).toBe(250);
+  top = 440;
+  await act(async () => {
+    rendered.rerender(view([old, gap, visible, appended]));
+    finish();
+  });
+  expect(scroller.scrollTop).toBe(650);
+  expect(rendered.container.querySelector("[data-message-id='visible']")).toBe(visibleRow);
 });

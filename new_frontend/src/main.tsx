@@ -4,6 +4,7 @@ import { App } from "./app/App";
 import "streamdown/styles.css";
 import "katex/dist/katex.min.css";
 import "./styles/base.css";
+import "./styles/tokens.css";
 import "./styles/login.css";
 import "./styles/layout.css";
 import "./styles/sidebar.css";

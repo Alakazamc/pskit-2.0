@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RunEvent } from "../../api/types";
-import { emptyRun, projectEvents } from "./events";
+import { emptyRun, MAX_RETAINED_RUN_EVENTS, projectEvents } from "./events";
 
 describe("run event projection", () => {
   it("projects the latest structured plan snapshot across reconnects", () => {
@@ -171,3 +171,26 @@ function retry(id: string): Extract<RunEvent, { type: "run.retrying" }> {
     attempt: 1, max_attempts: 3, delay_ms: 1000, reset_message: true,
   } };
 }
+
+it("bounds raw history after projecting all display state and preserves the original run time", () => {
+  const first = projectEvents(emptyRun, [
+    { id: "start", run_id: "run-1", created_at: "2026-10-10T00:00:00Z", type: "message.start", data: { role: "assistant" } },
+    { id: "task", run_id: "run-1", type: "task.updated", data: { job_id: "job-1", status: "completed", progress: 100, label: "Task" } },
+    { id: "tool", run_id: "run-1", type: "tool.finished", data: { tool_call_id: "call-1", tool: "write", status: "completed", summary: "Saved" } },
+    { id: "artifact", run_id: "run-1", type: "artifact.created", data: { artifact_id: "file-1", name: "report.md", kind: "document" } },
+    { id: "plan", run_id: "run-1", type: "plan.created", data: { steps: [{ id: "p1", title: "Write", status: "completed" }] } },
+  ]);
+  const frames = Array.from({ length: MAX_RETAINED_RUN_EVENTS * 3 }, (_, index) => delta(`delta-${index}`, "x"));
+  let view = first;
+  for (const frame of frames) view = projectEvents(view, [frame]);
+  expect(view.events).toHaveLength(MAX_RETAINED_RUN_EVENTS);
+  expect(view.text).toHaveLength(frames.length);
+  expect(view.startedAt).toBe("2026-10-10T00:00:00Z");
+  expect(view.tasks?.[0].data.job_id).toBe("job-1");
+  expect(view.tools[0].summary).toBe("Saved"); expect(view.plan[0].status).toBe("completed");
+  expect(view.artifacts[0].name).toBe("report.md");
+  expect(projectEvents(view, [frames.at(-1)!])).toBe(view);
+  const finished = projectEvents(view, [{ id: "end", run_id: "run-1", type: "run.completed", data: { status: "completed" } }]);
+  expect(finished.ended).toBe(true); expect(finished.events).toHaveLength(MAX_RETAINED_RUN_EVENTS);
+  expect(first.events).toHaveLength(5);
+});

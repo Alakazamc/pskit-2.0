@@ -609,3 +609,27 @@ function byteResponse(bytes: Uint8Array): Response {
     controller.close();
   } }));
 }
+
+it("requests bounded message pages without changing legacy message-list URLs", async () => {
+  const fetcher = vi.fn().mockImplementation(async () => Response.json({ items: [], next_before: null }));
+  const api = createHttpApi({ token: () => "token", fetcher });
+  await api.getMessagePage!("session/1", null, { limit: 50, before: "opaque/id" });
+  expect(String(fetcher.mock.calls[0][0])).toBe("/api/v1/c/session%2F1/messages/page?limit=50&before=opaque%2Fid");
+  await api.getMessagePage!("session-2", "project-alice", { limit: 50 });
+  expect(String(fetcher.mock.calls[1][0])).toMatch(/\/g\/[^/]+\/c\/session-2\/messages\/page\?limit=50$/);
+  await api.getMessages("session-2");
+  expect(String(fetcher.mock.calls[2][0])).toBe("/api/v1/c/session-2/messages");
+});
+
+it("falls back only for a missing initial page endpoint and never masks forbidden or foreign cursor errors", async () => {
+  const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ detail: "Missing" }, { status: 404 })).mockResolvedValueOnce(Response.json([]));
+  const api = createHttpApi({ token: () => "token", fetcher });
+  expect(await api.getMessagePage!("session-1")).toEqual({ items: [], next_before: null });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  fetcher.mockReset().mockResolvedValue(Response.json({ detail: "Forbidden" }, { status: 403 }));
+  await expect(api.getMessagePage!("session-1")).rejects.toMatchObject({ status: 403 });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  fetcher.mockReset().mockResolvedValue(Response.json({ detail: "Foreign cursor" }, { status: 404 }));
+  await expect(api.getMessagePage!("session-1", null, { before: "foreign" })).rejects.toMatchObject({ status: 404 });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});

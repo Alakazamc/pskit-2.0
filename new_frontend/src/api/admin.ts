@@ -5,7 +5,7 @@ import type { CatalogItem, SkillDetail } from "./types";
 export type AdminMe = Generated.AdminMe;
 export type AdminPage<T> = Omit<Required<Generated.AdminPageAdminModel>, "items"> & { items: T[] };
 export type RevisionRequest = Generated.RevisionRequest;
-export type ModelDraft = Required<Generated.ModelDraft>;
+export type ModelDraft = Omit<Required<Generated.ModelDraft>, "runtime_profile"> & Pick<Generated.ModelDraft, "runtime_profile">;
 export type AdminModel = Omit<Required<Generated.AdminModel>, "draft" | "published"> & { draft: ModelDraft | null; published: ModelDraft | null };
 export type ServiceDraft = Required<Generated.ServiceDraft>;
 export type AdminService = Required<Generated.AdminService>;
@@ -38,6 +38,7 @@ export interface AdminApi {
   listAdminModels(cursor?: string): Promise<AdminPage<AdminModel>>;
   saveModelDraft(id: string, draft: ModelDraft): Promise<AdminModel>;
   publishModel(id: string, revision: RevisionRequest): Promise<AdminModel>;
+  qualifyModel?(id: string, revision: RevisionRequest): Promise<AdminModel>;
   retireModel(id: string, revision: RevisionRequest): Promise<AdminModel>;
   listServices(cursor?: string): Promise<AdminPage<AdminService>>;
   saveServiceDraft(id: string, draft: ServiceDraft): Promise<AdminService>;
@@ -77,6 +78,7 @@ export function createAdminApi(request: AdminRequest): AdminApi {
     listAdminModels: (cursor) => list("llm-aliases", cursor),
     saveModelDraft: (id, draft) => change(`llm-aliases/${encodeURIComponent(id)}/draft`, draft, "PUT"),
     publishModel: (id, revision) => change(`llm-aliases/${encodeURIComponent(id)}/publish`, revision),
+    qualifyModel: (id, revision) => change(`llm-aliases/${encodeURIComponent(id)}/qualify`, revision),
     retireModel: (id, revision) => change(`llm-aliases/${encodeURIComponent(id)}/retire`, revision),
     listServices: (cursor) => list("services", cursor),
     saveServiceDraft: (id, draft) => change(`services/${encodeURIComponent(id)}/draft`, draft, "PUT"),

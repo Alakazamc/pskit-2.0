@@ -29,6 +29,7 @@ it("keeps a guest draft and offers upgrade when its Token allowance is exhausted
   loggedIn("/session/session-1");
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "guest-1", name: "Guest", email: "", is_anonymous: true });
     if (path.endsWith("/g")) return json([{ id: "project-guest-1", name: "Personal", description: "" }]);
     if (path.endsWith("/c")) return json([{ id: "session-1", project_id: "project-guest-1", title: "Research" }]);
@@ -54,6 +55,7 @@ it("uploads a file through Python even with demo authentication and sends its se
   const sent: unknown[] = [];
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([{ id: "project-alice", name: "Personal", description: "" }]);
     if (path.endsWith("/c")) return json([
@@ -98,6 +100,7 @@ it.each([
   loggedIn("/c/session-1");
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([{ id: "project-alice", name: "Personal", description: "" }]);
     if (path.endsWith("/c")) return json([
@@ -136,6 +139,7 @@ it("shows reported task progress inside the reply and cancels without a bar abov
   loggedIn("/c/session-1");
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([{ id: "project-alice", name: "Personal", description: "" }]);
     if (path.endsWith("/c")) return json([
@@ -168,6 +172,7 @@ it("shows the reply loading mark and stop before a reloaded active run receives 
   loggedIn("/session/session-1");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([]);
     if (path.endsWith("/c")) return json([{ id: "session-1", project_id: "project-alice", title: "Queued", status: "running", latest_run_id: "run-queued" }]);
@@ -186,6 +191,7 @@ it("switches the composer to stop after message submission while the reply is st
   loggedIn("/session/session-1");
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([{ id: "project-alice", name: "Personal", description: "" }]);
     if (path.endsWith("/c")) return json([{ id: "session-1", project_id: "project-alice", title: "Research" }]);
@@ -217,6 +223,7 @@ it.each(["/session/session-1", "/"])("shows the submitted user message before wa
   let submitted = false;
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([]);
     if (path.endsWith("/c") && init?.method === "POST") return json({ id: "session-1", project_id: "project-alice", title: "Timing", status: "idle" });
@@ -251,6 +258,7 @@ it("shows a quota rejection on approval and keeps the decision available", async
   loggedIn("/c/session-1");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([{ id: "project-alice", name: "Personal", description: "" }]);
     if (path.endsWith("/c")) return json([
@@ -276,6 +284,7 @@ it("shows server Token and daily GPU limits without raw ledger rows in settings"
   loggedIn("/settings");
   const fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/usage/entries")) return json([{
       id: "job-1", resource: "gpu_minutes", kind: "job", amount: 20,
@@ -310,6 +319,7 @@ it("localizes the active Skill navigation and page title", async () => {
   loggedIn("/skills");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g") || path.endsWith("/c")
       || path.endsWith("/skills") || path.endsWith("/resources")) return json([]);
@@ -327,6 +337,7 @@ it("labels quotas in English without the internal usage ledger", async () => {
   window.localStorage.setItem("research_language", "en");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/usage/entries")) return json([{
       id: "job-1", resource: "gpu_minutes", kind: "job", amount: 20,
@@ -353,6 +364,7 @@ it("keeps the composer menu inside the themed workspace", async () => {
   window.localStorage.setItem("pskit-theme", "dark");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g") || path.endsWith("/c") || path.endsWith("/skills") || path.endsWith("/resources")) return json([]);
     return json({ detail: "Not found" }, 404);
@@ -370,6 +382,7 @@ it("opens chat search from one sidebar button and finds chats across projects", 
   const actor = userEvent.setup();
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([{ id: "project-alice", name: "Personal", description: "" }, { id: "project-lab", name: "Lab research", description: "" }]);
     if (path.endsWith("/g/g-p-lab/c")) return json([{ id: "chat-lab", project_id: "project-lab", title: "蛋白结构预测" }]);
@@ -405,6 +418,7 @@ it("renames a personal chat from its sidebar menu and refreshes the title", asyn
   let title = "旧标题";
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([{ id: "project-alice", name: "Personal", description: "" }]);
     if (path.endsWith("/c")) return json([{ id: "session-1", project_id: "project-alice", title }]);
@@ -441,6 +455,7 @@ it("creates a project directly from the sidebar in mock mode", async () => {
   const projects = [{ id: "project-alice", name: "Personal", description: "" }];
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g") && init?.method === "POST") {
       const project = { id: "project-new", ...JSON.parse(String(init.body)) };
@@ -480,6 +495,7 @@ it("uses the project header as the only page title and opens creation there", as
   loggedIn("/g");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([{ id: "project-alice", name: "个人", description: "" }]);
     if (path.endsWith("/c") || path.endsWith("/skills") || path.endsWith("/resources")) return json([]);
@@ -499,6 +515,7 @@ it("changes a project icon from its detail page and updates the sidebar", async 
   let icon = "flask";
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g/g-p-lab/icon") && init?.method === "PATCH") {
       icon = JSON.parse(String(init.body)).icon;
@@ -533,6 +550,7 @@ it("creates a project, saves its default Skill, and moves a personal chat into i
   let sessionProject = "project-alice";
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     const method = init?.method ?? "GET";
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g") && method === "GET") return json(projects);
@@ -595,6 +613,7 @@ it("runs a PDB search and shows the returned record with a source link", async (
   let toolRun: { id: string; tool: string; title: string; arguments: { query: string }; result: { hits: { pdb_id: string; title: string; score: number }[] }; created_at: string; project_id: string | null } | null = null;
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([{ id: "project-alice", name: "我的科研项目", description: "" }, { id: "project-new", name: "蛋白设计", description: "" }]);
     if (path.endsWith("/c") || path.endsWith("/skills") || path.endsWith("/resources")) return json([]);
@@ -633,6 +652,7 @@ it("reuses a PDB invocation key when the same submission is retried after an unc
   const keys: (string | null)[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g") || path.endsWith("/c") || path.endsWith("/skills")
       || path.endsWith("/resources") || path.endsWith("/tool-runs")) return json([]);
@@ -658,6 +678,7 @@ it("lists the structure viewer in the toolbox even without an MCP connection", a
   loggedIn("/tools");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([{ id: "project-alice", name: "Personal", description: "" }]);
     if (path.endsWith("/c") || path.endsWith("/skills") || path.endsWith("/resources") || path.endsWith("/mcp/tools")) return json([]);
@@ -677,6 +698,7 @@ it("shows an uncertain MCP outcome without inviting a blind retry", async () => 
   const actor = userEvent.setup();
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g") || path.endsWith("/c") || path.endsWith("/skills")
       || path.endsWith("/resources") || path.endsWith("/tool-runs")) return json([]);
@@ -696,6 +718,7 @@ it("shows the conversation artifact control in English without a sidebar destina
   window.localStorage.setItem("research_language", "en");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([]);
     if (path.endsWith("/c")) return json([{ id: "session-1", project_id: "project-alice", title: "English chat" }]);
@@ -718,6 +741,7 @@ it("translates the active workspace navigation and settings page", async () => {
   window.localStorage.setItem("research_language", "en");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g") || path.endsWith("/c")
       || path.endsWith("/skills") || path.endsWith("/resources")) return json([]);
@@ -742,6 +766,7 @@ it("translates project creation and the project Skill dialog", async () => {
   const projects = [{ id: "project-lab", name: "Lab research", description: "" }];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json(projects);
     if (path.endsWith("/g/g-p-lab/skills")) return json({ skill_ids: [], default_skill_ids: [] });
@@ -790,6 +815,7 @@ it("builds the tool directory from the MCP catalog instead of fixed prediction c
   loggedIn("/tools");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g") || path.endsWith("/c")
       || path.endsWith("/skills") || path.endsWith("/resources")) return json([]);
@@ -816,6 +842,7 @@ it("uses a published MCP tool schema to invoke a newly listed tool", async () =>
   const invoked: Record<string, unknown>[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g") || path.endsWith("/c")
       || path.endsWith("/skills") || path.endsWith("/resources")) return json([]);
@@ -844,6 +871,7 @@ it("creates an editable conversation draft from a tool result without sending it
   const messages: unknown[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([{ id: "project-alice", name: "个人空间", description: "" }]);
     if (path.endsWith("/c") && init?.method === "POST")
@@ -880,6 +908,7 @@ it("does not expose a prediction page without a backing capability", async () =>
   loggedIn("/tools/inabe");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([{ id: "project-alice", name: "我的科研项目", description: "" }]);
     if (path.endsWith("/c") || path.endsWith("/skills") || path.endsWith("/resources") || path.endsWith("/mcp/tools")) return json([]);
@@ -903,6 +932,7 @@ it("lists owned artifacts and downloads only those with stored bytes", async () 
   const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   const fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/g")) return json([{ id: "project-alice", name: "我的科研项目", description: "" }]);
     if (path.endsWith("/c")) return json([{ id: "session-1", project_id: "project-alice", title: "Research" }]);

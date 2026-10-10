@@ -8,12 +8,12 @@ import { effortKeys, ThinkingSlider } from "./ThinkingSlider";
 
 type Effort = NonNullable<MessageRequest["reasoning_effort"]>;
 
-function modelLabel(id: string): string {
-  return id.split("/").at(-1) ?? id;
+export function modelLabel(model: ModelOption): string {
+  return model.display_name?.trim() || model.id;
 }
 
-function providerLabel(id: string): string {
-  return id.includes("/") ? id.split("/")[0] : "";
+export function providerLabel(model?: ModelOption): string {
+  return model?.provider_label?.trim() || "";
 }
 
 export function ModelPicker({ models, selected, effort, hasImages, selectionUnavailable = false, onModelChange, onEffortChange }: {
@@ -32,10 +32,10 @@ export function ModelPicker({ models, selected, effort, hasImages, selectionUnav
   const [query, setQuery] = useState("");
   const levels = selected?.reasoning_levels ?? [];
   const activeEffort = effort && levels.includes(effort) ? effort : undefined;
-  const matches = models.filter((option) => option.id.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
-  const providers = [...new Set(matches.map((option) => providerLabel(option.id)))].sort((a, b) =>
-    Number(b === providerLabel(selected?.id ?? "")) - Number(a === providerLabel(selected?.id ?? "")) || a.localeCompare(b));
-  const label = selected ? modelLabel(selected.id) : t("composer.selectModel");
+  const matches = models.filter((option) => `${option.id} ${modelLabel(option)} ${providerLabel(option)}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const providers = [...new Set(matches.map((option) => providerLabel(option)))].sort((a, b) =>
+    Number(b === providerLabel(selected)) - Number(a === providerLabel(selected)) || a.localeCompare(b));
+  const label = selected ? modelLabel(selected) : t("composer.selectModel");
   const effortLabel = t(activeEffort ? effortKeys[activeEffort] : "composer.effortDefault");
   const modelControl = <Popover.Trigger asChild><button type="button" className="composer-effort-picker" aria-label={`${t("composer.switchModel")}: ${label}`} title={selected?.id}>
     <span>{effortLabel}</span><ChevronUp size={14} aria-hidden="true" />
@@ -60,10 +60,10 @@ export function ModelPicker({ models, selected, effort, hasImages, selectionUnav
             {matches.length === 0 && <p className="composer-model-empty">{t(models.length ? "composer.noMatchingModels" : "composer.noModels")}</p>}
             {providers.map((provider) => <div className="composer-model-group" key={provider}>
               <div className="composer-model-group-label">{provider || t("composer.otherModels")}</div>
-              {matches.filter((option) => providerLabel(option.id) === provider).sort((a, b) => Number(b.id === selected?.id) - Number(a.id === selected?.id)).map((option) => {
+              {matches.filter((option) => providerLabel(option) === provider).sort((a, b) => Number(b.id === selected?.id) - Number(a.id === selected?.id)).map((option) => {
                 const blocked = hasImages && !option.supports_images;
                 return <button key={option.id} type="button" className="composer-model-option" aria-label={option.id} aria-pressed={option.id === selected?.id} disabled={blocked} title={blocked ? t("composer.modelNeedsImages") : option.id} onClick={() => { if (option.id !== selected?.id) { onModelChange(option.id); onEffortChange(undefined); } setModelsOpen(false); setQuery(""); }}>
-                  <span className="composer-model-option-text"><strong>{modelLabel(option.id)}</strong><small>{option.id}{option.supports_images ? ` · ${t("composer.supportsImages")}` : ""}</small></span>
+                  <span className="composer-model-option-text"><strong>{modelLabel(option)}</strong><small>{option.id}{option.supports_images ? ` · ${t("composer.supportsImages")}` : ""}</small></span>
                   {option.id === selected?.id && <Check size={16} aria-hidden="true" />}
                 </button>;
               })}

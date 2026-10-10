@@ -215,6 +215,15 @@ export function createHttpApi({ baseUrl = "/api/v1", token, fetcher = fetch, onU
     archiveSession: (id, projectId) => remove(chatPath(id, projectId)),
     moveSession: (id, targetProjectId, sourceProjectId) => request(`${chatPath(id, sourceProjectId)}/project`, { method: "PATCH", body: JSON.stringify({ project_id: targetProjectId }) }),
     getMessages: (sessionId, projectId) => request(`${chatPath(sessionId, projectId)}/messages`),
+    getMessagePage: async (sessionId, projectId, options = {}) => {
+      const params = new URLSearchParams({ limit: String(options.limit ?? 50) });
+      if (options.before) params.set("before", options.before);
+      try { return await request(`${chatPath(sessionId, projectId)}/messages/page?${params}`); }
+      catch (error) {
+        if (options.before || !(error instanceof ApiError) || ![404, 405].includes(error.status)) throw error;
+        return { items: await request(`${chatPath(sessionId, projectId)}/messages`), next_before: null };
+      }
+    },
     getSkills: () => request("/skills"),
     getSkill: (id) => request(`/skills/${encodeURIComponent(id)}`),
     uploadSkill: (file, visibility) => request(

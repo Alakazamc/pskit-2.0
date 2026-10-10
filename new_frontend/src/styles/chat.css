@@ -213,3 +213,6 @@
   .message-resource-icon {width:38px;height:38px}
   .message-resource-actions {grid-column:2;justify-content:flex-end}
 }
+
+.conversation-history-loader{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:24px;color:var(--color-text-secondary);font-size:12px}
+.conversation-history-loader p{margin:0}

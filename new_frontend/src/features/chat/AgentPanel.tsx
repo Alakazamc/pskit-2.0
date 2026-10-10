@@ -18,7 +18,7 @@ export function AgentPanel({ run, usage, savedArtifacts, onCancel, onApproval }:
   const artifacts = [...savedArtifacts, ...run.artifacts].filter(
     (item, index, all) => all.findIndex((other) => other.id === item.id) === index,
   );
-  const taskEvents = run.events.filter((event): event is TaskEvent => event.type === "task.updated");
+  const taskEvents = run.tasks ?? run.events.filter((event): event is TaskEvent => event.type === "task.updated");
   const tasks = [...new Map(taskEvents.map((event) => [event.data.job_id, event])).values()];
   const runError = localizedRunError(run, t);
 

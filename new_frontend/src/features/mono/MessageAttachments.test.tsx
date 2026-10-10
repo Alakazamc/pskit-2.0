@@ -28,6 +28,7 @@ function api(download: (id: string) => Promise<Response> = async () => new Respo
   const downloads: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = new nativeURL(String(input), "http://test").pathname;
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json({ id: "alice", name: "Alice", email: "alice@example.org" });
     if (path.endsWith("/c")) return json(["first", "second"].map((id) => ({
       id, project_id: "project-alice", title: `${id} chat`, status: "completed",

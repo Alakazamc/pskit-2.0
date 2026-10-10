@@ -337,3 +337,14 @@ async function advance(ms: number) {
 function delta(id: string, text: string): RunEvent {
   return { id, run_id: "run-1", type: "message.delta", data: { delta: text } };
 }
+
+it("recognizes completion after raw event history reaches its retention bound", async () => {
+  const events: RunEvent[] = Array.from({ length: 600 }, (_, index) => ({ id: String(index), run_id: "bounded", type: "message.delta", data: { delta: "x" } }));
+  events.push({ id: "completed", run_id: "bounded", type: "run.completed", data: { status: "completed" } });
+  const api = { getRunEvents: vi.fn().mockResolvedValue(events) } as unknown as ResearchApi;
+  const onCompleted = vi.fn();
+  const { result } = renderHook(() => useRunEvents(api, "bounded", onCompleted));
+  await waitFor(() => expect(result.current.status).toBe("completed"));
+  expect(result.current.events).toHaveLength(512); expect(result.current.text).toHaveLength(600);
+  expect(onCompleted).toHaveBeenCalledTimes(1);
+});

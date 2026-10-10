@@ -1,6 +1,9 @@
 import type { PlanStep, RunEvent } from "../../api/types";
 
-export type RunView = { events: RunEvent[]; cursor?: string; status: "idle" | "running" | "waiting" | "completed" | "failed" | "cancelled"; jobId?: string; jobLabel?: string; progress: number; text: string; error?: string; retry?: { attempt: number; maxAttempts: number }; approval?: { id: string; capability: string; estimatedMinutes: number }; artifacts: { id: string; name: string; kind: string }[]; tools: { id: string; name: string; status: string; summary: string }[]; plan: PlanStep[] };
+// Raw frames are a bounded reconnect/debug window; display state lives in projections.
+export const MAX_RETAINED_RUN_EVENTS = 512;
+type TaskEvent = Extract<RunEvent, { type: "task.updated" }>;
+export type RunView = { events: RunEvent[]; cursor?: string; startedAt?: string; ended?: boolean; tasks?: TaskEvent[]; status: "idle" | "running" | "waiting" | "completed" | "failed" | "cancelled"; jobId?: string; jobLabel?: string; progress: number; text: string; error?: string; retry?: { attempt: number; maxAttempts: number }; approval?: { id: string; capability: string; estimatedMinutes: number }; artifacts: { id: string; name: string; kind: string }[]; tools: { id: string; name: string; status: string; summary: string }[]; plan: PlanStep[] };
 export const emptyRun: RunView = { events: [], status: "idle", progress: 0, text: "", artifacts: [], tools: [], plan: [] };
 
 export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView {
@@ -37,6 +40,9 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
   let newJobId: string | undefined;
   let newJobLabel: string | undefined;
   let newProgress: number | undefined;
+  let tasks: Map<string, TaskEvent> | undefined;
+  let tasksChanged = false;
+  let ended = previous.ended;
 
   for (const event of newEvents) {
     eventsToAdd.push(event);
@@ -85,6 +91,9 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
         planChanged = true;
         break;
       case "task.updated":
+        tasks ??= new Map((previous.tasks ?? []).map((item) => [item.data.job_id, item]));
+        tasks.set(event.data.job_id, event);
+        tasksChanged = true;
         newJobId = event.data.job_id;
         newJobLabel = event.data.label ?? undefined;
         newProgress = event.data.progress;
@@ -102,13 +111,16 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
         artifactsChanged = true;
         break;
       case "run.completed":
+        ended = true;
         statusChange = "completed";
         break;
       case "run.failed":
+        ended = true;
         statusChange = "failed";
         errorMessage = event.data.message;
         break;
       case "run.cancelled":
+        ended = true;
         statusChange = "cancelled";
         break;
       case "run.retrying":
@@ -117,6 +129,7 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
           maxAttempts: event.data.max_attempts
         };
         if (event.data.reset_message) {
+          ended = false;
           text = "";
           errorMessage = undefined;
           statusChange = "running";
@@ -140,10 +153,13 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
 
   // Only create new object if something actually changed
   if (eventsToAdd.length > 0) {
-    next = { ...next, events: [...next.events, ...eventsToAdd] };
+    next = { ...next, events: [...next.events, ...eventsToAdd].slice(-MAX_RETAINED_RUN_EVENTS),
+      startedAt: previous.startedAt ?? newEvents.find((event) => event.created_at)?.created_at, ended };
     next.cursor = eventsToAdd[eventsToAdd.length - 1]?.id;
     eventsChanged = true;
   }
+
+  if (tasksChanged && tasks) next = { ...next, tasks: [...tasks.values()] };
 
   if (text !== previous.text) {
     next = { ...next, text };

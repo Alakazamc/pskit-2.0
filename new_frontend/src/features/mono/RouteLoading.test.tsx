@@ -39,6 +39,7 @@ it("shows one shared loader until both tool catalogs settle, without flashing th
   const products = deferred<Response>();
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(String(input), "http://test").pathname;
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json(user);
     if (path.endsWith("/mcp/tools")) return tools.promise;
     if (path.endsWith("/tool-products")) return products.promise;
@@ -64,6 +65,7 @@ it("keeps available tools visible and offers retry after a partial catalog failu
   let attempts = 0;
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(String(input), "http://test").pathname;
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json(user);
     if (path.endsWith("/mcp/tools")) return ++attempts === 1 ? json({ detail: "Unavailable" }, 503) : retry.promise;
     if (path.endsWith("/tool-products")) return json({ items: [], next_cursor: null });
@@ -85,6 +87,7 @@ it("waits for the selected history before revealing the composer and never repla
   const requested: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(String(input), "http://test").pathname;
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     requested.push(path);
     if (path.endsWith("/me")) return json(user);
     if (path.endsWith("/c")) return json(sessions);
@@ -118,6 +121,7 @@ it("replaces a failed history load with retry instead of an empty conversation",
   let attempts = 0;
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(String(input), "http://test").pathname;
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json(user);
     if (path.endsWith("/c")) return json(sessions);
     if (path.endsWith("/first/messages")) return ++attempts === 1
@@ -137,6 +141,7 @@ it("positions each cached conversation independently before showing its history"
   Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get() { return this.classList.contains("conversation-scroll") ? 4000 : 0; } });
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(String(input), "http://test").pathname;
+    if (path.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (path.endsWith("/me")) return json(user);
     if (path.endsWith("/c")) return json(sessions);
     if (path.endsWith("/first/messages")) return json(history("first", "First historical answer"));
@@ -162,6 +167,7 @@ it("loads failed run details as one snapshot before displaying the historical co
   const requests: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://test");
+    if (url.pathname.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (url.pathname.endsWith("/me")) return json(user);
     if (url.pathname.endsWith("/c")) return json([{ ...sessions[0], status: "failed", latest_run_id: "failed-run" }]);
     if (url.pathname.endsWith("/first/messages")) return json([history("first", "unused")[0]]);
@@ -181,6 +187,7 @@ it("preserves cancelled partial replies and retries a failed historical snapshot
   let attempts = 0;
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://test");
+    if (url.pathname.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (url.pathname.endsWith("/me")) return json(user);
     if (url.pathname.endsWith("/c")) return json([{ ...sessions[0], status: "cancelled", latest_run_id: "cancelled-run" }]);
     if (url.pathname.endsWith("/first/messages")) return json([history("first", "unused")[0]]);
@@ -207,6 +214,7 @@ it("uses the same quiet loader inside a tool's run history", async () => {
   const runs = deferred<Response>();
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://test");
+    if (url.pathname.includes("/messages/page")) return Response.json({ detail: "Page API not available" }, { status: 404 });
     if (url.pathname.endsWith("/me")) return json(user);
     if (url.pathname.endsWith("/mcp/tools")) return json([{ name: "fetch_uniprot", description: "Read proteins", input_schema: {} }]);
     if (url.pathname.endsWith("/tool-runs")) return runs.promise;

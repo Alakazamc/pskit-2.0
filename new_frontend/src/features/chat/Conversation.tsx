@@ -60,7 +60,7 @@ function UserMessage({ message, attachmentImages, resourceActions }: { message: 
     setExpanded((current) => !current);
   };
 
-  return <article className="message-row user" ref={rowRef}>
+  return <article className="message-row user" data-message-id={message.id} ref={rowRef}>
     <div className="user-message-content">
       {imageParts.length > 0 && <div className="user-message-images" role="region" aria-label={t("composer.attachments")} tabIndex={0}>
         {imageParts.map((part) => part.type === "file" && (attachmentImages
@@ -79,17 +79,44 @@ function UserMessage({ message, attachmentImages, resourceActions }: { message: 
   </article>;
 }
 
-export function Conversation({ messages, run, runId, awaitingEvents = false, onCancel, onApproval, attachmentImages, resourceActions }: { messages: Message[]; run: RunView; runId?: string | null; awaitingEvents?: boolean; onCancel?: () => Promise<void>; onApproval?: (approvalId: string, decision: "approved" | "rejected") => Promise<void>; attachmentImages?: AttachmentImages; resourceActions?: MessageResourceActions }) {
+export function Conversation({ messages, run, runId, awaitingEvents = false, onCancel, onApproval, attachmentImages, resourceActions, hasEarlier = false, loadingEarlier = false, earlierFailed = false, onLoadEarlier }: { messages: Message[]; run: RunView; runId?: string | null; awaitingEvents?: boolean; onCancel?: () => Promise<void>; onApproval?: (approvalId: string, decision: "approved" | "rejected") => Promise<void>; attachmentImages?: AttachmentImages; resourceActions?: MessageResourceActions; hasEarlier?: boolean; loadingEarlier?: boolean; earlierFailed?: boolean; onLoadEarlier?: () => Promise<void> }) {
   const { t } = useLanguage();
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  useChatAutoscroll(scrollRef, listRef, `${messages.length}:${run.text.length}:${run.status}:${run.tools.length}`, runId,
+  const { suspendFollowing } = useChatAutoscroll(scrollRef, listRef, `${messages.length}:${run.text.length}:${run.status}:${run.tools.length}`, runId,
     messages.length > 0 || run.status !== "idle" || awaitingEvents);
+  const historyAnchor = useRef<{ id: string; top: number; pending: boolean } | null>(null);
+  const [historyLoadCompleted, setHistoryLoadCompleted] = useState(0);
+  useLayoutEffect(() => {
+    const anchor = historyAnchor.current;
+    if (!anchor || anchor.pending) return;
+    const element = [...(listRef.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? [])]
+      .find((item) => item.dataset.messageId === anchor.id);
+    if (element && scrollRef.current) scrollRef.current.scrollTop += element.getBoundingClientRect().top - anchor.top;
+    historyAnchor.current = null;
+  }, [messages, historyLoadCompleted]);
+  const loadEarlier = async () => {
+    if (!onLoadEarlier || loadingEarlier || historyAnchor.current?.pending) return;
+    const top = scrollRef.current?.getBoundingClientRect().top ?? 0;
+    const element = [...(listRef.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? [])]
+      .find((item) => item.getBoundingClientRect().bottom >= top);
+    const anchor = element?.dataset.messageId
+      ? { id: element.dataset.messageId, top: element.getBoundingClientRect().top, pending: true } : null;
+    historyAnchor.current = anchor;
+    suspendFollowing();
+    try { await onLoadEarlier(); }
+    finally {
+      if (anchor && historyAnchor.current === anchor) {
+        anchor.pending = false;
+        setHistoryLoadCompleted((value) => value + 1);
+      }
+    }
+  };
   const runError = localizedRunError(run, t);
   const runActive = (run.status === "running" || run.status === "waiting" || awaitingEvents) && !run.approval;
   const runFinished = ["completed", "failed", "cancelled"].includes(run.status);
   const lastUserIndex = messages.reduce((last, message, index) => message.role === "user" ? index : last, -1);
-  const runStartedAt = run.events.find((event) => event.created_at)?.created_at;
+  const runStartedAt = run.startedAt ?? run.events.find((event) => event.created_at)?.created_at;
   const savedReplyAvailable = messages.some((message, index) => message.role === "assistant"
     && index > lastUserIndex
     && (!runStartedAt || Date.parse(message.created_at) >= Date.parse(runStartedAt)));
@@ -111,6 +138,10 @@ export function Conversation({ messages, run, runId, awaitingEvents = false, onC
       <h2>{t("conversation.emptyTitle")}</h2>
       <p>{t("conversation.emptyDescription")}</p>
     </div> : <div className="message-list" ref={listRef}>
+      {hasEarlier && <div className="conversation-history-loader">
+        <button type="button" className="mono-button" disabled={loadingEarlier} onClick={() => { void loadEarlier(); }}>{t(loadingEarlier ? "conversation.loadingEarlier" : "conversation.loadEarlier")}</button>
+        {earlierFailed && <p role="status">{t("conversation.historyFailed")}</p>}
+      </div>}
       {run.plan.length > 0 && <section className="conversation-plan" aria-label={t("agent.plan")}>
         <h3>{t("agent.plan")}</h3>
         <ol>{run.plan.map((step) => <li key={step.id}>
@@ -122,7 +153,7 @@ export function Conversation({ messages, run, runId, awaitingEvents = false, onC
       </section>}
       {messages.map((message, index) => message.role === "user" ? <UserMessage message={message} attachmentImages={attachmentImages} resourceActions={resourceActions} key={message.id} />
         : message.role === "assistant" && index > lastUserIndex && showRunReply && !runFinished ? null
-        : <article className={`message-row ${message.role}`} key={message.id}>
+        : <article className={`message-row ${message.role}`} data-message-id={message.id} key={message.id}>
         <div className="message-body">
           <MessageParts parts={message.parts} markdown={message.role === "assistant"} resourceActions={resourceActions} />
           {message.role === "assistant" && <div className="message-actions"><ReplyCopyButton text={message.parts.filter((part) => part.type === "text").map((part) => part.text).join("\n\n")} /></div>}

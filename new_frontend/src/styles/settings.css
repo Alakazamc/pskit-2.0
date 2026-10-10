@@ -66,3 +66,10 @@
 .usage-activity .usage-activity-empty{margin:12px 0 0}
 @media(max-width:600px){.mono-page-content.settings-content{padding:20px 18px 32px}.settings-preferences{gap:16px}.profile-name-row{gap:8px}.profile-avatar-row{gap:14px}.profile-avatar-actions{gap:5px}.usage-activity-summary{flex-wrap:wrap}.usage-activity-heading{gap:8px}}
 @media(prefers-reduced-motion:reduce){.profile-loading{animation:none}}
+
+.settings-description{color:var(--color-text-secondary);font-size:13px;line-height:1.6;max-width:68ch}
+.settings-check{display:flex;align-items:center;gap:10px;margin:14px 0;font-size:13px}
+.settings-check input{accent-color:var(--color-text);width:16px;height:16px;flex-shrink:0}
+.settings-draft-actions{display:flex;align-items:end;flex-wrap:wrap;gap:12px;margin-top:20px}
+.settings-draft-selection{display:flex;flex-direction:column;gap:6px;color:var(--color-text-secondary);font-size:12px;min-width:180px;max-width:100%}
+.settings-draft-selection select{max-width:100%;height:36px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface);color:var(--color-text);padding:0 10px}
