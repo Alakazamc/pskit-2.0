@@ -6,10 +6,10 @@ import pytest
 from app.config import Settings
 from app.main import create_app
 from app.services.model_catalog import ModelCatalog
+from tests.model_policy_support import legacy_model_policy
 
 
 def policy_app(tmp_path):
-    from app.api import admin_auth, admin_models
     from app.domain.admin.model_policy import ModelPolicy
     from app.domain.admin.roles import AdminStore
 
@@ -27,13 +27,11 @@ def policy_app(tmp_path):
         transport=httpx.MockTransport(gateway),
     )
     app.state.model_policy = ModelPolicy(store, app.state.model_catalog, managed=True)
-    app.include_router(admin_auth.router)
-    app.include_router(admin_models.router)
     return app
 
 
 @pytest.mark.asyncio
-async def test_new_gateway_alias_is_draft_until_published(tmp_path):
+async def test_new_gateway_alias_without_profile_cannot_publish(tmp_path):
     app = policy_app(tmp_path)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -62,10 +60,9 @@ async def test_new_gateway_alias_is_draft_until_published(tmp_path):
             headers=headers,
             json={"expected_revision": 1, "reason": "Reviewed alias release"},
         )
-        assert published.status_code == 200
-        assert [m["id"] for m in (await client.get("/api/v1/models", headers=headers)).json()] == [
-            "lab-chat"
-        ]
+        assert published.status_code == 422
+        assert published.json() == {"detail": {"code": "MODEL_RUNTIME_PROFILE_REQUIRED"}}
+        assert (await client.get("/api/v1/models", headers=headers)).json() == []
         assert "server-only" not in published.text
 
 
@@ -81,6 +78,9 @@ async def test_policy_revocation_applies_even_with_cached_gateway(tmp_path):
         uid = login["user"]["id"]
         headers = {"Authorization": f"Bearer {login['access_token']}"}
         app.state.admin_store.grant(uid, "platform_admin", actor="server:test", reason="Test grant")
+        app.state.model_policy = legacy_model_policy(
+            app.state.admin_store, app.state.model_catalog, alias="lab-chat", user_id=uid,
+        )
         await client.put(
             "/api/v1/admin/llm-aliases/lab-chat/draft",
             headers=headers,
@@ -122,6 +122,9 @@ async def test_managed_catalog_does_not_claim_fallback_gateway_availability(tmp_
         uid = login["user"]["id"]
         h = {"Authorization": f"Bearer {login['access_token']}"}
         app.state.admin_store.grant(uid, "platform_admin", actor="server:test", reason="Test grant")
+        app.state.model_policy = legacy_model_policy(
+            app.state.admin_store, app.state.model_catalog, alias="lab-chat", user_id=uid,
+        )
         await client.put(
             "/api/v1/admin/llm-aliases/lab-chat/draft",
             headers=h,
@@ -151,3 +154,86 @@ async def test_managed_catalog_does_not_claim_fallback_gateway_availability(tmp_
         assert (await client.get("/api/v1/admin/llm-aliases", headers=h)).json()["items"][0][
             "gateway_available"
         ] is False
+
+
+@pytest.mark.asyncio
+async def test_qualify_requires_publication_permission_and_host_probe(tmp_path):
+    app = policy_app(tmp_path)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        login = (await client.post("/api/v1/auth/demo", json={"email": "probe@example.org"})).json()
+        uid = login["user"]["id"]
+        headers = {"Authorization": f"Bearer {login['access_token']}"}
+        path = "/api/v1/admin/llm-aliases/lab-chat/qualify"
+        payload = {"expected_revision": 1, "reason": "Qualified fixture check"}
+        forbidden = await client.post(path, headers=headers, json=payload)
+        assert forbidden.status_code == 403
+        app.state.admin_store.grant(uid, "auditor", actor="server:test", reason="Fixture grant")
+        assert (await client.post(path, headers=headers, json=payload)).status_code == 403
+        app.state.admin_store.grant(uid, "platform_admin", actor="server:test", reason="Fixture grant")
+        unavailable = await client.post(path, headers=headers, json=payload)
+        assert unavailable.status_code == 422
+        assert unavailable.json() == {"detail": {"code": "MODEL_QUALIFIER_UNAVAILABLE"}}
+        self_report = await client.post(path, headers=headers, json={**payload, "status": "passed"})
+        assert self_report.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exception,code", [
+    (TimeoutError, "MODEL_QUALIFICATION_TIMEOUT"),
+    (PermissionError, "MODEL_QUALIFICATION_BUDGET_EXHAUSTED"),
+])
+async def test_qualify_timeout_and_budget_error_do_not_expose_details(tmp_path, exception, code):
+    app = policy_app(tmp_path)
+    async def fail(*args, **kwargs):
+        raise exception("provider-key-private-uri")
+    app.state.model_policy.qualify = fail
+    app.state.model_qualifier = object()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        login = (await client.post("/api/v1/auth/demo", json={"email": "probe@example.org"})).json()
+        uid = login["user"]["id"]
+        headers = {"Authorization": f"Bearer {login['access_token']}"}
+        app.state.admin_store.grant(uid, "platform_admin", actor="server:test", reason="Fixture grant")
+        response = await client.post("/api/v1/admin/llm-aliases/lab-chat/qualify", headers=headers,
+                                    json={"expected_revision": 1, "reason": "Fixture check"})
+        assert response.status_code == 422
+        assert response.json() == {"detail": {"code": code}}
+        assert "provider-key" not in response.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("alias_path", ["lab/alias", "lab%2Falias"])
+async def test_admin_alias_paths_support_supplier_slash_without_contract_rename(tmp_path, alias_path):
+    from app.domain.admin.model_policy import ModelPolicy
+
+    app = policy_app(tmp_path)
+    app.state.model_catalog = ModelCatalog(
+        base_url="http://gateway", api_key="server-only", default_model="lab/alias",
+        transport=httpx.MockTransport(lambda request: httpx.Response(
+            200, json={"data": [{"id": "lab/alias"}]},
+        )),
+    )
+    app.state.model_policy = ModelPolicy(app.state.admin_store, app.state.model_catalog, managed=True)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        login = (await client.post("/api/v1/auth/demo", json={"email": "slash@example.org"})).json()
+        uid = login["user"]["id"]
+        headers = {"Authorization": f"Bearer {login['access_token']}"}
+        app.state.admin_store.grant(uid, "platform_admin", actor="server:test", reason="Fixture grant")
+        app.state.model_policy = legacy_model_policy(
+            app.state.admin_store, app.state.model_catalog, alias="lab/alias", user_id=uid,
+        )
+        saved = await client.put(f"/api/v1/admin/llm-aliases/{alias_path}/draft", headers=headers,
+                                json={"expected_revision": 0, "reason": "Supplier alias fixture",
+                                      "allowed_user_ids": [uid]})
+        assert saved.status_code == 200
+        assert saved.json()["id"] == "lab/alias"
+        published = await client.post(f"/api/v1/admin/llm-aliases/{alias_path}/publish", headers=headers,
+                                      json={"expected_revision": 1, "reason": "Supplier alias fixture"})
+        assert published.status_code == 200
+        assert [item["id"] for item in (await client.get("/api/v1/models", headers=headers)).json()] == ["lab/alias"]
+        unavailable = await client.post(f"/api/v1/admin/llm-aliases/{alias_path}/qualify", headers=headers,
+                                         json={"expected_revision": 2, "reason": "Supplier alias fixture"})
+        assert unavailable.json() == {"detail": {"code": "MODEL_QUALIFIER_UNAVAILABLE"}}
+        retired = await client.post(f"/api/v1/admin/llm-aliases/{alias_path}/retire", headers=headers,
+                                    json={"expected_revision": 2, "reason": "Supplier alias fixture"})
+        assert retired.status_code == 200
+        assert "/api/v1/admin/llm-aliases/{alias}/draft" in app.openapi()["paths"]

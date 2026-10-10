@@ -32,7 +32,7 @@ async def list_aliases(
     return await request.app.state.model_policy.admin_list(limit=limit, cursor=cursor)
 
 
-@router.put("/llm-aliases/{alias}/draft")
+@router.put("/llm-aliases/{alias:path}/draft")
 async def save_alias(alias: str, payload: ModelDraft, actor: Write, request: Request) -> AdminModel:
     try:
         return await request.app.state.model_policy.save(
@@ -42,7 +42,7 @@ async def save_alias(alias: str, payload: ModelDraft, actor: Write, request: Req
         raise management_error(exc) from exc
 
 
-@router.post("/llm-aliases/{alias}/publish")
+@router.post("/llm-aliases/{alias:path}/publish")
 async def publish_alias(
     alias: str, payload: RevisionRequest, actor: Publish, request: Request
 ) -> AdminModel:
@@ -54,7 +54,7 @@ async def publish_alias(
         raise management_error(exc) from exc
 
 
-@router.post("/llm-aliases/{alias}/retire")
+@router.post("/llm-aliases/{alias:path}/retire")
 async def retire_alias(
     alias: str, payload: RevisionRequest, actor: Publish, request: Request
 ) -> AdminModel:
@@ -66,5 +66,26 @@ async def retire_alias(
             retire=True,
             request_id=request.headers.get("x-request-id"),
         )
+    except (ValueError, LookupError) as exc:
+        raise management_error(exc) from exc
+
+
+@router.post("/llm-aliases/{alias:path}/qualify")
+async def qualify_alias(
+    alias: str, payload: RevisionRequest, actor: Publish, request: Request
+) -> AdminModel:
+    """Run only a host-configured budgeted probe; admin JSON cannot assert success."""
+    qualifier = getattr(request.app.state, "model_qualifier", None)
+    if qualifier is None:
+        raise HTTPException(422, detail={"code": "MODEL_QUALIFIER_UNAVAILABLE"})
+    try:
+        return await request.app.state.model_policy.qualify(
+            actor.user_id, alias, payload, qualifier,
+            request_id=request.headers.get("x-request-id"),
+        )
+    except TimeoutError as exc:
+        raise HTTPException(422, detail={"code": "MODEL_QUALIFICATION_TIMEOUT"}) from exc
+    except PermissionError as exc:
+        raise HTTPException(422, detail={"code": "MODEL_QUALIFICATION_BUDGET_EXHAUSTED"}) from exc
     except (ValueError, LookupError) as exc:
         raise management_error(exc) from exc

@@ -8,15 +8,20 @@ from app.contracts.conversation import MessageRequest
 from app.domain.admin.model_policy import ModelPolicy
 from app.main import create_app
 from app.services.model_catalog import ModelCatalog
+from tests.model_policy_support import legacy_model_policy
 
 
-async def setup(client, app):
+async def setup(client, app, *, legacy=True):
     login = (await client.post("/api/v1/auth/demo", json={"email": "operator@example.org"})).json()
     uid = login["user"]["id"]
     headers = {"Authorization": f"Bearer {login['access_token']}"}
     app.state.admin_store.grant(
         uid, "platform_admin", actor="server:test", reason="Controlled model test"
     )
+    if legacy:
+        app.state.model_policy = legacy_model_policy(
+            app.state.admin_store, app.state.model_catalog, alias="lab-chat", user_id=uid,
+        )
     return uid, headers
 
 
@@ -54,7 +59,7 @@ async def test_hidden_alias_cannot_be_sent_by_api(tmp_path):
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
-        _uid, h = await setup(client, app)
+        _uid, h = await setup(client, app, legacy=False)
         project = (await client.get("/api/v1/g", headers=h)).json()[0]
         session = project["id"].replace("project-", "session-")
         assert (await client.get("/api/v1/models", headers=h)).json() == []

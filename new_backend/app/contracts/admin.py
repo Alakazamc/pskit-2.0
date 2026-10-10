@@ -5,6 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.contracts.compute import CapabilityVersion, ResourceCounter, UsageReport
+from app.contracts.model_runtime import ModelRuntimeProfile
 from app.services.model_catalog import ModelOption
 
 Role = Literal["platform_admin", "service_maintainer", "quota_operator", "auditor"]
@@ -40,6 +41,7 @@ class ModelDraft(RevisionRequest):
         Field(default_factory=list)
     )
     default_for_purposes: list[Literal["chat", "analysis"]] = Field(default_factory=list)
+    runtime_profile: ModelRuntimeProfile | None = None
 
 
 class AdminModel(AdminContract):

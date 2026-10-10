@@ -104,6 +104,54 @@ async def test_operator_can_mark_a_custom_alias_as_vision_capable():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("other", [False, None])
+async def test_mixed_vision_alias_uses_lowest_deployment_capability(other):
+    def gateway(request):
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [{"id": "mixed"}]})
+        metadata = {} if other is None else {"supports_vision": other}
+        return httpx.Response(200, json={"data": [
+            {"model_name": "mixed", "model_info": {"supports_vision": True}},
+            {"model_name": "mixed", "model_info": metadata},
+        ]})
+
+    catalog = ModelCatalog(base_url="http://gateway", api_key="fixture-only",
+                           default_model="mixed", image_model_ids={"mixed"},
+                           transport=httpx.MockTransport(gateway))
+    assert (await catalog.resolve("mixed")).supports_images is False
+
+
+@pytest.mark.asyncio
+async def test_listing_false_vision_cannot_be_overridden_by_operator():
+    def gateway(request):
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [{
+                "id": "mixed", "model_info": {"supports_vision": False},
+            }]})
+        return httpx.Response(404)
+
+    catalog = ModelCatalog(base_url="http://gateway", api_key="fixture-only",
+                           default_model="mixed", image_model_ids={"mixed"},
+                           transport=httpx.MockTransport(gateway))
+    assert (await catalog.resolve("mixed")).supports_images is False
+
+
+@pytest.mark.asyncio
+async def test_listing_missing_deployment_metadata_fails_closed_without_details():
+    def gateway(request):
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [
+                {"id": "mixed", "model_info": {"supports_vision": True}},
+                {"id": "mixed"},
+            ]})
+        return httpx.Response(404)
+    catalog = ModelCatalog(base_url="http://gateway", api_key="fixture-only",
+                           default_model="mixed", image_model_ids={"mixed"},
+                           transport=httpx.MockTransport(gateway))
+    assert (await catalog.resolve("mixed")).supports_images is False
+
+
+@pytest.mark.asyncio
 async def test_authenticated_model_list_only_exposes_public_alias_and_image_flag():
     def gateway(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/v1/models":
