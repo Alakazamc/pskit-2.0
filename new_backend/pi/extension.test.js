@@ -3,6 +3,131 @@ import test from "node:test";
 
 import register from "./extension.js";
 
+function genericEnvironment(overrides, action) {
+  const values = {
+    PSKIT_AF3_ENABLED: "0", PSKIT_MCP_TOOLS_JSON: "[]",
+    PSKIT_COMPUTE_CAPABILITIES_JSON: "[]", PSKIT_COMPUTE_TOOLS_JSON: "[]",
+    PSKIT_WORKSPACE_CAPABILITIES_JSON: "{}", PSKIT_RUN_ID: "run-echo",
+    PSKIT_AGENT_TOOL_TOKEN: "synthetic-token", PSKIT_INTERNAL_API_URL: "http://127.0.0.1:18080",
+    ...overrides,
+  };
+  const previous = Object.fromEntries(Object.keys(values).map(key => [key, process.env[key]]));
+  Object.assign(process.env, values);
+  return Promise.resolve().then(action).finally(() => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  });
+}
+
+const echoDefinition = {
+  name: "pskit_echo_831c", description: "Echo a document as a background job.",
+  release_id: "release-echo-1", action_id: "echo",
+  input_schema: { type: "object", properties: { text: { type: "string" } },
+    required: ["text"], additionalProperties: false },
+};
+
+test("published generic business tool pins hidden release and preserves Pending and trusted resume", async () => {
+  await genericEnvironment({ PSKIT_COMPUTE_TOOLS_JSON: JSON.stringify([echoDefinition]) }, async () => {
+    const tools = new Map();
+    const commands = new Map();
+    const sent = [];
+    const requests = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+      requests.push({ url, init });
+      return { ok: true, json: async () => init?.method === "POST"
+        ? { id: "compute-echo-1", status: "queued" }
+        : { job: { id: "compute-echo-1", status: "completed" }, related: [{
+          id: "compute-echo-1", status: "completed", report: { result: { text: "hello" } },
+        }] } };
+    };
+    try {
+      register({ registerTool(tool) { tools.set(tool.name, tool); },
+        registerCommand(name, command) { commands.set(name, command); },
+        sendMessage(message, options) { sent.push({ message, options }); } });
+      const tool = tools.get(echoDefinition.name);
+      assert.ok(tool, "Published business tool must be registered");
+      assert.deepEqual(tool.parameters, echoDefinition.input_schema);
+      assert.equal(tools.has("submit_compute"), false);
+      const result = await tool.execute("call-echo", { text: "hello" });
+      assert.deepEqual(JSON.parse(requests[0].init.body), {
+        run_id: "run-echo", tool_call_id: "call-echo", release_id: "release-echo-1",
+        action_id: "echo", arguments: { text: "hello" },
+      });
+      assert.match(requests[0].url, /\/internal\/compute\/tools\/pskit_echo_831c\/jobs$/);
+      assert.equal(requests[0].init.headers.Authorization, "Bearer synthetic-token");
+      assert.deepEqual(result.details, { status: "pending", taskId: "compute-echo-1" });
+      assert.equal(result.terminate, true);
+      await commands.get("pskit_resume").handler("compute-echo-1");
+      assert.match(requests[1].url, /\/internal\/compute\/jobs\/compute-echo-1\?run_id=run-echo$/);
+      assert.equal(sent[0].message.customType, "pskit.compute_terminal");
+      assert.equal(sent[0].message.display, false);
+      assert.equal(sent[0].options.triggerTurn, true);
+      assert.match(sent[0].message.content, /hello/);
+    } finally { globalThis.fetch = originalFetch; }
+  });
+});
+
+test("generic business whitelist rejects reserved invalid and duplicate tool names", async () => {
+  for (const definitions of [
+    [{ ...echoDefinition, name: "update_plan" }],
+    [{ ...echoDefinition, name: "echo/unsafe" }],
+    [echoDefinition, echoDefinition],
+  ]) {
+    await genericEnvironment({ PSKIT_COMPUTE_TOOLS_JSON: JSON.stringify(definitions) }, () => {
+      assert.throws(() => register({ registerTool() {}, registerCommand() {} }), /tool name/i);
+    });
+  }
+  await genericEnvironment({
+    PSKIT_COMPUTE_TOOLS_JSON: JSON.stringify([echoDefinition]),
+    PSKIT_MCP_TOOLS_JSON: JSON.stringify([{ name: echoDefinition.name, description: "Echo",
+      input_schema: echoDefinition.input_schema }]),
+  }, () => {
+    assert.throws(() => register({ registerTool() {}, registerCommand() {} }), /tool name/i);
+  });
+});
+
+test("generic business whitelist rejects malformed descriptors", async () => {
+  for (const descriptor of [
+    { ...echoDefinition, release_id: undefined },
+    { ...echoDefinition, action_id: undefined },
+    { ...echoDefinition, input_schema: { type: "string" } },
+  ]) {
+    await genericEnvironment({ PSKIT_COMPUTE_TOOLS_JSON: JSON.stringify([descriptor]) }, () => {
+      assert.throws(() => register({ registerTool() {}, registerCommand() {} }), /compute tool/i);
+    });
+  }
+});
+
+test("legacy generic submit_compute remains compatible alongside business tools", async () => {
+  await genericEnvironment({
+    PSKIT_COMPUTE_TOOLS_JSON: JSON.stringify([echoDefinition]),
+    PSKIT_COMPUTE_CAPABILITIES_JSON: JSON.stringify([{ id: "document.echo", version: "1" }]),
+  }, async () => {
+    const tools = new Map();
+    const requests = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+      requests.push({ url, init });
+      return { ok: true, json: async () => ({ id: "compute-legacy", status: "queued" }) };
+    };
+    try {
+      register({ registerTool(tool) { tools.set(tool.name, tool); }, registerCommand() {} });
+      const request = { capability_id: "document.echo", version: "1",
+        arguments: { text: "hello" }, budget: { cpu_core_ms: 40 } };
+      const result = await tools.get("submit_compute").execute("call-legacy", request);
+      assert.deepEqual(JSON.parse(requests[0].init.body), {
+        ...request, run_id: "run-echo", tool_call_id: "call-legacy",
+      });
+      assert.match(requests[0].url, /\/internal\/compute\/jobs$/);
+      assert.equal(result.terminate, true);
+      assert.equal(result.details.status, "pending");
+      assert.ok(tools.has(echoDefinition.name));
+    } finally { globalThis.fetch = originalFetch; }
+  });
+});
+
 test("AF3 tool submits a task and stops Pi, then resume injects an internal message", async () => {
   const tools = new Map();
   const commands = new Map();

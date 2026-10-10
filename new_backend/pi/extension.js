@@ -109,6 +109,32 @@ async function workspaceCommand(path, payload, signal, onUpdate) {
 }
 
 export default function register(pi) {
+  const reservedNames = new Set([
+    "read", "write", "edit", "ls", "find", "grep",
+    "read_file", "write_file", "edit_file", "list_files", "find_files", "search_files",
+    "bash", "python", "update_plan", "submit_af3", "submit_compute",
+  ]);
+  const mcpTools = JSON.parse(process.env.PSKIT_MCP_TOOLS_JSON || "[]");
+  const computeTools = JSON.parse(process.env.PSKIT_COMPUTE_TOOLS_JSON || "[]");
+  if (!Array.isArray(computeTools)) throw new Error("Invalid compute tool whitelist");
+  const toolNames = new Set(reservedNames);
+  for (const tool of mcpTools) {
+    if (!/^[a-zA-Z0-9_]+$/.test(tool.name)) throw new Error("Invalid MCP tool name");
+    if (toolNames.has(tool.name)) throw new Error("Reserved or duplicate tool name");
+    toolNames.add(tool.name);
+  }
+  for (const tool of computeTools) {
+    if (!tool || typeof tool.name !== "string" || !/^[a-zA-Z0-9_]{1,64}$/.test(tool.name)) {
+      throw new Error("Invalid compute tool name");
+    }
+    if (toolNames.has(tool.name)) throw new Error("Reserved or duplicate tool name");
+    if (
+      typeof tool.release_id !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$/.test(tool.release_id) ||
+      typeof tool.action_id !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$/.test(tool.action_id) ||
+      typeof tool.description !== "string" || tool.input_schema?.type !== "object"
+    ) throw new Error("Invalid compute tool descriptor");
+    toolNames.add(tool.name);
+  }
   const workspace = JSON.parse(process.env.PSKIT_WORKSPACE_CAPABILITIES_JSON || "{}");
   if (workspace.file_access) {
     const fileTool = (name, description, properties, required, path, render) => pi.registerTool({
@@ -194,15 +220,7 @@ export default function register(pi) {
       },
     });
   }
-  const mcpTools = JSON.parse(process.env.PSKIT_MCP_TOOLS_JSON || "[]");
   for (const tool of mcpTools) {
-    if (!/^[a-zA-Z0-9_]+$/.test(tool.name)) throw new Error("Invalid MCP tool name");
-    if ([
-      "read", "write", "edit", "ls", "find", "grep",
-      "read_file", "write_file", "edit_file", "list_files", "find_files", "search_files",
-      "bash", "python",
-      "update_plan", "submit_af3", "submit_compute",
-    ].includes(tool.name)) throw new Error("Reserved tool name");
     pi.registerTool({
       name: tool.name,
       label: tool.name,
@@ -277,6 +295,26 @@ export default function register(pi) {
         content: [{ type: "text", text: `AF3 task ${job.id} is ${job.status}. I will continue when it completes.` }],
         details: { status: "pending", taskId: job.id },
         terminate: true,
+      };
+    },
+  });
+
+  for (const tool of computeTools) pi.registerTool({
+    name: tool.name,
+    label: tool.name,
+    description: tool.description,
+    parameters: tool.input_schema,
+    async execute(toolCallId, params) {
+      const job = await internalJson(`/internal/compute/tools/${encodeURIComponent(tool.name)}/jobs`, {
+        method: "POST",
+        body: JSON.stringify({
+          run_id: runId(), tool_call_id: toolCallId,
+          release_id: tool.release_id, action_id: tool.action_id, arguments: params,
+        }),
+      });
+      return {
+        content: [{ type: "text", text: `Computation ${job.id} is ${job.status}. Results will resume this session.` }],
+        details: { status: "pending", taskId: job.id }, terminate: true,
       };
     },
   });

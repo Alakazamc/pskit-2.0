@@ -20,21 +20,10 @@ class ComputeJobs:
         self.ledger = ledger
         self.events = None
 
-    def submit(
-        self,
-        user_id,
-        request,
-        idempotency_key,
-        *,
-        run_id=None,
-        tool_call_id=None,
-        execution_binding=None,
-        resolved_capability=None,
-        connection=None,
-    ):
-        if not idempotency_key or len(idempotency_key) > 200:
-            raise ValueError("INVALID_IDEMPOTENCY_KEY")
-        digest = payload_hash({
+    @staticmethod
+    def _submission_hash(request, *, run_id=None, tool_call_id=None, execution_binding=None,
+                         resolved_capability=None, provenance=None):
+        payload = {
             **request.model_dump(mode="json"),
             "run_id": run_id,
             "tool_call_id": tool_call_id,
@@ -45,7 +34,32 @@ class ComputeJobs:
                 "capability": resolved_capability[1].model_dump(mode="json"),
             }
             if resolved_capability is not None else None,
-        })
+        }
+        # Trusted publication identity affects idempotence, never the strict
+        # worker wire contract. Omission preserves every legacy request digest.
+        if provenance is not None:
+            payload["publication_provenance"] = provenance
+        return payload_hash(payload)
+
+    def submit(
+        self,
+        user_id,
+        request,
+        idempotency_key,
+        *,
+        run_id=None,
+        tool_call_id=None,
+        execution_binding=None,
+        resolved_capability=None,
+        provenance=None,
+        connection=None,
+    ):
+        if not idempotency_key or len(idempotency_key) > 200:
+            raise ValueError("INVALID_IDEMPOTENCY_KEY")
+        digest = self._submission_hash(
+            request, run_id=run_id, tool_call_id=tool_call_id, execution_binding=execution_binding,
+            resolved_capability=resolved_capability, provenance=provenance,
+        )
         if connection is None:
             with self.database.transaction() as owned_connection:
                 return self.submit(
@@ -56,6 +70,7 @@ class ComputeJobs:
                     tool_call_id=tool_call_id,
                     execution_binding=execution_binding,
                     resolved_capability=resolved_capability,
+                    provenance=provenance,
                     connection=owned_connection,
                 )
         admission_lock(connection)

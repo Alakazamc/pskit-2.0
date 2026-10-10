@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Request
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.api.compute import compute_error, jobs_for
 from app.contracts.catalog import ArtifactRef
@@ -25,6 +25,15 @@ from app.contracts.compute import (
 from app.domain.compute.artifacts import MAX_ARTIFACT_BYTES, ComputeArtifacts
 
 router = APIRouter(prefix="/internal/compute", tags=["compute-worker"])
+
+
+class InternalBusinessComputeSubmit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    run_id: str = Field(min_length=1, max_length=200)
+    tool_call_id: str = Field(min_length=1, max_length=200)
+    release_id: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$")
+    action_id: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$")
+    arguments: dict
 
 
 def authorized_service(request, service_id, key):
@@ -124,6 +133,22 @@ def submit_agent_job(payload: InternalComputeSubmit, request: Request,
             payload.model_dump(exclude={"run_id", "tool_call_id"})),
             f"agent:{payload.run_id}:{payload.tool_call_id}",
             run_id=payload.run_id, tool_call_id=payload.tool_call_id)
+    except (ValueError, LookupError) as exc:
+        raise compute_error(exc) from exc
+
+
+@router.post("/tools/{tool_name}/jobs")
+def submit_agent_business_job(
+    tool_name: str, payload: InternalBusinessComputeSubmit, request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+) -> ComputeJob:
+    owner = agent_owner(request, payload.run_id, authorization)
+    tools = getattr(request.app.state, "agent_compute_tools", None)
+    if tools is None:
+        raise HTTPException(503, detail={"code": "COMPUTE_TOOLS_NOT_CONFIGURED"})
+    try:
+        return tools.submit(owner, payload.run_id, payload.tool_call_id, tool_name,
+                            payload.release_id, payload.action_id, payload.arguments)
     except (ValueError, LookupError) as exc:
         raise compute_error(exc) from exc
 

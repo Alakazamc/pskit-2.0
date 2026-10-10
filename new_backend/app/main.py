@@ -88,6 +88,7 @@ from app.ports.workspace_sandbox import WorkspaceProviderError
 from app.services.agent import AgentService
 from app.services.auth_protection import AuthProtection
 from app.services.client_ip import TrustedClientIpResolver
+from app.services.compute_tools import AgentComputeTools
 from app.services.csrf import CsrfProtector
 from app.services.model_catalog import ModelCatalog
 from app.services.model_gateway import gateway_client_lifespan
@@ -590,6 +591,11 @@ def create_app(
         if app.state.compute_jobs is not None
         else None
     )
+    app.state.agent_compute_tools = (
+        AgentComputeTools(database, app.state.tool_product_repository, app.state.compute_jobs)
+        if app.state.compute_jobs is not None
+        else None
+    )
     app.state.pdf_processor = PdfProcessingPool(
         max_concurrent=settings.pdf_max_concurrent_parses,
         queue_timeout_seconds=settings.pdf_queue_timeout_seconds,
@@ -819,6 +825,7 @@ def create_app(
     )
     if app.state.agent_service is not None:
         app.state.agent_service.compute_jobs = app.state.compute_jobs
+        app.state.agent_service.agent_compute_tools = app.state.agent_compute_tools
         app.state.agent_service.compute_leases = app.state.compute_leases
         app.state.agent_service.workspace_sandbox_provider = workspace_sandbox_provider
         app.state.agent_service.workspace_sandbox_store = workspace_sandbox_store
