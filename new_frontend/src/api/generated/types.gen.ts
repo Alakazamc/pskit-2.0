@@ -1793,6 +1793,34 @@ export type HttpValidationError = {
 };
 
 /**
+ * InternalBusinessComputeSubmit
+ */
+export type InternalBusinessComputeSubmit = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Tool Call Id
+     */
+    tool_call_id: string;
+    /**
+     * Release Id
+     */
+    release_id: string;
+    /**
+     * Action Id
+     */
+    action_id: string;
+    /**
+     * Arguments
+     */
+    arguments: {
+        [key: string]: unknown;
+    };
+};
+
+/**
  * InternalComputeSubmit
  */
 export type InternalComputeSubmit = {
@@ -1993,6 +2021,22 @@ export type Message = {
      * Created At
      */
     created_at: string;
+};
+
+/**
+ * MessagePage
+ *
+ * Chronological bounded slice; cursor is an owned message's opaque ID.
+ */
+export type MessagePage = {
+    /**
+     * Items
+     */
+    items: Array<Message>;
+    /**
+     * Next Before
+     */
+    next_before?: string | null;
 };
 
 /**
@@ -6402,6 +6446,84 @@ export type SendMessageApiV1cSessionIdMessagesPostResponses = {
 
 export type SendMessageApiV1cSessionIdMessagesPostResponse = SendMessageApiV1cSessionIdMessagesPostResponses[keyof SendMessageApiV1cSessionIdMessagesPostResponses];
 
+export type ListMessagePageApiV1gProjectKeyCSessionIdMessagesPageGetData = {
+    body?: never;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Before
+         */
+        before?: string | null;
+    };
+    url: '/api/v1/g/{project_key}/c/{session_id}/messages/page';
+};
+
+export type ListMessagePageApiV1gProjectKeyCSessionIdMessagesPageGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListMessagePageApiV1gProjectKeyCSessionIdMessagesPageGetError = ListMessagePageApiV1gProjectKeyCSessionIdMessagesPageGetErrors[keyof ListMessagePageApiV1gProjectKeyCSessionIdMessagesPageGetErrors];
+
+export type ListMessagePageApiV1gProjectKeyCSessionIdMessagesPageGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: MessagePage;
+};
+
+export type ListMessagePageApiV1gProjectKeyCSessionIdMessagesPageGetResponse = ListMessagePageApiV1gProjectKeyCSessionIdMessagesPageGetResponses[keyof ListMessagePageApiV1gProjectKeyCSessionIdMessagesPageGetResponses];
+
+export type ListMessagePageApiV1cSessionIdMessagesPageGetData = {
+    body?: never;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Before
+         */
+        before?: string | null;
+    };
+    url: '/api/v1/c/{session_id}/messages/page';
+};
+
+export type ListMessagePageApiV1cSessionIdMessagesPageGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListMessagePageApiV1cSessionIdMessagesPageGetError = ListMessagePageApiV1cSessionIdMessagesPageGetErrors[keyof ListMessagePageApiV1cSessionIdMessagesPageGetErrors];
+
+export type ListMessagePageApiV1cSessionIdMessagesPageGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: MessagePage;
+};
+
+export type ListMessagePageApiV1cSessionIdMessagesPageGetResponse = ListMessagePageApiV1cSessionIdMessagesPageGetResponses[keyof ListMessagePageApiV1cSessionIdMessagesPageGetResponses];
+
 export type ClaimInternalComputeJobsClaimPostData = {
     body: ComputeClaimRequest;
     headers?: {
@@ -6665,6 +6787,42 @@ export type SubmitAgentJobInternalComputeJobsPostResponses = {
 };
 
 export type SubmitAgentJobInternalComputeJobsPostResponse = SubmitAgentJobInternalComputeJobsPostResponses[keyof SubmitAgentJobInternalComputeJobsPostResponses];
+
+export type SubmitAgentBusinessJobInternalComputeToolsToolNameJobsPostData = {
+    body: InternalBusinessComputeSubmit;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path: {
+        /**
+         * Tool Name
+         */
+        tool_name: string;
+    };
+    query?: never;
+    url: '/internal/compute/tools/{tool_name}/jobs';
+};
+
+export type SubmitAgentBusinessJobInternalComputeToolsToolNameJobsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SubmitAgentBusinessJobInternalComputeToolsToolNameJobsPostError = SubmitAgentBusinessJobInternalComputeToolsToolNameJobsPostErrors[keyof SubmitAgentBusinessJobInternalComputeToolsToolNameJobsPostErrors];
+
+export type SubmitAgentBusinessJobInternalComputeToolsToolNameJobsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ComputeJob;
+};
+
+export type SubmitAgentBusinessJobInternalComputeToolsToolNameJobsPostResponse = SubmitAgentBusinessJobInternalComputeToolsToolNameJobsPostResponses[keyof SubmitAgentBusinessJobInternalComputeToolsToolNameJobsPostResponses];
 
 export type GetAgentResultInternalComputeJobsJobIdGetData = {
     body?: never;
