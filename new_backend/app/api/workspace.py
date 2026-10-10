@@ -325,6 +325,8 @@ async def send_message(
             allowed_tools=context.allowed_tools, user_prompt=context.user_prompt,
             model_id=selected_model.id,
             model_supports_images=selected_model.supports_images,
+            model_runtime_profile=(selected_model.runtime_profile.model_dump(mode="json")
+                                   if selected_model.runtime_profile is not None else None),
             reasoning_effort=payload.reasoning_effort,
             image_ids=context.image_ids,
         )

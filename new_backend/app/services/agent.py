@@ -266,6 +266,9 @@ class AgentService:
         model_id = self.store.run_context(run_id).get("model_id")
         if model_id:
             environment["PSKIT_MODEL_ID"] = model_id
+        profile = self.store.run_context(run_id).get("model_runtime_profile")
+        if profile is not None:
+            environment["PSKIT_MODEL_RUNTIME_PROFILE"] = json.dumps(profile, separators=(",", ":"))
         if self.store.run_context(run_id).get("model_supports_images") is True:
             environment["PSKIT_MODEL_SUPPORTS_IMAGES"] = "1"
         reasoning_effort = self.store.run_context(run_id).get("reasoning_effort")
