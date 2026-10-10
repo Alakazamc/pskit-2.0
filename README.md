@@ -1,235 +1,38 @@
 # PSKit 2.0
 
-PSKit 2.0 is a full-stack BioAI Agent workbench for protein-nucleic-acid analysis. It combines a Vue web UI, FastAPI backend, LangGraph agent orchestration, Qdrant RAG, authenticated user sessions, long-running BioAI task execution, and downloadable scientific reports.
+科研 Agent 工作台：React 前端、FastAPI API、Pi JSON RPC、PostgreSQL 17、LiteLLM 模型网关，以及 OpenSandbox 工作区。GPU 计算通过独立接收器和已审核的 MCP 服务执行。
 
-The supported handoff is a reproducible single-server Docker Compose stack. An
-optional compatible scientific runtime can be connected through
-`PSKIT_LEGACY_ROOT` without bundling licensed models or private data.
+## 当前开发入口
 
-## Highlights
+开始前阅读 [本地开发与云端背景](docs/DEV_CLOUD_CONTEXT.md)，再检查 `git status --short --branch`。日常开发同时运行本地前后端；mock 配置与真实联调数据隔离。具体命令、端口、Windows SSH 方式只维护在背景文档中。
 
-- **LangGraph Agent architecture**: retrieval, planning, tool execution, and answer synthesis are explicit graph nodes.
-- **RAG knowledge retrieval**: Markdown knowledge base indexed by Qdrant with `BAAI/bge-m3`; keyword fallback is available when the vector stack is unavailable.
-- **BioAI tool calling**: PDB/RCSB, UniProt, RNAcentral, SerpAPI, structure splitting, contact maps, binding-site prediction, PAIR-style interaction prediction, CORAL/PepCCD MCP services, remote RNA expert, AlphaFold3 task submission, result reading, and report generation.
-- **Recoverable SSE streaming UI**: durable turn IDs prevent duplicate scientific jobs after a browser or proxy disconnect; task and artifact state is polled from the server.
-- **Authenticated multi-user system**: username/password login, HttpOnly cookie sessions, proxy-aware database-backed auth limits, admin user/session management, audit events, and ownership checks.
-- **Long-running task runtime**: worker process for model/GPU jobs, structured task states, logs, and registered artifacts.
-- **Deployment-oriented engineering**: database migrations, readiness checks, locked dependencies, CI gates, offline image export, and end-to-end smoke tests.
+| 位置 | 职责 |
+| --- | --- |
+| `new_frontend/` | React/Vite、会话与文件富 UI、管理页面；见 [前端约定](new_frontend/AGENTS.md) |
+| `new_backend/app/` | FastAPI API、权限、账本、模型策略、Agent 及工作区领域模块 |
+| `new_backend/pi/` | 固定 Pi 扩展与 JSON RPC 工具边界 |
+| `contracts/` | OpenAPI、事件与计算契约、Release Manifest schema |
+| `infra/` | Supabase/PostgreSQL、LiteLLM、OpenSandbox 配置与独立生命周期 |
+| `deploy/agent/` | 应用 Compose、接收器与受控发布工具 |
+| `scripts/ci_new_stack.py` | 新栈隔离验证；见 [CI 说明](docs/runbooks/NEW_STACK_CI.md) |
+| `docs/architecture/` | [现状审计](docs/architecture/CURRENT_STATE_AUDIT.md)、[整改计划](docs/architecture/REMEDIATION_PLAN.md)及逐阶段证据 |
 
-## Current User-Facing Features
+用户文件与产物按所有权访问。浏览器草稿留在用户设备；服务端会话/Run/Job/用量使用 PostgreSQL，SQLite 仅保留兼容测试及历史迁移用途。模型工具只能在真实执行成功后声明文件已生成。工作区不是宿主根目录；隔离、安全授权和资源额度仍由既有 OpenSandbox/gVisor 边界控制。
 
-- Public home/about/technical documentation pages.
-- Login and registration pages.
-- Agent chat page with Markdown rendering, SSE progress, RAG sources, tool events, result files, task list, and follow-up suggestions.
-- Task center with live polling, result downloads, retry chains and queued/running/completed/failed BioAI jobs.
-- Tool catalog page.
-- Admin pages for users, sessions, runtime metrics and checks of LLM, embedding, Qdrant, MCP, model paths, Foldseek, DSSP and AlphaFold3.
-- Downloadable artifacts, including CIF/PDB/JSON/CSV/log/report files.
+## 检查与构建
 
-## Technology Stack
+本地命令与合成测试的环境要求见 [新栈 CI 手册](docs/runbooks/NEW_STACK_CI.md)。新工作流在本分支 push 和所有 PR 运行，不自动发布云端。公开 API 与生成类型通过独立契约检查保持一致；PostgreSQL 测试必须在专用 PG17 上执行，不能静默跳过。
 
-| Layer | Technology | Role |
-| --- | --- | --- |
-| Frontend | Vue 3, TypeScript, Vite | SPA workbench and protected routes |
-| Frontend state/routing | Pinia, Vue Router | Auth state, sessions, tasks, navigation |
-| UI | Custom CSS | Responsive BioAI dashboard and Agent chat UI |
-| Backend API | FastAPI, Pydantic v2 | HTTP APIs, SSE, auth, tasks, files, doctor |
-| Database | SQLite default, PostgreSQL-ready SQLAlchemy models | Users, sessions, messages, tasks, artifacts |
-| Auth | Argon2id/PBKDF2 fallback, HttpOnly cookie | Password login and session security |
-| Agent orchestration | LangGraph, langchain-core | Planner, executor, synthesizer, graph state |
-| LLM client | httpx + OpenAI-compatible chat schema | DeepSeek/OpenRouter/compatible providers |
-| RAG vector DB | Qdrant | Semantic retrieval with metadata payloads |
-| Embedding model | `BAAI/bge-m3` | 1024-dim Chinese/English document embedding |
-| Optional rerank | `BAAI/bge-reranker-v2-m3` | Higher precision RAG ranking |
-| Task runtime | Persistent SQL-polling Python worker | Long-running model/GPU task execution |
-| Artifacts | Ownership-checked local filesystem | Registered scientific outputs |
-| BioAI runtime | PSKit 1.x compatibility subprocess | INABe, PAIR, AF3 and legacy tools |
-| External tools | Foldseek, DSSP, AlphaFold3, CORAL/PepCCD MCP, remote RNA expert | Structure and model workflows |
-| Testing | pytest/TestClient, smoke scripts, Vue build checks | Local and deployment validation |
+## 发布与回退
 
-## Repository Layout
+唯一日常应用发布入口是 [pskitctl 与受控发布手册](docs/runbooks/RELEASE_CONTROL.md)，读取已经验收的不可变 Manifest。API 与 Web 可分别更新，基础设施、数据库迁移、执行节点升级使用独立流程。缺少活动状态、准入保护或关键 smoke 时拒绝发布。
 
-```text
-backend/      FastAPI backend, LangGraph agent, auth, DB models, APIs, tools, worker
-frontend/     Vue 3 + TypeScript frontend
-knowledge/    Markdown RAG knowledge base
-docs/         Design, architecture, API, and test notes
-scripts/      Deployment, worker, smoke-test, RAG, and offline export helpers
-infra/        Docker Compose dependency plan
-agent/        Agent design notes
-tests/        Test plan and placeholders
-```
+- [当前部署拓扑与首次安装](deploy/agent/DEPLOYMENT.md)
+- [独立 Staging](deploy/agent/STAGING.md)
+- [发布操作与历史职责](docs/runbooks/DEPLOYMENT.md)
 
-## Quick Start
+本轮整改没有连接云端、发布生产、修改真实数据库或删除历史数据。受控工具的本地故障测试不等于实际 Staging 演练；发布准入适配器、真实模型资格和 RPO/RTO 必须另行验收。
 
-For deployment or transfer to another machine, use the verified Docker path in
-[DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md). The steps below are for native
-development.
+## 历史栈与路径
 
-For the current A6000 installation, file locations, operating boundaries, and
-live scientific acceptance checklist, see the [Chinese operator handoff](docs/OPERATOR_HANDOFF_CN.md).
-
-### 1. Clone
-
-```bash
-git clone <your-repo-url> pskit-2.0
-cd pskit-2.0
-```
-
-### 2. Configure Environment
-
-```bash
-cp .env.example .env
-chmod 600 .env
-```
-
-Edit `.env` and fill in your API keys, model paths, Qdrant settings, and PSKit runtime paths. Do not commit `.env`.
-
-### 3. Install Backend Dependencies
-
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install uv==0.11.16
-uv sync --frozen --extra dev
-```
-
-### 4. Build Frontend
-
-```bash
-cd ../frontend
-npm ci
-npm run build
-```
-
-### 5. Start Backend and Worker
-
-From the repository root:
-
-```bash
-scripts/pskit2_ctl.sh start
-scripts/pskit2_ctl.sh status
-scripts/pskit2_ctl.sh logs 120
-```
-
-Stop services:
-
-```bash
-scripts/pskit2_ctl.sh stop
-```
-
-## Server Deployment
-
-For a direct trusted-LAN deployment, bind to the server interface and restrict
-access with a firewall:
-
-```bash
-PSKIT_BIND=0.0.0.0:10716 scripts/pskit2_ctl.sh start
-```
-
-Then access:
-
-```text
-http://SERVER_IP:10716/agent
-```
-
-For a reproducible handoff, prefer the Docker workflow in
-[DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md).
-
-## RAG Setup
-
-PSKit 2.0 uses Markdown files under `knowledge/` as the source document library.
-
-Recommended vector setup:
-
-```text
-EMBEDDING_MODEL=BAAI/bge-m3
-QDRANT_VECTOR_SIZE=1024
-QDRANT_COLLECTION=pskit_knowledge
-```
-
-Build or rebuild the index:
-
-```bash
-cd backend
-PYTHONPATH=. python3 ../scripts/build_rag_index.py
-```
-
-If `QDRANT_PATH` is set, PSKit uses embedded local Qdrant storage. If not, it connects to `QDRANT_URL`. If Qdrant or embedding is unavailable, Agent retrieval falls back to keyword search.
-
-## Environment Variables
-
-Use `.env.example` as the canonical template. Main groups:
-
-- **Server**: `PSKIT_BIND`, `DATABASE_URL`, `DATA_DIR`, `ARTIFACT_DIR`
-- **LLM**: `LLM_BASE_URL`, `LLM_MODEL_ID`, `LLM_API_KEY`
-- **Embedding/RAG**: `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_API_KEY`, `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_PATH`, `QDRANT_COLLECTION`, `QDRANT_VECTOR_SIZE`
-- **Search**: `SERPAPI_API_KEY`
-- **BioAI runtime**: `PSKIT_LEGACY_ROOT`, `PSKIT_MODEL_PARAMETERS`, `PSKIT_FOLDSEEK`, `PSKIT_DSSP`
-- **AlphaFold3**: `PSKIT_AF3_DB_DIR`, `PSKIT_AF3_MODEL_DIR`, `PSKIT_AF3_IMAGE`, `PSKIT_AF3_GPU_DEVICE`
-- **CORAL MCP**: `REMOTE_RNA_EXPERT_SSE_URL` (SSE transport; tool `generate_rna_for_protein`)
-- **PepCCD MCP**: `PEPCCD_MCP_URL`, `PEPCCD_MCP_TOOL_NAME` (Streamable HTTP transport)
-- **Security**: `REGISTRATION_MODE`, `SESSION_COOKIE_NAME`, `SESSION_TTL_DAYS`, `COOKIE_SECURE`, login rate limits
-
-Never commit real API keys, model weights, task outputs, user databases, or `.env`.
-
-## Smoke Tests
-
-Backend API smoke test:
-
-```bash
-cd backend
-PYTHONPATH=. python3 ../scripts/smoke_backend.py
-```
-
-Live backend smoke test:
-
-```bash
-scripts/smoke_live_backend.sh
-```
-
-Frontend build check:
-
-```bash
-cd frontend
-npm run build
-```
-
-Runtime check:
-
-```bash
-scripts/pskit2_ctl.sh status
-```
-
-## Open Source Notes
-
-This repository intentionally excludes:
-
-- `.env` and private API keys.
-- User database files.
-- Generated task outputs and artifacts.
-- ESM2, SaProt, RNA-FM, INABe, AlphaFold3, or other model weights.
-- AlphaFold3 model parameters and public databases.
-
-AlphaFold3, model weights, third-party tools, and biological databases are governed by their own licenses and terms. You must obtain and configure them separately.
-
-## Publishing to GitHub
-
-If you already have a GitHub repository:
-
-```bash
-git remote add origin git@github.com:<owner>/<repo>.git
-git push -u origin main
-```
-
-If using GitHub CLI:
-
-```bash
-gh auth login
-gh repo create <owner>/<repo> --private --source=. --remote=origin --push
-```
-
-## Contact
-
-If there are questions or issues, please contact **Alakazamc on WeChat**.
+Vue/LangGraph/Qdrant 旧栈仍位于 `frontend/`、`backend/`，保留用于历史维护和恢复，不是新版默认入口。原 README 逐字节保存于 [历史索引](docs/archive/README.md)。由于 Compose source bind、旧 CI 与回退版本仍引用现有路径，本轮保留 `new_backend/`、`new_frontend/`；未来纯路径迁移的前置清单见 [目录迁移计划](docs/architecture/phases/phase-6/CHANGE_SUMMARY.md)。
