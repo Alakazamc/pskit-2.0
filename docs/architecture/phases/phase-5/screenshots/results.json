@@ -1,0 +1,106 @@
+[
+  {
+    "viewport": [
+      1440,
+      900
+    ],
+    "theme": "light",
+    "language": "en",
+    "messages": 120,
+    "model_keyboard": true,
+    "draft_retained": true,
+    "no_horizontal_overflow": true,
+    "console_errors": []
+  },
+  {
+    "viewport": [
+      1440,
+      900
+    ],
+    "theme": "light",
+    "language": "zh",
+    "messages": 120,
+    "model_keyboard": true,
+    "draft_retained": true,
+    "no_horizontal_overflow": true,
+    "console_errors": []
+  },
+  {
+    "viewport": [
+      1440,
+      900
+    ],
+    "theme": "dark",
+    "language": "en",
+    "messages": 120,
+    "model_keyboard": true,
+    "draft_retained": true,
+    "no_horizontal_overflow": true,
+    "console_errors": []
+  },
+  {
+    "viewport": [
+      1440,
+      900
+    ],
+    "theme": "dark",
+    "language": "zh",
+    "messages": 120,
+    "model_keyboard": true,
+    "draft_retained": true,
+    "no_horizontal_overflow": true,
+    "console_errors": []
+  },
+  {
+    "viewport": [
+      390,
+      844
+    ],
+    "theme": "light",
+    "language": "en",
+    "messages": 120,
+    "model_keyboard": true,
+    "draft_retained": true,
+    "no_horizontal_overflow": true,
+    "console_errors": []
+  },
+  {
+    "viewport": [
+      390,
+      844
+    ],
+    "theme": "light",
+    "language": "zh",
+    "messages": 120,
+    "model_keyboard": true,
+    "draft_retained": true,
+    "no_horizontal_overflow": true,
+    "console_errors": []
+  },
+  {
+    "viewport": [
+      390,
+      844
+    ],
+    "theme": "dark",
+    "language": "en",
+    "messages": 120,
+    "model_keyboard": true,
+    "draft_retained": true,
+    "no_horizontal_overflow": true,
+    "console_errors": []
+  },
+  {
+    "viewport": [
+      390,
+      844
+    ],
+    "theme": "dark",
+    "language": "zh",
+    "messages": 120,
+    "model_keyboard": true,
+    "draft_retained": true,
+    "no_horizontal_overflow": true,
+    "console_errors": []
+  }
+]
