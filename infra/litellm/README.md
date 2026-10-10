@@ -50,6 +50,38 @@ MODEL_GATEWAY_API_KEY=<团队虚拟密钥>
 
 Pi 的 OpenAI 兼容请求会包含 Anthropic 不支持的 `store=false`。网关配置了 `litellm_settings.drop_params: true`，让 LiteLLM 过滤所选提供商不支持的字段；更换模型后应在 Admin UI 测试工具调用和流式输出，因为过滤掉不支持的字段也可能改变这些能力的表现。
 
+### PinCC 的原生工具协议兼容
+
+当前固定的 LiteLLM `1.100.3` 会在转换后的 Anthropic 自定义工具中添加
+`type: custom`。`https://v2.pincc.ai/v1/messages` 上游遇到该字段时会返回普通
+文字而不调用工具。`provider_compat.py` 通过配置中的同步 `log_pre_api_call`
+回调，仅对这个 HTTPS 主机、端口和路径的 Anthropic 请求移除自定义工具的
+该字段；工具名称、参数 schema、缓存标记、系统工具和其他提供商均保留。
+此兼容层不会把模型输出的 XML 或代码文本当作工具执行。
+
+回调使用固定版本中“转换后、序列化前”的原生请求字典；这是经过源码与
+实际 HTTP transport 验证的行为，不应假定其他版本也一样。版本不匹配时
+模块拒绝初始化。升级 LiteLLM 前先在新版本上重新验证并更新版本约束。
+Compose 必须同时挂载配置与 Python 模块；生产、Staging 及旧回退 Compose
+均已声明该挂载。
+
+不联网的协议验证（同步/异步 × 流式/非流式，包含官方地址不受影响）：
+
+```bash
+docker run --rm --network none --read-only --tmpfs /tmp \
+  -e LITELLM_LOCAL_MODEL_COST_MAP=True -e PYTHONDONTWRITEBYTECODE=1 \
+  -e PYTHONPATH=/compat -v "$PWD/infra/litellm:/compat:ro" \
+  --entrypoint python ghcr.io/berriai/litellm:v1.100.3 \
+  /compat/test_provider_compat.py
+```
+
+真实联调使用 `deploy/agent/tests/smoke_workspace_tools_live.py`：只登录既有
+Staging 合成账号，签发单模型、20 分钟、最多 $0.25 的临时虚拟 key，验证
+`write_file`、`read_file`、`artifact.created`、鉴权下载及预览字节一致，最后
+撤销临时路由和 key。仅 `message.delta` 或 HTTP 200 不能证明文件创建成功。
+候选阶段支持私网 `4001`，上线后用同一工具验证生产网关 `4000`；账号和
+文件仍在 Staging。模型调用费用计入生产网关的独立测试 key。
+
 PSKit 从 Run 归属查出用户 ID，向 LiteLLM 发送 `user` 和 `x-litellm-end-user-id`；浏览器和 Pi 提交的身份不会用于记账。费用按 LiteLLM 的模型价格估算，可能与提供商最终账单略有差异。首次真实调用后，应在 Admin UI 的用量页核对团队和用户消耗。
 
 参见 [LiteLLM Admin UI 快速入门](https://docs.litellm.ai/docs/proxy/docker_quick_start)、[预算](https://docs.litellm.ai/docs/proxy/users)和[虚拟密钥](https://docs.litellm.ai/docs/proxy/virtual_keys)。

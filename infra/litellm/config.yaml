@@ -5,6 +5,7 @@ general_settings:
   database_url: os.environ/DATABASE_URL
 
 litellm_settings:
+  callbacks: [provider_compat.pincc_tool_compatibility]
   # Pi sends OpenAI-only fields such as store=false; remove fields unsupported
   # by the selected provider while preserving supported tool-call parameters.
   drop_params: true

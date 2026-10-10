@@ -5,6 +5,7 @@ services:
   gateway:
     volumes: !override
       - ./config.staging.yaml:/app/config.yaml:ro
+      - ./provider_compat.py:/app/provider_compat.py:ro
     depends_on:
       model-stub:
         condition: service_started
