@@ -1,32 +1,27 @@
 """Validate drain, output collection and committed turns through the full HTTP application."""
 
 import asyncio
-import hashlib
-import hmac
-from pathlib import Path
 
 import httpx
 import pytest
-from test_sandbox_lifecycle import AUTH, DockerDouble
-from test_sandbox_lifecycle import settings as manager_settings
+from workspace_provider_support import FilesystemWorkspaceProvider, workspace_settings
 
-from app.adapters.live.sandbox_pi import SandboxPiRunner
 from app.config import Settings
 from app.contracts.models import UserIdentity
-from app.domain.sandboxes import SandboxActivityStore
 from app.main import create_app
-from app.sandbox_bridge import create_bridge_app
-from app.sandbox_manager import create_manager_app
 from app.services.model_catalog import ModelCatalog
 
 
 @pytest.mark.asyncio
-async def test_drained_turn_commits_its_transcript_and_owned_outputs(
+async def test_active_turn_blocks_drain_then_preserves_its_transcript_and_owned_outputs(
     live_database, tmp_path, monkeypatch
 ):
     dsn, schema = live_database
     entered, finish = asyncio.Event(), asyncio.Event()
-    monkeypatch.setenv("RESEARCH_AGENT_PI_SESSION_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        "app.main.OpenSandboxWorkspaceProvider",
+        lambda _settings, store: FilesystemWorkspaceProvider(tmp_path, store=store),
+    )
 
     class Identity:
         async def verify(self, token):
@@ -37,7 +32,9 @@ async def test_drained_turn_commits_its_transcript_and_owned_outputs(
 
     class Pi:
         async def prompt(self, session, message, on_event, **kwargs):
-            output = Path(kwargs["environment"]["PSKIT_ARTIFACT_DIR"])
+            attempt = kwargs["environment"]["PSKIT_ATTEMPT_ID"]
+            output = tmp_path / session / "artifacts" / attempt
+            output.mkdir(parents=True, exist_ok=True)
             (output / "result.txt").write_bytes(b"owned output")
             transcript = tmp_path / session / ".pi" / "turn.jsonl"
             transcript.parent.mkdir(parents=True, exist_ok=True)
@@ -46,11 +43,9 @@ async def test_drained_turn_commits_its_transcript_and_owned_outputs(
             await finish.wait()
             return {"text": "Completed analysis", "session_file": str(transcript)}
 
-    runner = SandboxPiRunner(
-        manager_url="http://manager", manager_token="manager-secret-123456", model="lab"
-    )
     app = create_app(
         Settings(
+            auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
             mode="live",
             agent_runtime="pi",
             database_url=dsn,
@@ -60,11 +55,9 @@ async def test_drained_turn_commits_its_transcript_and_owned_outputs(
             model_gateway_base_url="http://gateway/v1",
             model_gateway_model="lab",
             model_gateway_api_key="test-only",
-            pi_execution="sandbox",
-            sandbox_manager_url="http://manager",
-            sandbox_manager_token="manager-secret-123456",
+            **workspace_settings(),
         ),
-        pi_runner=runner,
+        pi_runner=Pi(),
     )
     app.state.identity_provider = Identity()
     app.state.model_catalog = ModelCatalog(
@@ -75,14 +68,9 @@ async def test_drained_turn_commits_its_transcript_and_owned_outputs(
             lambda _: httpx.Response(200, json={"data": [{"id": "lab"}]})
         ),
     )
-    token = hmac.new(b"derived-token-secret", b"alice", hashlib.sha256).hexdigest()
-    manager = create_manager_app(
-        manager_settings(),
-        activity_store=SandboxActivityStore(app.state.database),
-        docker_transport=httpx.MockTransport(DockerDouble()),
-        bridge_transport=httpx.ASGITransport(app=create_bridge_app("alice", token, lambda _: Pi())),
+    app.state.admin_store.grant(
+        "alice", "platform_admin", actor="test-bootstrap", reason="Workspace lifecycle regression",
     )
-    runner.manager_transport = httpx.ASGITransport(app=manager)
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(
@@ -90,11 +78,6 @@ async def test_drained_turn_commits_its_transcript_and_owned_outputs(
             base_url="http://app",
             headers={"Authorization": "Bearer alice-test-only"},
         ) as client,
-        httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=manager),
-            base_url="http://manager",
-            headers=AUTH,
-        ) as control,
     ):
         session = (await client.post("/api/v1/c", json={"title": "Drain lifecycle"})).json()
         accepted = await client.post(
@@ -104,11 +87,14 @@ async def test_drained_turn_commits_its_transcript_and_owned_outputs(
         run_id = accepted.json()["run_id"]
         try:
             await asyncio.wait_for(entered.wait(), timeout=10)
-            summary = (await control.get("/v1/sandboxes")).json()[0]
-            drained = await control.post(
-                "/v1/sandboxes/alice/drain", json={"expected_revision": summary["revision"]}
+            summary = (await client.get("/api/v1/admin/sandboxes")).json()["items"][0]
+            assert summary["active_sessions"] == [session["id"]]
+            denied_drain = await client.post(
+                "/api/v1/admin/sandboxes/alice/drain",
+                json={"expected_revision": summary["revision"], "reason": "Lifecycle regression"},
             )
-            assert drained.status_code == 200, drained.text
+            assert denied_drain.status_code == 409, denied_drain.text
+            assert denied_drain.json()["detail"]["code"] == "REVISION_CONFLICT"
         finally:
             finish.set()
         async with asyncio.timeout(10):
@@ -118,6 +104,16 @@ async def test_drained_turn_commits_its_transcript_and_owned_outputs(
                     break
                 await asyncio.sleep(0.02)
         assert status["status"] == "completed", status
+        summary = (await client.get("/api/v1/admin/sandboxes")).json()["items"][0]
+        assert summary["active_sessions"] == []
+        drained = await client.post(
+            "/api/v1/admin/sandboxes/alice/drain",
+            json={"expected_revision": summary["revision"], "reason": "Lifecycle regression"},
+        )
+        assert drained.status_code == 200, drained.text
+        stopped = (await client.get("/api/v1/admin/sandboxes")).json()["items"][0]
+        assert stopped["runtime_state"] == "stopped"
+        assert stopped["volume_id"] == summary["volume_id"]
         messages = (await client.get(f"/api/v1/c/{session['id']}/messages")).json()
         assert messages[-1]["role"] == "assistant"
         assert messages[-1]["parts"][0]["text"] == "Completed analysis"

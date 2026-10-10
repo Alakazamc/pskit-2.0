@@ -132,7 +132,7 @@ it.each([
   )).toBe(false);
 });
 
-it("shows waiting inside the reply and cancels without a bar above the composer", async () => {
+it("shows reported task progress inside the reply and cancels without a bar above the composer", async () => {
   loggedIn("/c/session-1");
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
@@ -153,8 +153,9 @@ it("shows waiting inside the reply and cancels without a bar above the composer"
   vi.stubGlobal("fetch", fetcher);
   render(<App />);
 
-  const spinner = await screen.findByRole("status", { name: "正在生成回复" });
-  expect(spinner.closest(".message-row.assistant")).toBeInTheDocument();
+  const progress = await screen.findByRole("progressbar", { name: "后台任务" });
+  expect(progress).toHaveAttribute("aria-valuenow", "25");
+  expect(progress.closest(".message-row.assistant")).toBeInTheDocument();
   expect(screen.queryByRole("region", { name: "当前运行" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "发送消息" })).not.toBeInTheDocument();
   await userEvent.setup().click(screen.getByRole("button", { name: "取消运行" }));

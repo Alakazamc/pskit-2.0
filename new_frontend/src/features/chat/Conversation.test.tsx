@@ -104,7 +104,7 @@ it("renders saved assistant Markdown as headings, tables, code, and math", async
   expect(await screen.findByRole("heading", { name: "结果" }, { timeout: 5_000 })).toBeInTheDocument();
   expect(screen.getByText("蛋白质").closest("strong")).toBeInTheDocument();
   expect(screen.getByRole("table")).toHaveTextContent("A1");
-  expect(screen.getByText("print('ok')")).toBeInTheDocument();
+  await waitFor(() => expect(document.querySelector("pre code")).toHaveTextContent("print('ok')"));
   await waitFor(() => expect(document.querySelector(".katex")).toBeInTheDocument());
 });
 

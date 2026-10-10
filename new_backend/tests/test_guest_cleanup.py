@@ -216,6 +216,7 @@ async def test_mismatched_remote_identity_cannot_promote_or_delete_guest(tmp_pat
 async def test_claimed_guest_cannot_use_api_or_start_upgrade(tmp_path):
     path = str(tmp_path / "agent.sqlite3")
     app = create_app(Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_db_path=path,
         supabase_url="https://example.supabase.co",
         supabase_publishable_key="publishable-test",

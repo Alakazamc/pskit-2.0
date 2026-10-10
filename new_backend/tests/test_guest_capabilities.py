@@ -5,10 +5,12 @@ import pytest
 
 from app.config import Settings
 from app.contracts.conversation import MessageRequest
+from app.domain.catalog import ContextNotFound
 from app.main import create_app
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("mock_mcp_skill_catalog")
 async def test_guest_af3_and_mcp_are_denied_before_any_job_or_tool_run():
     app = create_app(Settings())
     token, guest = app.state.demo_store.issue_anonymous_token()
@@ -33,6 +35,27 @@ async def test_guest_af3_and_mcp_are_denied_before_any_job_or_tool_run():
     assert skills.json() == []
     assert invocation.status_code == 403
     assert invocation.json()["detail"]["code"] == "TOOL_NOT_ALLOWED"
+    assert app.state.quotas.usage_for(guest.id).gpu.reserved == 0
+    assert app.state.tool_runs.list_for(guest.id) == []
+
+
+@pytest.mark.asyncio
+async def test_guest_can_browse_unavailable_packages_without_gaining_tool_permissions():
+    app = create_app(Settings())
+    token, guest = app.state.demo_store.issue_anonymous_token()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test",
+    ) as client:
+        response = await client.get("/api/v1/skills", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    advertised = response.json()
+    assert advertised
+    assert all(skill["source"] == "upstream" and skill["available"] is False for skill in advertised)
+    for skill in advertised:
+        with pytest.raises(ContextNotFound):
+            app.state.catalog.resolve_context(
+                guest.id, MessageRequest(content="Review", skills=[skill]),
+            )
     assert app.state.quotas.usage_for(guest.id).gpu.reserved == 0
     assert app.state.tool_runs.list_for(guest.id) == []
 

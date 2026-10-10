@@ -25,6 +25,15 @@ async def test_health_reports_configured_modes_without_secrets(tmp_path):
     assert ready.json() == {
         "status": "ready", "identity": "mock", "agent": "pi",
         "mcp": "disabled", "af3": "mock", "external_services": "unchecked",
+        "workspace_provider": {
+            "provider": "disabled", "state": "disabled", "code": "WORKSPACE_DISABLED",
+            "runtime": None, "file_access": False, "command_execution": False,
+            "persistent_volume": False, "session_mount_namespace": False,
+            "rollout": {
+                "state": "configured", "enabled": False, "commands_enabled": False,
+                "allowlisted_users": 0,
+            },
+        },
     }
     assert "private-secret" not in ready.text
 
@@ -89,6 +98,7 @@ async def test_dependency_diagnostics_probe_live_identity_and_gateway_without_le
         transport=httpx.MockTransport(respond), timeout=2,
     ))
     app = create_app(Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://identity.example", supabase_publishable_key="private-publishable",
         model_gateway_base_url="https://gateway.example/v1",
@@ -125,6 +135,7 @@ async def test_dependency_diagnostics_classify_transport_failure_and_rate_limit(
         transport=httpx.MockTransport(respond), timeout=2,
     ))
     app = create_app(Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://identity.example", supabase_publishable_key="private-publishable",
         model_gateway_base_url="https://gateway.example/v1",
@@ -156,6 +167,7 @@ async def test_dependency_diagnostics_have_a_wall_clock_deadline(tmp_path, monke
         transport=httpx.MockTransport(slow_response), timeout=2,
     ))
     app = create_app(Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://identity.example", supabase_publishable_key="publishable",
         admin_api_key="admin-key",

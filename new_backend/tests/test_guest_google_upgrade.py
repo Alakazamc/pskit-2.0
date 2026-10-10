@@ -19,6 +19,7 @@ async def _csrf_headers(client: httpx.AsyncClient) -> dict[str, str]:
 
 def _settings(tmp_path):
     return Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_runtime="pi", agent_db_path=str(tmp_path / "auth.sqlite3"),
         supabase_url="https://example.supabase.co",
         supabase_publishable_key="publishable-test",

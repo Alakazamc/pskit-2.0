@@ -209,7 +209,8 @@ describe("Tool UI result interpreter", () => {
   it("shows honest loading, failed and empty states", () => {
     localStorage.setItem("research_language", "en");
     const { rerender } = render(<Harness currentRun={{ ...run, status: "running", progress: 12, result: null, artifacts: [] }} />);
-    expect(screen.getByRole("status")).toHaveTextContent("Running");
+    expect(screen.getByText("Running · 12%")).toBeInTheDocument();
+    expect(document.querySelector('[data-status="running"]')).toBeInTheDocument();
     rerender(<Harness currentRun={{ ...run, status: "failed", progress: 12, result: null, artifacts: [] }} />);
     expect(screen.getByRole("alert")).toHaveTextContent("failed");
     rerender(<Harness currentRun={{ ...run, result: {}, artifacts: [] }} />);

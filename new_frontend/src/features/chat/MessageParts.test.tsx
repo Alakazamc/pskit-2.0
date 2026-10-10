@@ -1,6 +1,8 @@
-import { render, screen } from "@testing-library/react";
-import { expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, expect, it } from "vitest";
 import { MessageParts } from "./MessageParts";
+
+afterEach(cleanup);
 
 it("renders persisted file, citation, tool result, and error parts", () => {
   render(<MessageParts parts={[
@@ -15,8 +17,8 @@ it("renders persisted file, citation, tool result, and error parts", () => {
   expect(screen.getByText("Search failed")).toBeInTheDocument();
 });
 
-it("shows progress parts as a spinning status instead of a bar", () => {
+it("shows progress parts using their reported value", () => {
   render(<MessageParts parts={[{ type: "progress", label: "正在计算", value: 42 }]} />);
-  expect(screen.getByRole("status", { name: "正在计算" })).toBeInTheDocument();
-  expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  expect(screen.getByRole("progressbar", { name: "正在计算" })).toHaveAttribute("aria-valuenow", "42");
+  expect(screen.queryByText(/42%/)).not.toBeInTheDocument();
 });

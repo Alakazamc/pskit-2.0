@@ -2,7 +2,9 @@ import httpx
 import pytest
 
 from app.config import Settings
+from app.contracts.conversation import MessageRequest
 from app.contracts.models import UserIdentity
+from app.domain.catalog import ContextNotFound
 from app.main import create_app
 
 pytestmark = pytest.mark.usefixtures("live_database")
@@ -20,6 +22,7 @@ class StubIdentity:
 def test_live_mode_rejects_invalid_supabase_base_url(url, tmp_path):
     with pytest.raises(ValueError, match="SUPABASE_URL"):
         create_app(Settings(
+            auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
             mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
             supabase_url=url, supabase_publishable_key="publishable-test",
         ))
@@ -32,6 +35,7 @@ def test_live_mode_rejects_invalid_supabase_base_url(url, tmp_path):
 def test_invalid_supabase_public_url_rejected(url, tmp_path):
     with pytest.raises(ValueError, match="SUPABASE_PUBLIC_URL"):
         create_app(Settings(
+            auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
             mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
             supabase_url="http://api-gw:8000", supabase_public_url=url,
             supabase_publishable_key="publishable-test",
@@ -50,6 +54,7 @@ def test_supabase_public_url_reads_environment(monkeypatch):
 def test_live_pi_rejects_invalid_model_gateway_base_url(url, tmp_path):
     with pytest.raises(ValueError, match="MODEL_GATEWAY_BASE_URL"):
         create_app(Settings(
+            auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
             mode="live", agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3"),
             supabase_url="https://identity.example", supabase_publishable_key="publishable-test",
             model_gateway_base_url=url, model_gateway_model="research-model",
@@ -58,6 +63,7 @@ def test_live_pi_rejects_invalid_model_gateway_base_url(url, tmp_path):
 
 def test_live_mode_accepts_local_self_hosted_http_endpoints():
     Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_runtime="pi",
         supabase_url="http://127.0.0.1:54321", supabase_publishable_key="publishable-test",
         model_gateway_base_url="http://127.0.0.1:4000/v1", model_gateway_model="research-model",
@@ -67,6 +73,7 @@ def test_live_mode_accepts_local_self_hosted_http_endpoints():
 def test_live_af3_callback_requires_an_explicit_gpu_memory_profile(tmp_path):
     with pytest.raises(ValueError, match="AF3_MIN_GPU_MEMORY_MB"):
         create_app(Settings(
+            auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
             mode="live", agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3"),
             supabase_url="https://example.supabase.co",
             supabase_publishable_key="publishable-test",
@@ -78,6 +85,7 @@ def test_live_af3_callback_requires_an_explicit_gpu_memory_profile(tmp_path):
 
 def test_pi_tool_environment_hides_af3_when_executor_is_disabled(tmp_path):
     app = create_app(Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
         model_gateway_base_url="https://gateway.example.org/v1", model_gateway_model="research-model",
@@ -89,6 +97,7 @@ def test_pi_tool_environment_hides_af3_when_executor_is_disabled(tmp_path):
 @pytest.mark.asyncio
 async def test_live_mode_disables_undeployed_mcp_and_af3_by_default(tmp_path):
     app = create_app(Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
     ))
@@ -103,7 +112,13 @@ async def test_live_mode_disables_undeployed_mcp_and_af3_by_default(tmp_path):
                                 json={"estimated_gpu_minutes": 20})
 
     assert tools.status_code == 200 and tools.json() == []
-    assert skills.status_code == 200 and skills.json() == []
+    assert skills.status_code == 200
+    advertised = skills.json()
+    assert "structure-review" in {skill["id"] for skill in advertised}
+    assert all(skill["available"] is False for skill in advertised)
+    for skill in advertised:
+        with pytest.raises(ContextNotFound):
+            app.state.catalog.resolve_context("alice", MessageRequest(content="Review", skills=[skill]))
     assert mcp.status_code == 503 and mcp.json()["detail"]["code"] == "MCP_NOT_CONFIGURED"
     assert af3.status_code == 503 and af3.json()["detail"]["code"] == "AF3_NOT_CONFIGURED"
 
@@ -111,6 +126,7 @@ async def test_live_mode_disables_undeployed_mcp_and_af3_by_default(tmp_path):
 @pytest.mark.asyncio
 async def test_live_mode_can_explicitly_use_mock_capabilities_for_contract_development(tmp_path):
     app = create_app(Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
         mcp_executor="mock", af3_executor="mock",

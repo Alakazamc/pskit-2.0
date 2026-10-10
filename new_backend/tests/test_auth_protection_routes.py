@@ -39,6 +39,7 @@ class FakeProtection:
 def live_app():
     return create_app(
         Settings(
+            auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
             mode="live",
             supabase_url="https://example.supabase.co",
             supabase_publishable_key="publishable-test",

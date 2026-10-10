@@ -21,6 +21,7 @@ from scripts.cleanup_guests import main as cleanup_main
 
 def _live_settings(dsn: str = "", schema: str = "pskit") -> Settings:
     return Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", database_url=dsn, database_schema=schema,
         supabase_url="https://identity.example", supabase_publishable_key="publishable",
         mcp_executor="disabled", af3_executor="disabled",

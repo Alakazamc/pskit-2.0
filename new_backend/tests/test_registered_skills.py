@@ -59,6 +59,8 @@ async def test_admin_registered_skill_appears_in_other_live_instance(tmp_path):
         assert {skill["id"]: skill for skill in skills}["rna-review"] == {
             "id": "rna-review", "name": "RNA Review",
             "description": "Review RNA structures", "version": 1,
+            "available": True, "owned_by_me": False,
+            "source": "builtin", "visibility": "public",
         }
 
 

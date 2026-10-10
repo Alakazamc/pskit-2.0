@@ -46,9 +46,9 @@ async def test_member_bearer_cannot_be_replaced_by_guest_login():
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                  base_url="http://test") as client:
         member = await client.post("/api/v1/auth/demo", json={"email": "member@example.org"})
+        assert (await client.get("/api/v1/auth/csrf")).status_code == 204
         anonymous = await client.post("/api/v1/auth/anonymous", json={}, headers={
             "Authorization": f"Bearer {member.json()['access_token']}",
-            **await _csrf_headers(client),
         })
 
     assert member.status_code == 200
@@ -75,6 +75,7 @@ async def test_mock_guest_refresh_keeps_same_identity():
 @pytest.mark.asyncio
 async def test_live_anonymous_signup_uses_python_supabase_boundary_and_records_guest(tmp_path):
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
         anonymous_enabled=True, anonymous_captcha_required=True,
@@ -115,6 +116,7 @@ async def test_live_anonymous_signup_uses_python_supabase_boundary_and_records_g
 @pytest.mark.asyncio
 async def test_live_guest_cookie_restores_same_user_without_another_signup(tmp_path):
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
         anonymous_enabled=True, anonymous_captcha_required=True,
@@ -161,6 +163,7 @@ async def test_live_guest_cookie_restores_same_user_without_another_signup(tmp_p
 @pytest.mark.asyncio
 async def test_live_member_bearer_does_not_create_guest_or_replace_session(tmp_path):
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
         anonymous_enabled=True, anonymous_captcha_required=True,
@@ -195,6 +198,7 @@ async def test_live_member_bearer_does_not_create_guest_or_replace_session(tmp_p
 @pytest.mark.asyncio
 async def test_two_live_instances_share_guest_creation_limit_and_ignore_forwarded_header(tmp_path):
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
         anonymous_enabled=True, anonymous_captcha_required=True,
@@ -227,6 +231,7 @@ async def test_two_live_instances_share_guest_creation_limit_and_ignore_forwarde
 @pytest.mark.asyncio
 async def test_member_bearer_takes_precedence_over_stale_guest_cookie(tmp_path):
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
         anonymous_enabled=True, anonymous_captcha_required=True,
@@ -262,6 +267,7 @@ async def test_member_bearer_takes_precedence_over_stale_guest_cookie(tmp_path):
 @pytest.mark.asyncio
 async def test_malformed_supabase_identity_does_not_issue_guest_cookie(tmp_path):
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
         anonymous_enabled=True, anonymous_captcha_required=True,

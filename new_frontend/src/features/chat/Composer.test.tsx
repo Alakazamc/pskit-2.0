@@ -188,10 +188,10 @@ describe("Composer file references", () => {
     const user = userEvent.setup();
     render(<Composer onSend={vi.fn()} onUpload={vi.fn()} skills={[]} resources={[]} />);
     await user.type(screen.getByLabelText("消息内容"), "/");
-    expect(screen.getByText("暂无可用技能")).toBeInTheDocument();
+    expect(within(screen.getByRole("listbox")).getByText("没有匹配的技能或资源")).toBeInTheDocument();
     await user.clear(screen.getByLabelText("消息内容"));
     await user.type(screen.getByLabelText("消息内容"), "@");
-    expect(screen.getByText("暂无可用资源")).toBeInTheDocument();
+    expect(within(screen.getByRole("listbox")).getByText("没有匹配的技能或资源")).toBeInTheDocument();
   });
 
   it("uses English labels and empty states when English is selected", async () => {
@@ -199,7 +199,7 @@ describe("Composer file references", () => {
     const user = userEvent.setup();
     render(<LanguageProvider><Composer onSend={vi.fn()} onUpload={vi.fn()} skills={[]} resources={[]} /></LanguageProvider>);
     await user.type(screen.getByLabelText("Message"), "/");
-    expect(screen.getByText("No skills available")).toBeInTheDocument();
+    expect(within(screen.getByRole("listbox")).getByText("No matching skills or resources")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send message" })).toBeInTheDocument();
   });
 

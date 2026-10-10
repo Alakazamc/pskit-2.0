@@ -165,7 +165,7 @@ it("starts a pending run, recovers real events by cursor, labels usage source an
     "flex-design", "generate", { target: "1A9N" }, expect.any(String),
   );
   expect(await screen.findByText("Generate candidates")).toBeInTheDocument();
-  expect(screen.getByText(/service reported/i)).toBeInTheDocument();
+  expect(screen.getByText("Measured by service")).toBeInTheDocument();
   expect(screen.queryByText("GGCA")).not.toBeInTheDocument();
   expect(screen.getByText("all-candidates.csv")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Stop run" })).toBeInTheDocument();

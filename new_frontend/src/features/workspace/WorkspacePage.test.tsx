@@ -37,7 +37,7 @@ it("restores the latest waiting run after a page reload", async () => {
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  expect(await screen.findByText(/Sequence alignment · 50%/)).toBeInTheDocument();
+  expect(await screen.findByRole("progressbar", { name: "Sequence alignment" })).toHaveAttribute("aria-valuenow", "50");
   expect(fetcher.mock.calls.every(([input]) => !String(input).includes("/af3/jobs/"))).toBe(true);
   expect(screen.getAllByText("来自接口的项目").length).toBeGreaterThan(0);
   expect(screen.queryByText("AF3 MOCK")).not.toBeInTheDocument();

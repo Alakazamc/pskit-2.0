@@ -1,9 +1,25 @@
 """Shared live-mode PostgreSQL fixture for HTTP tests."""
 
 import os
+import shutil
 import uuid
+from functools import partial
+from pathlib import Path
 
 import pytest
+
+
+@pytest.fixture
+def mock_mcp_skill_catalog(tmp_path, monkeypatch):
+    """Exercise MCP permissions with one controlled, executable Skill package."""
+    from app.domain.catalog import CatalogStore
+
+    skill_root = tmp_path / "skills"
+    shutil.copytree(
+        Path(__file__).parents[1] / "skills/structure-review",
+        skill_root / "structure-review",
+    )
+    monkeypatch.setattr("app.main.CatalogStore", partial(CatalogStore, skill_root=skill_root))
 
 
 @pytest.fixture

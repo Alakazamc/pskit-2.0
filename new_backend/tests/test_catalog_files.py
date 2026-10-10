@@ -8,6 +8,7 @@ from app.main import create_app
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("mock_mcp_skill_catalog")
 async def test_catalog_files_and_artifacts_are_scoped_to_user():
     app = create_app(Settings(mock_af3_seconds=0.1))
     async with app.router.lifespan_context(app):  # noqa: SIM117 - Start scheduler first.

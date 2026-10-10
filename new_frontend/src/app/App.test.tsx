@@ -60,7 +60,7 @@ it("renders catalog data from HTTP and submits selected context as API refs", as
     skills: [{ id: "skill-api", name: "Genome scan" }],
     resources: [{ id: "resource-api", name: "Reference database" }],
   }]));
-  expect(await screen.findByText(/Genome scan · 45%/)).toBeInTheDocument();
+  expect(await screen.findByRole("progressbar", { name: "Genome scan" })).toHaveAttribute("aria-valuenow", "45");
 }, 10_000);
 
 it("upgrades a mock guest without changing ownership or losing its session", async () => {
@@ -236,7 +236,7 @@ it("restores a deep linked session after checking the stored API token", async (
   vi.stubGlobal("fetch", fetcher);
 
   render(<App />);
-  expect(await screen.findByText(/后台计算 · 30%/)).toBeInTheDocument();
+  expect(await screen.findByRole("progressbar", { name: "后台计算" })).toHaveAttribute("aria-valuenow", "30");
   await waitFor(() => expect(window.location.pathname).toBe("/session/session-alice"));
 }, 10_000);
 

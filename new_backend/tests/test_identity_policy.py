@@ -76,6 +76,7 @@ def test_existing_project_owner_is_backfilled_as_member_without_changing_project
 @pytest.mark.asyncio
 async def test_email_login_persists_verified_member_tier_without_me_request(tmp_path):
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
     )
@@ -105,6 +106,7 @@ async def test_email_login_persists_verified_member_tier_without_me_request(tmp_
 @pytest.mark.asyncio
 async def test_refresh_observes_anonymous_user_without_me_request(tmp_path):
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
     )
@@ -134,6 +136,7 @@ async def test_refresh_observes_anonymous_user_without_me_request(tmp_path):
 @pytest.mark.asyncio
 async def test_signed_in_signup_persists_verified_member_tier(tmp_path):
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
     )
@@ -164,6 +167,7 @@ async def test_signed_in_signup_persists_verified_member_tier(tmp_path):
 @pytest.mark.asyncio
 async def test_email_verification_persists_verified_member_tier(tmp_path):
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
     )

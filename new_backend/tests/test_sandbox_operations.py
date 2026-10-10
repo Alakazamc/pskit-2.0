@@ -6,7 +6,7 @@ from test_sandbox_lifecycle import AUTH, DockerDouble, settings
 
 from app.domain.sandboxes import MemorySandboxActivityStore
 from app.sandbox_manager import create_manager_app
-from app.services.sandbox_operations import SandboxOperations
+from app.services.sandbox_operations import LegacySandboxOperations
 
 DIGEST = "pskit-agent@sha256:" + "a" * 64
 
@@ -26,7 +26,7 @@ async def test_image_replace_waits_for_active_attempts():
         docker_transport=httpx.MockTransport(docker),
         bridge_transport=httpx.MockTransport(bridge),
     )
-    operations = SandboxOperations(
+    operations = LegacySandboxOperations(
         "http://manager", "manager-secret-123456", transport=httpx.ASGITransport(app=app)
     )
     async with httpx.AsyncClient(
@@ -130,7 +130,7 @@ async def test_pending_replacement_completes_after_confirmed_exit():
             lambda _: httpx.Response(200, json={"boot_id": "boot", "attempts": []})
         ),
     )
-    operations = SandboxOperations(
+    operations = LegacySandboxOperations(
         "http://manager", "manager-secret-123456", transport=httpx.ASGITransport(app=app)
     )
     async with httpx.AsyncClient(

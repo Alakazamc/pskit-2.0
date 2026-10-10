@@ -2,6 +2,7 @@
 
 import httpx
 import pytest
+from workspace_provider_support import FilesystemWorkspaceProvider, workspace_settings
 
 from app.config import Settings
 from app.main import create_app
@@ -101,10 +102,17 @@ async def test_full_app_exposes_audited_management_and_unavailable_sandbox_truth
         assert files.status_code == 503
 
 
-def test_live_sandbox_artifacts_obey_the_same_configured_storage_limit(live_database):
+def test_live_sandbox_artifacts_obey_the_same_configured_storage_limit(
+    live_database, tmp_path, monkeypatch,
+):
     dsn, schema = live_database
+    monkeypatch.setattr(
+        "app.main.OpenSandboxWorkspaceProvider",
+        lambda _settings, store: FilesystemWorkspaceProvider(tmp_path, "member", store=store),
+    )
     app = create_app(
         Settings(
+            auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
             mode="live",
             agent_runtime="pi",
             database_url=dsn,
@@ -116,6 +124,7 @@ def test_live_sandbox_artifacts_obey_the_same_configured_storage_limit(live_data
             pi_execution="sandbox",
             sandbox_manager_url="http://manager",
             sandbox_manager_token="test-only-manager-token",
+            **workspace_settings("member"),
         ),
         pi_runner=object(),
     )

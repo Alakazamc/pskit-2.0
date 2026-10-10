@@ -30,6 +30,7 @@ async def test_postgres_names_a_completed_chat_once_and_preserves_it_across_rest
     dsn, schema = pg_schema
     migrate_postgres(dsn, schema=schema)
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_runtime="pi", database_url=dsn, database_schema=schema,
         mcp_executor="disabled", af3_executor="disabled", anonymous_enabled=False,
         supabase_url="https://identity.invalid", supabase_publishable_key="test-only-key",

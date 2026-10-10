@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 PROMPT = Path(__file__).parents[1] / "pi" / "system-prompt.md"
 
 

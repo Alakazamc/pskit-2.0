@@ -118,6 +118,7 @@ async def test_supabase_explicit_rate_limit_is_not_transport_failure_or_retried(
 @pytest.mark.asyncio
 async def test_google_start_uses_public_supabase_url():
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", supabase_url="http://api-gw:8000",
         supabase_public_url="https://agent.bioailab.net",
         supabase_publishable_key="publishable-test",
@@ -141,6 +142,7 @@ async def test_google_start_uses_public_supabase_url():
 @pytest.mark.asyncio
 async def test_google_start_falls_back_to_internal_url():
     app = create_app(Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", supabase_url="http://api-gw:8000",
         supabase_publishable_key="publishable-test",
     ))
@@ -186,7 +188,9 @@ async def test_supabase_token_rate_limit_is_forwarded_without_retry(route: str):
         assert request.url.path == "/auth/v1/token"
         return httpx.Response(429, headers={"Retry-After": "3"})
 
-    settings = Settings(mode="live", supabase_url="https://example.supabase.co",
+    settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
+        mode="live", supabase_url="https://example.supabase.co",
                         supabase_publishable_key="publishable-test")
     app = create_app(settings)
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as supabase:
@@ -212,7 +216,9 @@ async def test_supabase_token_rate_limit_is_forwarded_without_retry(route: str):
 
 @pytest.mark.asyncio
 async def test_google_exchange_rate_limit_is_forwarded():
-    settings = Settings(mode="live", supabase_url="https://example.supabase.co",
+    settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
+        mode="live", supabase_url="https://example.supabase.co",
                         supabase_publishable_key="publishable-test")
     app = create_app(settings)
     async with httpx.AsyncClient(
@@ -303,6 +309,7 @@ async def test_python_email_login_exchanges_supabase_password_for_jwt_and_refres
         return httpx.Response(200, json={"id": "user-123", "email": "alice@example.org"})
 
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", supabase_url="https://example.supabase.co",
         supabase_publishable_key="publishable-test", new_api_base_url="https://new-api.example",
     )
@@ -336,6 +343,7 @@ async def test_python_refresh_rotates_supabase_token_without_exposing_refresh_se
         return httpx.Response(200, json={"id": "user-123", "email": "alice@example.org"})
 
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", supabase_url="https://example.supabase.co",
         supabase_publishable_key="publishable-test", new_api_base_url="https://new-api.example",
     )
@@ -361,6 +369,7 @@ async def test_python_refresh_rotates_supabase_token_without_exposing_refresh_se
 @pytest.mark.asyncio
 async def test_invalid_refresh_clears_browser_cookie():
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", supabase_url="https://example.supabase.co",
         supabase_publishable_key="publishable-test", new_api_base_url="https://new-api.example",
     )
@@ -390,6 +399,7 @@ async def test_refresh_clears_cookie_when_supabase_cannot_verify_new_access_toke
         return httpx.Response(401)
 
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", supabase_url="https://example.supabase.co",
         supabase_publishable_key="publishable-test", new_api_base_url="https://new-api.example",
     )
@@ -427,6 +437,7 @@ async def test_google_oauth_starts_and_finishes_in_python_with_pkce():
         })
 
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", supabase_url="https://example.supabase.co",
         supabase_publishable_key="publishable-test", new_api_base_url="https://new-api.example",
         frontend_url="http://localhost:5174", public_api_url="http://localhost:18080",
@@ -460,6 +471,7 @@ async def test_google_oauth_starts_and_finishes_in_python_with_pkce():
 @pytest.mark.asyncio
 async def test_google_oauth_callback_can_finish_in_another_python_instance(tmp_path):
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_db_path=str(tmp_path / "auth.sqlite3"),
         supabase_url="https://example.supabase.co",
         supabase_publishable_key="publishable-test",
@@ -508,6 +520,7 @@ async def test_python_logout_revokes_supabase_session_and_clears_refresh_cookie(
         return httpx.Response(204)
 
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", supabase_url="https://example.supabase.co",
         supabase_publishable_key="publishable-test", new_api_base_url="https://new-api.example",
     )
@@ -534,6 +547,7 @@ async def test_live_usage_returns_token_allowance_without_new_api_quota_points()
         return httpx.Response(200, json={"id": "user-123", "email": "alice@example.org"})
 
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", supabase_url="https://example.supabase.co",
         supabase_publishable_key="publishable-test", new_api_base_url="https://new-api.example",
     )
@@ -567,6 +581,7 @@ async def test_supabase_login_runs_without_a_model_gateway():
         raise AssertionError(f"Unexpected Supabase request: {request.url}")
 
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", supabase_url="https://example.supabase.co",
         supabase_publishable_key="publishable-test",
     )
@@ -601,6 +616,7 @@ async def test_live_pi_can_use_a_shared_openai_compatible_gateway(tmp_path):
         return httpx.Response(200, json={"id": "alice", "email": "alice@example.org"})
 
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
         model_gateway_base_url="https://gateway.example/v1",
@@ -633,6 +649,7 @@ async def test_live_pi_can_use_a_shared_openai_compatible_gateway(tmp_path):
 @pytest.mark.asyncio
 async def test_generic_gateway_without_shared_key_rejects_message(tmp_path):
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
         model_gateway_base_url="https://gateway.example/v1",
@@ -682,6 +699,7 @@ async def test_python_supabase_signup_and_password_recovery_are_versioned_api_fl
         raise AssertionError(f"Unexpected request: {request.method} {request.url.path}")
 
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
     )
@@ -735,6 +753,7 @@ async def test_live_pi_without_shared_gateway_key_rejects_all_users(tmp_path):
         return httpx.Response(200, json={"id": user_id, "email": f"{user_id}@example.org"})
 
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
         new_api_base_url="https://new-api.example", new_api_model="research-model",
@@ -771,6 +790,7 @@ async def test_live_pi_without_shared_gateway_key_rejects_all_users(tmp_path):
 
 def test_live_configuration_rejects_legacy_user_key_mapping():
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_runtime="pi",
         supabase_url="https://example.supabase.co", supabase_publishable_key="publishable-test",
         new_api_base_url="https://new-api.example", new_api_model="research-model",

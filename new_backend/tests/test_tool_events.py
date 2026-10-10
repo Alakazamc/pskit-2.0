@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import httpx
 import pytest
@@ -21,7 +22,9 @@ class ToolEventPi:
         await on_event({
             "type": "tool_execution_update", "toolCallId": "call-1",
             "toolName": "search_pdb", "partialResult": {
-                "content": [{"type": "text", "text": "private partial output"}],
+                "content": [{
+                    "type": "text", "text": "private partial output\n" + "Progress " + "x" * 600,
+                }],
             },
         })
         await on_event({
@@ -74,6 +77,9 @@ async def test_pi_tool_lifecycle_is_typed_and_projected_to_message_without_raw_p
     assert "private tool result" not in events
     assert "private draft" not in events
     assert "private final" not in events
+    updates = [json.loads(line[6:]) for line in events.splitlines()
+               if line.startswith("data: ") and '"type":"tool.updated"' in line]
+    assert updates[0]["data"]["summary"] == "x" * 500
     assert messages[-1]["parts"] == [
         {"type": "text", "text": "Found a structure"},
         {"type": "tool_call", "tool_call_id": "call-1", "tool": "search_pdb",

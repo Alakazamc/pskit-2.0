@@ -1,30 +1,15 @@
-"""Owned uploads and scoped output transfer over the bridge HTTP consumer boundary."""
+"""Owned provider file transfers and the legacy bridge's admitted operations."""
 
 import asyncio
 import hashlib
 
 import httpx
 import pytest
+from workspace_provider_support import FilesystemWorkspaceProvider
 
 from app.domain.catalog import CatalogStore, ContextNotFound
 from app.sandbox_bridge import create_bridge_app
 from app.services.workspace_transfer import LocalWorkspace, WorkspaceTransfer
-
-
-class BridgeClient:
-    def __init__(self, app):
-        self.app = app
-
-    async def workspace_request(self, user, method, path, **kwargs):
-        kwargs.pop("continuation_attempt_id", None)
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=self.app),
-            base_url="http://sandbox",
-            headers={"Authorization": "Bearer secret"},
-        ) as client:
-            response = await client.request(method, path, **kwargs)
-            response.raise_for_status()
-            return response.json()
 
 
 class ArtifactDouble:
@@ -49,12 +34,10 @@ class ArtifactDouble:
 
 
 @pytest.mark.asyncio
-async def test_owned_upload_is_readable_in_session_workspace(tmp_path, monkeypatch):
-    monkeypatch.setenv("RESEARCH_AGENT_PI_SESSION_DIR", str(tmp_path))
+async def test_owned_upload_is_readable_in_session_workspace(tmp_path):
     catalog = CatalogStore()
     upload = catalog.add_uploaded_file("alice", "sequence.fasta", b">A\nACDE")
-    bridge = create_bridge_app("alice", "secret")
-    transfer = WorkspaceTransfer(catalog, BridgeClient(bridge), ArtifactDouble())
+    transfer = WorkspaceTransfer(catalog, FilesystemWorkspaceProvider(tmp_path), ArtifactDouble())
     refs = await transfer.prepare("alice", "one", [upload.id])
     assert (tmp_path / "one" / refs[0].relative_path).read_bytes() == b">A\nACDE"
     assert refs[0].sha256 == hashlib.sha256(b">A\nACDE").hexdigest()
@@ -90,14 +73,13 @@ def test_workspace_transfer_rejects_symlink_and_oversize_without_overwrite(tmp_p
 
 
 @pytest.mark.asyncio
-async def test_output_roundtrip_preserves_artifact_owner(tmp_path, monkeypatch):
-    monkeypatch.setenv("RESEARCH_AGENT_PI_SESSION_DIR", str(tmp_path))
+async def test_output_roundtrip_preserves_artifact_owner(tmp_path):
     output = tmp_path / "one/artifacts/attempt"
     output.mkdir(parents=True)
     (output / "result.txt").write_bytes(b"result")
     artifacts = ArtifactDouble()
     transfer = WorkspaceTransfer(
-        CatalogStore(), BridgeClient(create_bridge_app("alice", "secret")), artifacts
+        CatalogStore(), FilesystemWorkspaceProvider(tmp_path), artifacts
     )
     first = await transfer.collect("alice", "one", "attempt")
     second = await transfer.collect("alice", "one", "attempt")
@@ -222,7 +204,7 @@ async def test_admitted_pi_turn_collects_artifacts_after_drain(tmp_path, monkeyp
         model="m",
         manager_transport=httpx.ASGITransport(app=manager),
     )
-    transfer = WorkspaceTransfer(CatalogStore(), runner, ArtifactDouble())
+    transfer = WorkspaceTransfer(CatalogStore(), FilesystemWorkspaceProvider(tmp_path), ArtifactDouble())
     collected = []
 
     async def collect(result):

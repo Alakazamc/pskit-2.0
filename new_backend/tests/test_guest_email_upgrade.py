@@ -97,7 +97,9 @@ async def test_mock_occupied_email_and_cross_guest_verification_do_not_merge_acc
 
 @pytest.mark.asyncio
 async def test_live_email_upgrade_rejects_verified_session_for_different_user(tmp_path):
-    settings = Settings(mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
+    settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
+        mode="live", agent_db_path=str(tmp_path / "agent.sqlite3"),
                         supabase_url="https://example.supabase.co",
                         supabase_publishable_key="publishable-test")
     app = create_app(settings)
@@ -161,6 +163,7 @@ async def test_supabase_email_upgrade_uses_authenticated_user_update_and_email_c
 @pytest.mark.asyncio
 async def test_live_upgrade_can_finish_on_another_python_instance_with_same_user_id(tmp_path):
     settings = Settings(
+        auth_csrf_secret="test-only-csrf-secret-at-least-32-bytes",
         mode="live", agent_runtime="pi", agent_db_path=str(tmp_path / "agent.sqlite3"),
         supabase_url="https://example.supabase.co",
         supabase_publishable_key="publishable-test",

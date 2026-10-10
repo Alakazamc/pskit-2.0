@@ -110,6 +110,10 @@ it("searches compact skill cards and opens their full details without leaving th
       { id: "rna-review", name: "RNA review", description: "Review RNA papers and summarize experimental evidence.", version: 3 },
       { id: "structure", name: "Structure analysis", description: "Inspect molecular structures", version: 1 },
     ]);
+    if (path.endsWith("/skills/rna-review")) return json({
+      id: "rna-review", name: "RNA review", version: 3,
+      files: [{ path: "SKILL.md", content: "# RNA review\n\nReview RNA evidence.", size: 36 }],
+    });
     return json([]);
   }));
   render(<App />);
@@ -120,8 +124,8 @@ it("searches compact skill cards and opens their full details without leaving th
   expect(card).toHaveClass("catalog-entry-card");
   await actor.click(card);
   const panel = screen.getByRole("dialog", { name: "RNA review" });
-  expect(within(panel).getByText("rna-review")).toBeInTheDocument();
-  expect(within(panel).getByText("3")).toBeInTheDocument();
+  expect(await within(panel).findByRole("button", { name: "SKILL.md" })).toBeInTheDocument();
+  expect(within(panel).getByText(/Review RNA evidence/)).toBeInTheDocument();
   expect(within(panel).getByText("Review RNA papers and summarize experimental evidence.")).toBeInTheDocument();
   await actor.click(within(panel).getByRole("button", { name: "Close details" }));
   expect(card).toHaveFocus();
