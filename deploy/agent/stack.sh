@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One operational entry point for the existing Supabase, LiteLLM and Agent projects.
+# Bootstrap/status entry point for Supabase, LiteLLM and Agent; not a daily release command.
 set -Eeuo pipefail
 
 agent_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -75,7 +75,7 @@ fi
 
 backend_image=${STACK_BACKEND_IMAGE:-}
 
-preflight() {
+check_config() {
   local file
   for file in "$supabase_env" "$litellm_env" "$backend_env" "$admin_env" "$cloud_env" "$proxy_env"; do
     private_file "$file"
@@ -88,6 +88,7 @@ preflight() {
   require_value "$backend_env" MODEL_GATEWAY_MODEL
   require_value "$backend_env" RESEARCH_AGENT_AUTH_ABUSE_MODE
   require_value "$backend_env" RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET
+  require_value "$backend_env" RESEARCH_AGENT_AUTH_CSRF_SECRET
   require_value "$backend_env" RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON
   require_value "$backend_env" RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED
   require_value "$backend_env" TURNSTILE_SECRET_KEY
@@ -107,19 +108,8 @@ preflight() {
     [[ $(value_in_file "$backend_env" RESEARCH_AGENT_PI_EXECUTION 2>/dev/null || printf local) != sandbox ]] ||
       die "The retired sandbox manager and OpenSandbox cannot be enabled together"
   fi
-  auth_mode=$(value_in_file "$backend_env" RESEARCH_AGENT_AUTH_ABUSE_MODE)
-  [[ "$auth_mode" == observe || "$auth_mode" == enforce ]] ||
-    die "RESEARCH_AGENT_AUTH_ABUSE_MODE must be observe or enforce"
-  auth_secret=$(value_in_file "$backend_env" RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET)
-  (( ${#auth_secret} >= 32 )) || die "RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET is too short"
-  [[ $(value_in_file "$backend_env" RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON) == '["127.0.0.1/32"]' ]] ||
-    die "RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON must trust only the local Nginx proxy"
-  [[ $(value_in_file "$backend_env" RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED) == true ]] ||
-    die "RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED must be true"
-  [[ $(value_in_file "$backend_env" TURNSTILE_SECRET_KEY) != 1x0000000000000000000000000000000AA ]] ||
-    die "TURNSTILE_SECRET_KEY must not use the public test secret"
-  [[ $(value_in_file "$cloud_env" TURNSTILE_SITE_KEY) != 1x00000000000000000000AA ]] ||
-    die "TURNSTILE_SITE_KEY must not use the public test site key"
+  python3 "$agent_dir/scripts/production_config.py" \
+    --backend-env-file "$backend_env" --cloud-env-file "$cloud_env"
   if [[ $(value_in_file "$supabase_env" CLOUD_DISABLE_SIGNUP 2>/dev/null || printf true) == false ]]; then
     require_value "$supabase_env" SMTP_HOST
     require_value "$supabase_env" SMTP_USER
@@ -140,6 +130,10 @@ preflight() {
   export AGENT_BACKEND_ENV_FILE="$backend_env"
   export AGENT_AF3_PROXY_KEY_FILE="$proxy_env"
   export SUPABASE_DOCKER_NETWORK="$supabase_network"
+}
+
+preflight() {
+  check_config
   docker image inspect "$backend_image" >/dev/null
   "${supabase[@]}" config --quiet
   "${litellm[@]}" config --quiet
@@ -159,6 +153,9 @@ running_db_count() {
 
 command_name=${1:-}
 case "$command_name" in
+  check-config)
+    check_config
+    ;;
   up)
     preflight
     [[ $(running_db_count pskit-agent-litellm) == 0 ]] ||
@@ -214,5 +211,5 @@ case "$command_name" in
     "${litellm[@]}" down
     "${supabase[@]}" down
     ;;
-  *) die "Usage: stack.sh up|status|logs <project>|down" ;;
+  *) die "Usage: stack.sh check-config|up|status|logs <project>|down (up/down are whole-stack bootstrap/maintenance)" ;;
 esac

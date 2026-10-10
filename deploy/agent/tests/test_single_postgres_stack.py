@@ -38,8 +38,9 @@ def stack_env(tmp_path):
         "MODEL_GATEWAY_API_KEY=sk-local-test-key",
         "MODEL_GATEWAY_MODEL=pskit-smoke",
         "SUPABASE_PUBLISHABLE_KEY=sb_publishable_local",
-        "RESEARCH_AGENT_AUTH_ABUSE_MODE=observe",
+        "RESEARCH_AGENT_AUTH_ABUSE_MODE=enforce",
         "RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET=local-auth-rate-limit-secret-at-least-32-bytes",
+        "RESEARCH_AGENT_AUTH_CSRF_SECRET=local-csrf-secret-distinct-and-at-least-32-bytes",
         'RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON=["127.0.0.1/32"]',
         "RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED=true",
         "TURNSTILE_SECRET_KEY=production-turnstile-secret-test-value",
@@ -135,6 +136,24 @@ def test_missing_auth_protection_secret_never_runs_docker(stack_env):
     result, calls = run_stack(stack_env, "up")
     assert result.returncode != 0
     assert "RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET" in result.stderr
+    assert calls == []
+
+
+def test_observe_auth_mode_never_runs_docker_in_production(stack_env):
+    _env, _log, backend = stack_env
+    backend.write_text(backend.read_text().replace(
+        "RESEARCH_AGENT_AUTH_ABUSE_MODE=enforce", "RESEARCH_AGENT_AUTH_ABUSE_MODE=observe",
+    ))
+    result, calls = run_stack(stack_env, "up")
+    assert result.returncode != 0
+    assert "RESEARCH_AGENT_AUTH_ABUSE_MODE" in result.stderr
+    assert calls == []
+
+
+def test_check_config_does_not_call_docker_or_provision_database(stack_env):
+    result, calls = run_stack(stack_env, "check-config")
+    assert result.returncode == 0, result.stderr
+    assert "configuration" in result.stdout.lower()
     assert calls == []
 
 

@@ -2,6 +2,10 @@
 
 此手册用于既有环境的代码发布。先读 checkout 的 `deploy/agent/DEPLOYMENT.md` 和 `STAGING.md`；首次安装、数据库迁移、Nginx 路由调整及沙箱启用是不同操作。
 
+根 `deploy_to_cloud.sh` 已无副作用退役，所有参数返回非零。日常发布使用
+[应用发布门禁和命令](../../../docs/runbooks/DEPLOYMENT.md)；`stack.sh up/down`
+保留给全栈初始化或维护，`up` 包含 provisioning 和迁移。
+
 ## 1. SSH 与主机检查
 
 已知连接是 Windows config 中的 `aliyun`，Linux 用户 `ecs-user`。WSL 示例：
@@ -36,11 +40,25 @@
 从干净或明确记录过的源码构建：
 
 ```bash
+set -Eeuo pipefail
+python3 deploy/agent/scripts/production_config.py \
+  --backend-env-file deploy/agent/cloud.backend.env \
+  --cloud-env-file deploy/agent/cloud.env
+# Load only the public site key from the same validated production marker.
+TURNSTILE_SITE_KEY=$(python3 -c 'from pathlib import Path; from deploy.agent.scripts.production_config import read_env; print(read_env(Path("deploy/agent/cloud.env"))["TURNSTILE_SITE_KEY"])')
 docker build --label org.opencontainers.image.revision="$COMMIT" \
   -f deploy/agent/backend.Dockerfile -t "$IMAGE" new_backend
-(cd new_frontend && VITE_AUTH_MODE=supabase VITE_API_BASE_URL=/api/v1 npm run build)
+(cd new_frontend && VITE_AUTH_MODE=supabase VITE_API_BASE_URL=/api/v1 \
+  VITE_TURNSTILE_SITE_KEY="$TURNSTILE_SITE_KEY" npm run build)
 docker image inspect --format '{{.Id}}' "$IMAGE"
 ```
+
+这一步要求 Python/PostgreSQL 认证限流为 `enforce`、仅信任本地 Nginx、启用
+captcha，并拒绝缺值、占位值和所有
+[Cloudflare 官方公开测试 key](https://developers.cloudflare.com/turnstile/troubleshooting/testing/)。
+校验器只读字面量配置，不执行 env。生产 Nginx 模板的 dry-run 继续供观测；有效
+路由、运行中的 `enforce`、真实 captcha 和 429/Retry-After 为
+`needs_live_validation`，在另行授权的受控 canary 中验证后才记录线上防护有效。
 
 运行仓库约定的授权验证。制品记录至少包含 Git commit、image/tag/ID、`prepare_staging._dist_hash(dist)`、前端构建参数和归档 SHA256。源码包用 `git archive`；未提交源码必须单独注明内容哈希。不要用整仓目录递归打包 `.env`、数据、私钥或 node_modules。
 
@@ -96,32 +114,29 @@ COMMIT;
 
 先原子更新现用 `cloud.env` 的唯一 `AGENT_BACKEND_IMAGE` 为已验收的 `$IMAGE`，保留其他字段和 0600 权限。若 `.env.stack` 存在 `STACK_BACKEND_IMAGE`，同时更新它；只更新 `.env.stack` 不会改变下方直接 Compose 命令的镜像。
 
-Compose 必须使用运行容器标签中相同的 `--env-file`、`-p`、`-f` 顺序及卷/网络。程序内解析 resolved config，确认只改变预期镜像后：
-
-```bash
-docker compose --env-file deploy/agent/cloud.env \
-  -f deploy/agent/compose.yaml -f deploy/agent/compose.cloud.yaml \
-  -f deploy/agent/compose.postgres.yaml -p pskit-agent-cloud \
-  up -d --no-deps --wait backend
-```
+Compose 必须使用运行容器标签中相同的 `--env-file`、`-p`、完整 `-f` 顺序及
+卷/网络。程序内解析 resolved config，确认只改变预期镜像后，执行
+[只更新 backend 命令](../../../docs/runbooks/DEPLOYMENT.md#只更新-backend)。
+该命令显式检查 `STACK_OPENSANDBOX_ENABLED`：启用时按 base → cloud → postgres →
+`compose.opensandbox.yaml` → `compose.opensandbox.production.yaml` 保留完整叠加，
+使用 `up -d --no-deps --wait backend`，随后检查 `/health/ready`。实际存在的额外
+overlay 也须保留；不能用省略 OpenSandbox 的三文件组合替换现有配置。
 
 需要更新 `.env.stack` 的 `STACK_BACKEND_IMAGE` 时只修改该字段，保持后续 `stack.sh` 指向本次版本。更新回调代理需明确代理代码变更；普通后台 image 更新无需重建 Supabase、Postgres、LiteLLM 或 A6000。
 
-沙箱模式：先验证 Staging 支持对应 overlay，再同步 backend/manager/用户容器的镜像。既有容器可能因 image mismatch 被拒绝。空闲后重建对应 namespace 容器，保留工作卷和 transcript，禁止默认启用或切换模式。
+OpenSandbox 制品或能力变更先按 `deploy/agent/OPENSANDBOX.md` 验收独立 Staging
+manifest，再执行专门发布操作，核对活动/unknown attempt 并保留工作卷和
+transcript。普通 backend 更新保持原 Server、workspace 镜像及 rollout；旧 manager
+模式已退役。
 
 ## 5. 静态发布、验收与回滚
 
 已有可写普通 root：保存完整旧目录；复制新 assets，保留旧 assets；其他公开文件随后复制；把新 index 写入同目录临时文件，设 0644 后 `os.replace`。目录 0755、文件 0644，Nginx 才能遍历/读取。新 hash assets 同名时必须内容相同。已有 release symlink 布局则原子换链接。配置不变无需 reload。
 
-检查：
-
-```bash
-curl --noproxy '*' --fail http://127.0.0.1:18088/health/ready
-curl --fail -I https://agent.bioailab.net/login
-curl -sS -o /dev/null -w '%{http_code}\n' https://agent.bioailab.net/api/v1/usage
-curl -sS -o /dev/null -w '%{http_code}\n' https://agent.bioailab.net/internal/
-```
-
-预期 ready、200、401、404。还需比对 index 和每个新 asset 的内容哈希，确认运行 image ID；经授权测试账号检查模型、推理等级实际传递、流式 Stop、自动滚动及历史会话。部署成功不能仅凭 HTTP 200 或 mock 输出判断。
+执行 [非零失败的上线验收断言](../../../docs/runbooks/DEPLOYMENT.md#验收失败与回退)：
+`/health/ready` 成功、login `200`、未登录 usage `401`、internal `404`。
+每项失败即停止，不能仅打印状态码后宣布成功。还需比对 index 和每个新 asset
+的内容哈希，确认运行 image ID；经授权测试账号检查模型、推理等级实际传递、
+流式 Stop、自动滚动及历史会话。部署成功不能仅凭 HTTP 200 或 mock 输出判断。
 
 失败时停止新增工作，恢复旧发布参数、镜像和 index，保留已写入数据。只在 schema/transcript 兼容时回退程序；有新写入时不恢复旧数据库覆盖它们。记录前后版本、验证结果、根本原因和下一步，不声称尚未验证的功能通过。
