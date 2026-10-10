@@ -95,6 +95,11 @@ class Settings:
     user_token_limits_json: str = "{}"
     admin_api_key: str = ""
     model_policy_mode: Literal["legacy", "managed"] = "legacy"
+    model_qualification_enabled: bool = False
+    model_qualification_environment: Literal["offline", "staging"] = "offline"
+    model_qualification_user_id: str = ""
+    model_qualification_pi_version: str = "unverified"
+    model_qualification_gateway_version: str = "unverified"
     admin_service_endpoints_json: str = "{}"
     admin_service_credentials_json: str = "{}"
     admin_mcp_network_zones_json: str = "{}"
@@ -231,6 +236,12 @@ class Settings:
             user_token_limits_json=os.getenv("RESEARCH_AGENT_USER_TOKEN_LIMITS_JSON", "{}"),
             admin_api_key=os.getenv("RESEARCH_AGENT_ADMIN_API_KEY", ""),
             model_policy_mode=os.getenv("RESEARCH_AGENT_MODEL_POLICY_MODE", "legacy"),
+            model_qualification_enabled=os.getenv("RESEARCH_AGENT_MODEL_QUALIFICATION_ENABLED", "").lower()
+            in {"1", "true", "yes"},
+            model_qualification_environment=os.getenv("RESEARCH_AGENT_MODEL_QUALIFICATION_ENVIRONMENT", "offline"),
+            model_qualification_user_id=os.getenv("RESEARCH_AGENT_MODEL_QUALIFICATION_USER_ID", ""),
+            model_qualification_pi_version=os.getenv("RESEARCH_AGENT_MODEL_QUALIFICATION_PI_VERSION", "unverified"),
+            model_qualification_gateway_version=os.getenv("RESEARCH_AGENT_MODEL_QUALIFICATION_GATEWAY_VERSION", "unverified"),
             admin_service_endpoints_json=os.getenv("RESEARCH_AGENT_ADMIN_SERVICE_ENDPOINTS_JSON", "{}"),
             admin_service_credentials_json=os.getenv("RESEARCH_AGENT_ADMIN_SERVICE_CREDENTIALS_JSON", "{}"),
             admin_mcp_network_zones_json=os.getenv(

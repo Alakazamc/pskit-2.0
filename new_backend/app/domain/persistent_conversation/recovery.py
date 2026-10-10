@@ -249,7 +249,8 @@ class RecoveryMixin:
 
         A Run with a persisted job or approval returns to waiting. A turn with
         no started tool may retry up to three attempts. Other interruptions
-        fail closed and emit a terminal event.
+        fail closed and emit a terminal event. Internal model qualification
+        scopes never retry here; their unknown provider holds remain intact.
 
         Args:
             run_id: Run to examine.
@@ -259,22 +260,42 @@ class RecoveryMixin:
             terminal_code: Error code for a terminal initial Run.
             terminal_message: User-visible terminal error text.
         """
+        from .admission import is_qualification_context
+
         with self._immediate_transaction():
             row = self.db.execute(
                 "SELECT user_id,session_id,status,lease_owner,lease_expires_at,"
                 "initial_attempts,checkpoint_file,resume_attempts,active_resume_job_id,"
-                "turn_start_seq "
+                "turn_start_seq,context_json "
                 "FROM agent_runs WHERE id=?", (run_id,),
             ).fetchone()
             if row is None:
                 return
             (user_id, session_id, status, leased_by, expires_at, attempts, checkpoint_file,
-             resume_attempts, active_resume_job_id, turn_start_seq) = row
+             resume_attempts, active_resume_job_id, turn_start_seq, context_json) = row
             if status not in {"running", "resume_queued"}:
                 return
             if owner is not None and leased_by != owner:
                 return
             if expired_only and expires_at is not None and expires_at > _now().isoformat():
+                return
+            if is_qualification_context(context_json):
+                # Qualification owns a separate bounded evaluation budget. An
+                # ordinary Agent retry could forward an empty prompt outside
+                # that budget. A partial report also says nothing about later
+                # provider calls: leave every guard and Token entry unchanged.
+                self.db.execute(
+                    "UPDATE agent_runs SET status='failed',retry_after=NULL,"
+                    "active_resume_job_id=NULL,lease_owner=NULL,lease_expires_at=NULL WHERE id=?",
+                    (run_id,),
+                )
+                self._append_event_in_transaction(run_id, RunFailedEvent(
+                    run_id=run_id,
+                    data=RunFailedData(
+                        code="MODEL_QUALIFICATION_INTERRUPTED",
+                        message="模型验收被中断，请重新发起验收",
+                    ),
+                ))
                 return
             try:
                 _reservation_id, period, _reserved, observed, charged = self._latest_token_reservation(

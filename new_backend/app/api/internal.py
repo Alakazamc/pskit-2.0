@@ -167,6 +167,11 @@ async def proxy_model_call(
         raise HTTPException(status_code=400, detail="Model is not configured")
     if MODEL_ROUTE_OVERRIDE_FIELDS.intersection(payload):
         raise HTTPException(400, detail={"code": "MODEL_REQUEST_OVERRIDE_FORBIDDEN"})
+    qualifier = getattr(request.app.state, "model_qualifier", None)
+    if qualifier is not None:
+        qualified_response = await qualifier.proxy(request, authorization=authorization)
+        if qualified_response is not None:
+            return qualified_response
     policy = getattr(request.app.state, 'model_policy', None)
     allowed_model = None
     if policy and policy.managed:

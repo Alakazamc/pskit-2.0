@@ -1,10 +1,24 @@
 """Bounded candidate windows shared by initial and resumed Run admission."""
 
+import json
 from collections import Counter
 
 from app.db.postgres import PostgresStatements
 
 CANDIDATE_WINDOW = 100
+
+
+def is_qualification_context(context_json: str) -> bool:
+    """Identify server-created internal Runs that ordinary workers cannot replay."""
+    context = json.loads(context_json)
+    return isinstance(context, dict) and context.get("purpose") == "model_qualification"
+
+
+def ordinary_run_filter(store) -> str:
+    """Exclude internal qualification scopes before a bounded candidate LIMIT."""
+    purpose = ("r.context_json::jsonb ->> 'purpose'" if isinstance(store.db, PostgresStatements)
+               else "json_extract(r.context_json, '$.purpose')")
+    return f"COALESCE({purpose},'') <> 'model_qualification'"
 
 
 def native_or_legacy(store, statement: str, parameters: tuple = ()):
@@ -40,6 +54,7 @@ def candidate_filter(store, kind: str, counts: Counter, max_user_active: int):
         if count >= store._max_active_for_user(user, max_user_active)
     ]
     clauses = [
+        ordinary_run_filter(store),
         (
             "NOT EXISTS (SELECT 1 FROM agent_runs active WHERE "
             "active.session_id=r.session_id AND active.id<>r.id "

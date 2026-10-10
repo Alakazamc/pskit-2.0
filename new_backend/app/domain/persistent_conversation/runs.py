@@ -76,11 +76,13 @@ class RunsMixin:
         Returns:
             Whether this worker atomically claimed the Run.
         """
+        from .admission import is_qualification_context
+
         with self._immediate_transaction():
             row = self.db.execute(
-                "SELECT user_id,status FROM agent_runs WHERE id=?", (run_id,),
+                "SELECT user_id,status,context_json FROM agent_runs WHERE id=?", (run_id,),
             ).fetchone()
-            if row is None or row[1] != "queued":
+            if row is None or row[1] != "queued" or is_qualification_context(row[2]):
                 return False
             now = _now().isoformat()
             active = self.db.execute(

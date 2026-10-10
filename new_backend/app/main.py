@@ -92,6 +92,7 @@ from app.services.compute_tools import AgentComputeTools
 from app.services.csrf import CsrfProtector
 from app.services.model_catalog import ModelCatalog
 from app.services.model_gateway import gateway_client_lifespan
+from app.services.model_qualification_driver import ModelQualificationDriver
 from app.services.observability import ObservabilityMiddleware, RequestMetrics
 from app.services.pdf_processing import PdfProcessingPool
 from app.services.sandbox_operations import (
@@ -136,6 +137,15 @@ def create_app(
         raise ValueError("RESEARCH_AGENT_TITLE_TIMEOUT_SECONDS must be between 1 and 60")
     if settings.model_policy_mode not in {"legacy", "managed"}:
         raise ValueError("RESEARCH_AGENT_MODEL_POLICY_MODE must be legacy or managed")
+    if settings.model_qualification_enabled and (
+        settings.mode != "live" or settings.model_policy_mode != "managed"
+        or settings.agent_runtime != "pi" or settings.pi_execution != "sandbox"
+        or settings.model_qualification_environment != "staging"
+        or not settings.model_qualification_user_id
+        or settings.model_qualification_pi_version == "unverified"
+        or settings.model_qualification_gateway_version == "unverified"
+    ):
+        raise ValueError("MODEL_QUALIFICATION_CONFIG_INVALID")
     approved_references = {}
     for kind in ("endpoints", "credentials"):
         name = f"RESEARCH_AGENT_ADMIN_SERVICE_{kind.upper()}_JSON"
@@ -759,6 +769,17 @@ def create_app(
         app.state.admin_store,
         app.state.model_catalog,
         managed=settings.model_policy_mode == "managed",
+    )
+    app.state.model_qualifier = (
+        ModelQualificationDriver(
+            app.state.model_catalog, app.state.model_policy, app.state.conversations,
+            app.state.agent_service,
+            qualification_user_id=settings.model_qualification_user_id,
+            enabled=True, deployment_environment=settings.model_qualification_environment,
+            pi_version=settings.model_qualification_pi_version,
+            gateway_version=settings.model_qualification_gateway_version,
+            http_client=lambda: getattr(app.state, "model_gateway_http_client", None),
+        ) if settings.model_qualification_enabled else None
     )
     app.state.session_titles = (
         SessionTitleService(
