@@ -9,12 +9,18 @@
 - 推理 off 与 Pi 实际 none wire 值对齐；PinCC 特例保持限定范围，普通工具业务参数不被递归过滤。
 - OpenAPI 和 TypeScript 类型单独再生。原有路径、方法、字段均保留，已有 DTO 未新增 required 字段；资格端点为增量接口。
 
-## 尚未完成
+## 受控 host driver（追加提交 ff873b2）
 
-资格矩阵和受保护入口已有实现，但此阶段冻结版本的真实 host driver 尚未接到应用初始化；默认返回 `MODEL_QUALIFIER_UNAVAILABLE`。后续需要接入每次调用的独立账本、逐部署验证和 Pi/Artifact 验证，不得把注入的 fixture 成功当成真实供应商已通过。
+默认关闭；只有明确配置 live/managed/Pi sandbox/Staging、独立验收账号和已核对的 Pi/Gateway 版本才允许应用初始化。普通 Run 继续走原授权路径，资格代理只接受服务端登记的内部 Run、真实 owner 和 HMAC。
 
-真实供应商付费调用、Staging 沙箱资格、GitHub CI 与生产可用性均未验证，也未进行部署。此阶段完整门禁仍为 pending，核心边界代码可继续接受后续本地整改。
+逐 deployment 发现并固定当前路由指纹，每次实际请求独立预留、guard 和结算；预算在任何账本 await 前原子扣减准入容量。默认最多48次、32,768 Token、单请求120秒，正文和响应另有大小上限；取消不恢复已消耗的准入预算。异步取消等待实际数据库事务完成后再清理，已发送但用量未知保持 unknown。
+
+真实 Pi 的本地合成探针完成 write/read、文件字节、Artifact metadata、lease-fenced artifact.created、鉴权下载和跨用户拒绝。退出工作区后撤销代理登记，并取消/等待剩余调用完成账本清理，防止过期代理继续请求。进程中断的内部验收 Run 不被普通 Agent 重试；从批量和直接领取路径排除，恢复不退还未知预占。
+
+离线 fixture/loopback 的证据始终为 offline，不签发 Agent Ready。真实供应商付费调用、真实 OpenSandbox Staging 资格、GitHub CI 与生产可用性均未验证，也未部署；外部阶段 Gate 保持 pending。
 
 ## 提交
 
 `cac93ce` Profile/发布资格边界；`4b787e2` transport/Pi 配置/未知预占；`530b95e` 可信 Run Profile；`bba1ee6` 单独再生可选契约。
+
+后续提交 `ff873b2` 增加受控 driver、应用接线及内部验收恢复隔离；独立契约生成物不混入此提交。

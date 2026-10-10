@@ -34,7 +34,7 @@ alias 仍保留 operator fallback；显式人工 Profile 要获得真正工具�
 接收现有 `RevisionRequest` 的 `expected_revision`、`reason`。包含 `/` 的普通及
 URL-encoded alias 均可用于草稿、验收、发布和停用；OpenAPI 模板名称不变。
 
-默认应用未配置 `app.state.model_qualifier`，返回 `MODEL_QUALIFIER_UNAVAILABLE`。
+默认应用的 `app.state.model_qualifier` 为 None，返回 `MODEL_QUALIFIER_UNAVAILABLE`。
 这是失败关闭的边界，不能把它解释为已经完成真实供应商资格。管理员提供的
 `passed` 状态和结果不被接受；草稿里的资格字段也会被服务端清空。
 
@@ -50,7 +50,7 @@ async def probe(case_id, body, *, actor_id, deployment_fingerprint):
     ...
 ```
 
-Probe 的实现和启用仍是独立的受控 Staging 工作。本轮没有自动接入付费网关。
+受控 `ModelQualificationDriver` 已接入应用工厂；实际启用仍是独立的受控 Staging 工作。本轮没有接入付费网关。
 非 offline scope 必须提供服务器的 `budget_check(actor_id, alias, body)`，允许
 同步或异步检查；每次 Probe 前重检。限额失败立即终止，无后续调用或虚构零用量。
 调用总耗时最大 120 秒，默认 60 秒；单结果默认 256 KiB、最大 1 MiB。
@@ -88,3 +88,48 @@ Agent Ready。启动前已持久发布的旧无 Profile 路由继续可用，作
 
 回滚采用单一职责代码提交 revert，并停用新候选/重发之前合格候选。没有新表、
 schema 迁移或历史数据删除；不要通过普通代码回滚降级数据库或修改模型密钥。
+
+## 已实现的服务器 Driver（默认关闭）
+
+`ModelQualificationDriver` 复用当前 ModelCatalog、ModelPolicy、Run/Token guard、Pi
+及 WorkspaceTransfer；不是第二个网关或独立执行器。调用者不能传任意probe、URL、
+key、费用上限或成功布尔值。internal代理在原HMAC、owner、model及route override
+检查之后委托已登记的资格Run；普通Run返回None继续原公开路径与权限检查。
+
+仅服务器配置启用：
+
+| 环境项 | 默认/启用约束 |
+| --- | --- |
+| `RESEARCH_AGENT_MODEL_QUALIFICATION_ENABLED` | false；不自动开启 |
+| `RESEARCH_AGENT_MODEL_QUALIFICATION_ENVIRONMENT` | offline；显式启用必须staging |
+| `RESEARCH_AGENT_MODEL_QUALIFICATION_USER_ID` | 空；单独已验证正式审计账号，不能是操作管理员 |
+| `RESEARCH_AGENT_MODEL_QUALIFICATION_PI_VERSION` | unverified；核对固定Pi0.87.1实际制品 |
+| `RESEARCH_AGENT_MODEL_QUALIFICATION_GATEWAY_VERSION` | unverified；核对固定LiteLLM1.100.3实际制品 |
+
+应用工厂同时要求live、managed policy、Pi runtime与sandbox执行。Driver重新核对
+实际SandboxPiRunner、已配置工作区provider/attempt/transfer，以及账户tier。
+localhost/injected/mock transport永远为offline；不能仅填写staging字符串就签发
+真实通过证据。没有安装宿主Pi来替代Staging沙箱路径。
+
+每个当前deployment做协议矩阵，用真实 `x-litellm-model-id`、网关版本及api-base
+响应头和新鲜discovery核实路由。默认官方路由若缺少可验证api_base/头会失败关闭，
+管理员须先提供受控网关元数据/资格适配证据；不是通过猜测provider或body重写推广。
+每次调用重检候选revision、指纹和管理员write/publish权限。证据不保存请求/输出文本。
+
+每个实际上游POST有独立内部Run和模型call guard；费用走审计账号真实额度，成功
+usage结算一次。缺失/截断/取消/未知错误保持保守unknown，绝不写成零。默认单次
+验收最多48次调用、32768估算token、120秒、16KiB请求及256KiB响应；构造器可由
+受信服务器在封闭上限内调整，管理请求不能覆盖。错误401/402/403/429/5xx/timeout
+用本地归一化故障通道测试，避免真的对供应商发无效凭据/收费错误请求。
+
+工作区验收要求真实Pi工具event、固定write/read参数、实际文件字节、持久化产物
+metadata/hash、本账号下载、异账号拒绝和真实账本。仅工具名称、文本声称文件存在
+或管理页面自报passed不算。离线实际安装Pi只为合成隔离回归，offline scope即使
+工具成功也不能获得Agent Ready。
+
+本轮未填写以上真实配置、没有Staging/生产验收或付费调用。审计会话留在专用账号
+按既有retention处理；不删除已有审计历史。启用前还须人工确认固定版本、独立小额
+provider key、审计账号额度、受控网关头与真实沙箱边界，然后运行管理验收、审核
+证据、再发布候选。供应商/版本/路由变化后重新验收。
+
+并发准入在预留事务前原子占用 attempt/Token 上限；取消不恢复已消耗的测试预算。退出验收工作区会撤销代理登记、取消并 drain 剩余请求；未知用量留待对账。内部 `purpose=model_qualification` 的崩溃 Run 直接失败，普通初次领取/续跑都排除该 purpose，避免超出验收预算自动重试。真实文件验收须核对已持久化的 `artifact.created` 事件，不仅检查 Artifact 数据行。
