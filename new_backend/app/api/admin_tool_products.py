@@ -16,6 +16,7 @@ from app.contracts.tool_products import (
     QualificationReport,
     ToolProductDraft,
 )
+from app.domain.release_admission import AdmissionClosed
 from app.domain.tool_products.repository import (
     QualificationStale,
     ToolProductRevisionConflict,
@@ -177,6 +178,8 @@ async def qualify_product(
             product_id, payload.revision, payload.suite_revision
         )
     except HTTPException:
+        raise
+    except AdmissionClosed:
         raise
     except (ValueError, LookupError, PermissionError, RuntimeError) as exc:
         raise _error(exc) from exc

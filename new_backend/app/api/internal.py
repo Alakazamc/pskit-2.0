@@ -27,6 +27,7 @@ from app.contracts.model_runtime import (
 )
 from app.domain.persistent_conversation import ComputeLeaseConflict, GpuReconciliationConflict
 from app.domain.quota import GpuQuotaExceeded, TokenQuotaExceeded
+from app.domain.release_admission import AdmissionClosed
 from app.ports.providers import ProviderUnavailable
 from app.services.model_gateway import acquire_gateway_client, read_gateway_error
 
@@ -547,6 +548,9 @@ async def invoke_internal_mcp(
         return cached
     try:
         result = await request.app.state.mcp.invoke(name, payload.arguments)
+    except AdmissionClosed:
+        calls.release_before_invoke(payload.run_id, payload.tool_call_id)
+        raise
     except McpCapacityExceeded as exc:
         calls.release_before_invoke(payload.run_id, payload.tool_call_id)
         raise HTTPException(status_code=429, detail={"code": "MCP_CAPACITY_EXCEEDED"}) from exc

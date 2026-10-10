@@ -248,6 +248,7 @@ class ModelQualificationDriver:
         # Running from the initial commit prevents the normal Agent scheduler
         # from claiming these internal ledger scopes. No prompt/body is stored.
         with self.store._immediate_transaction():
+            self.store.check_admission()
             self.store._require_not_deleting(self.user_id)
             self.store.db.execute(
                 "INSERT INTO agent_runs (id,user_id,session_id,status,created_at,context_json,"

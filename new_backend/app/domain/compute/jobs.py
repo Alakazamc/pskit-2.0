@@ -13,8 +13,9 @@ from app.domain.compute.common import admission_lock, payload_hash, utcnow
 
 
 class ComputeJobs:
-    def __init__(self, database, ledger=None):
+    def __init__(self, database, ledger=None, *, admission_gate=None):
         self.database = database
+        self.admission_gate = admission_gate
         self.catalog = ComputeCatalog(database)
         self.artifacts = ComputeArtifacts(database)
         self.ledger = ledger
@@ -82,6 +83,8 @@ class ComputeJobs:
             if prior[1] != digest:
                 raise ValueError("IDEMPOTENCY_CONFLICT")
             return self.get(user_id, prior[0], connection=connection)
+        if self.admission_gate is not None:
+            self.admission_gate.require_open(connection)
         cleanup = connection.execute("SELECT cleanup_state FROM account_tiers WHERE user_id=%s "
                                      "FOR UPDATE", (user_id,)).fetchone()
         if cleanup and cleanup[0] == "deleting":

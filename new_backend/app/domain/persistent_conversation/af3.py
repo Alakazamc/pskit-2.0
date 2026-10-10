@@ -121,6 +121,7 @@ class Af3Mixin:
                     raise ValueError("Approval already rejected")
                 return ApprovalRef(approval_id=approval_id, estimated_gpu_minutes=estimate)
             approval_id = str(uuid.uuid4())
+            self.check_admission()
             self.db.execute(
                 "INSERT INTO agent_approvals "
                 "(id,user_id,run_id,tool_call_id,estimated_minutes,status,job_id,created_at,input_json) "
@@ -175,6 +176,7 @@ class Af3Mixin:
             if run_status not in {"running", "waiting"}:
                 raise ValueError("Run is no longer active")
             if decision == "approved":
+                self.check_admission()
                 used, reserved = self._gpu_usage_values(user_id, _now().date().isoformat())
                 if estimated_minutes > max(0, self._gpu_limit_for(user_id) - used - reserved):
                     raise GpuQuotaExceeded
@@ -268,6 +270,7 @@ class Af3Mixin:
                     if existing[1] != estimated_minutes or existing[2] != supplied:
                         raise ValueError("AF3 tool call arguments conflict with prior submission")
                     return self.get_af3_job(user_id, existing[0])
+            self.check_admission()
             used, reserved = self._gpu_usage_values(user_id, _now().date().isoformat())
             if estimated_minutes > max(0, self._gpu_limit_for(user_id) - used - reserved):
                 raise GpuQuotaExceeded
@@ -364,6 +367,8 @@ class Af3Mixin:
         postgres = getattr(self, "database", None) is not None
         transaction = self.db if postgres else self._immediate_transaction()
         with transaction:
+            if not self.admission_allowed():
+                return []
             if postgres:
                 self.db.execute(
                     "SELECT pg_advisory_xact_lock(hashtextextended(?, 0))",

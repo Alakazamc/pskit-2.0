@@ -48,6 +48,12 @@ class Docker:
         self.admission_mutation = lambda operation, receipt: None
         self.admission_fail = set()
 
+    def backend_environment(self):
+        return {"MODEL_GATEWAY_API_KEY": "synthetic-private-only", **{
+            key: value for key, value in rc.read_env(self.root / "backend.env").items()
+            if key.startswith("RESEARCH_AGENT_RELEASE_ADMISSION_") or key == "RESEARCH_AGENT_RUNTIME"
+        }}
+
     def __call__(self, command, *, env, input_text=None):
         self.calls.append(command)
         if command[0] == "/synthetic/admission":
@@ -93,9 +99,7 @@ class Docker:
                 "services": {
                     "backend": {
                         "image": env["AGENT_BACKEND_IMAGE"],
-                        "environment": {
-                            "MODEL_GATEWAY_API_KEY": "synthetic-private-only"
-                        },
+                        "environment": self.backend_environment(),
                         "networks": {"app": {}},
                         "volumes": [
                             {
@@ -120,7 +124,7 @@ class Docker:
                 {
                     "Image": self.image,
                     "Config": {
-                        "Env": ["MODEL_GATEWAY_API_KEY=synthetic-private-only"],
+                        "Env": [key + "=" + value for key, value in self.backend_environment().items()],
                         "Labels": {
                             "com.docker.compose.project": self.project,
                             "com.docker.compose.service": "backend",
@@ -189,7 +193,13 @@ def setup(tmp_path):
         'RESEARCH_AGENT_AUTH_TRUSTED_PROXY_CIDRS_JSON=["127.0.0.1/32"]\n'
         "RESEARCH_AGENT_AUTH_CAPTCHA_REQUIRED=true\n"
         "TURNSTILE_SECRET_KEY=synthetic-production-secret\n"
-        'TURNSTILE_HOSTNAMES_JSON=["release.example.invalid"]\n',
+        'TURNSTILE_HOSTNAMES_JSON=["release.example.invalid"]\n'
+        'RESEARCH_AGENT_RUNTIME=pi\n'
+        'RESEARCH_AGENT_RELEASE_ADMISSION_ENABLED=true\n'
+        'RESEARCH_AGENT_RELEASE_ADMISSION_ENVIRONMENT=prod\n'
+        'RESEARCH_AGENT_RELEASE_ADMISSION_PROJECT=pskit-agent-cloud\n'
+        'RESEARCH_AGENT_RELEASE_ADMISSION_KEY=' + 'k' * 40 + '\n'
+        'RESEARCH_AGENT_RELEASE_ADMISSION_QUALIFICATION_SHA256=' + 'f' * 64 + '\n',
     )
     cloud = private(
         tmp_path / "cloud.env",
@@ -269,6 +279,8 @@ def setup(tmp_path):
             "litellm_version": "1.100.3",
             "compatibility_sha256": "c" * 64,
             "opensandbox": None,
+            "admission": {"component_version": 1, "enforcement_version": "pskit.db-admission.v1",
+                          "qualification_sha256": "f" * 64},
             "compose": {
                 "project": "pskit-agent-cloud",
                 "workspace_provider": "disabled",
@@ -352,6 +364,10 @@ def test_502_readiness_rolls_back_and_returns_failure(setup):
         "jobs_unreconciled",
         "model_calls_unresolved",
         "compute_reservations",
+        "title_calls",
+        "mcp_leases",
+        "pdf_leases",
+        "mcp_calls_unresolved",
     ],
 )
 def test_activity_fails_closed_before_mutation(setup, key):
@@ -819,6 +835,12 @@ def test_staging_release_keeps_isolated_project_and_overlays(setup):
     ctl = rc.Controller(
         root / "control.json", "staging", runner=docker, http=old_controller.http
     )
+    backend = root / "backend.env"
+    backend.write_text(backend.read_text().replace(
+        "RESEARCH_AGENT_RELEASE_ADMISSION_ENVIRONMENT=prod",
+        "RESEARCH_AGENT_RELEASE_ADMISSION_ENVIRONMENT=staging",
+    ).replace("RESEARCH_AGENT_RELEASE_ADMISSION_PROJECT=pskit-agent-cloud",
+              "RESEARCH_AGENT_RELEASE_ADMISSION_PROJECT=pskit-agent-staging"))
     for name in ("old", "new"):
         path = root / "releases" / name / "manifest.json"
         data = json.loads(path.read_text())
@@ -1227,3 +1249,54 @@ def test_cloud_edit_during_admission_checks_is_never_overwritten_by_pin(setup):
     assert not any("up" in command for command in docker.calls)
     assert docker.admission_closed
     assert (root / "state/pending.json").exists()
+
+
+@pytest.mark.parametrize("field,value", [
+    ("RESEARCH_AGENT_RELEASE_ADMISSION_ENABLED", "false"),
+    ("RESEARCH_AGENT_RELEASE_ADMISSION_ENVIRONMENT", "staging"),
+    ("RESEARCH_AGENT_RELEASE_ADMISSION_PROJECT", "pskit-agent-staging"),
+    ("RESEARCH_AGENT_RELEASE_ADMISSION_QUALIFICATION_SHA256", "a" * 64),
+    ("RESEARCH_AGENT_RELEASE_ADMISSION_KEY", "short"),
+    ("RESEARCH_AGENT_RUNTIME", "mock"),
+])
+def test_api_change_refuses_unenforced_backend_before_any_mutation(setup, field, value):
+    controller, docker, root = setup
+    backend = root / "backend.env"
+    before = rc.read_env(backend)[field]
+    backend.write_text(backend.read_text().replace(field + "=" + before, field + "=" + value))
+    # Model a fully registered legacy/disabled deployment, rather than merely
+    # letting the existing source fingerprint check mask the missing enforcement.
+    current = controller.current()
+    for which in ("old", "new"):
+        path = root / "releases" / which / "manifest.json"
+        manifest = json.loads(path.read_text())
+        manifest["compose"]["resolved_sha256"] = rc.fingerprint(controller.render(manifest))
+        path.write_text(json.dumps(manifest))
+        if which == "old":
+            current["api"]["manifest_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+            current["web"] = current["api"]
+    private(root / "state/current.json", json.dumps(current))
+    with pytest.raises(rc.ReleaseError, match="admission|Admission|fingerprint"):
+        controller.release("new", "api")
+    assert docker.admission_calls == []
+    assert not any("up" in command for command in docker.calls)
+    assert not (root / "state/pending.json").exists()
+
+
+@pytest.mark.parametrize("which", ["old", "new"])
+def test_api_change_refuses_legacy_image_without_manifest_admission(setup, which):
+    controller, docker, root = setup
+    path = root / "releases" / which / "manifest.json"
+    manifest = json.loads(path.read_text())
+    del manifest["admission"]
+    path.write_text(json.dumps(manifest))
+    if which == "old":
+        current = controller.current()
+        current["api"]["manifest_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        current["web"] = current["api"]
+        private(root / "state/current.json", json.dumps(current))
+    with pytest.raises(rc.ReleaseError, match="admission|Admission"):
+        controller.release("new", "api")
+    assert docker.admission_calls == []
+    assert not any("up" in command for command in docker.calls)
+    assert not (root / "state/pending.json").exists()

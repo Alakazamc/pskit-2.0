@@ -72,6 +72,7 @@ class WorkspaceCommands:
             attempt.fencing_token,
             reservation,
             self.cpu_daily_limit_ms,
+            claim=True,
         )
         sandbox = await self.provider.ensure_user(context.user_id)
         try:

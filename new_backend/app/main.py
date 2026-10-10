@@ -47,6 +47,7 @@ from app.api import (
     metrics,
     models,
     profile,
+    release_admission,
     runs,
     sandbox_files,
     tool_products,
@@ -72,6 +73,7 @@ from app.domain.mcp_capacity import McpCapacityStore, PdfCapacityStore
 from app.domain.mcp_tool_calls import McpToolCallStore
 from app.domain.persistent_conversation import PersistentConversationStore
 from app.domain.quota import QuotaLedger
+from app.domain.release_admission import AdmissionClosed, DurableAdmissionGate
 from app.domain.sandboxes import SandboxArtifactStore
 from app.domain.store import DemoStore
 from app.domain.tool_products.registry import ToolProductRegistry
@@ -95,6 +97,7 @@ from app.services.model_gateway import gateway_client_lifespan
 from app.services.model_qualification_driver import ModelQualificationDriver
 from app.services.observability import ObservabilityMiddleware, RequestMetrics
 from app.services.pdf_processing import PdfProcessingPool
+from app.services.qualification_admission import AdmissionMcpQualificationExecutor
 from app.services.sandbox_operations import (
     LegacySandboxOperations,
     SandboxOperations,
@@ -130,6 +133,13 @@ def create_app(
         ValueError: A selected runtime lacks required or safe configuration.
     """
     settings = settings or Settings.from_env()
+    if settings.release_admission_enabled and (
+        settings.mode != "live" or settings.agent_runtime != "pi"
+        or not 32 <= len(settings.release_admission_key) <= 256
+        or any(not 33 <= ord(char) <= 126 for char in settings.release_admission_key)
+        or settings.pi_execution == "sandbox" and settings.workspace_provider != "opensandbox"
+    ):
+        raise ValueError("Release admission requires live PostgreSQL, Pi and a private observation key")
     settings.validate_workspace_config()
     if settings.mode not in {"mock", "live"}:
         raise ValueError("RESEARCH_AGENT_MODE must be mock or live")
@@ -311,6 +321,18 @@ def create_app(
         else None
     )
     storage = database if database is not None else settings.agent_db_path
+    admission_gate = None
+    if settings.release_admission_enabled:
+        try:
+            admission_gate = DurableAdmissionGate(
+                database, environment=settings.release_admission_environment,
+                project=settings.release_admission_project,
+                qualification_sha256=settings.release_admission_qualification_sha256,
+            )
+            admission_gate.configure()
+        except BaseException:
+            database.close()
+            raise
     workspace_sandbox_store = None
     workspace_reconciler = None
     workspace_access = WorkspaceAccessPolicy(
@@ -323,7 +345,7 @@ def create_app(
     if settings.workspace_provider == "opensandbox":
         if database is None:
             raise ValueError("OpenSandbox workspace provider requires live PostgreSQL")
-        workspace_sandbox_store = WorkspaceSandboxStore(database)
+        workspace_sandbox_store = WorkspaceSandboxStore(database, admission_gate=admission_gate)
         workspace_sandbox_provider = OpenSandboxWorkspaceProvider(
             settings,
             workspace_sandbox_store,
@@ -481,6 +503,10 @@ def create_app(
 
     app = FastAPI(title="PSKit Research Agent API", version="0.1.0", lifespan=lifespan)
 
+    @app.exception_handler(AdmissionClosed)
+    async def admission_closed_handler(_request: Request, _error: AdmissionClosed) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"detail": {"code": "RELEASE_ADMISSION_CLOSED"}})
+
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(
         request: Request,
@@ -523,11 +549,14 @@ def create_app(
         f"{frontend.scheme}://{frontend.netloc}",
     )
     app.state.database = database
+    app.state.admission_gate = admission_gate
     app.state.workspace_sandbox_store = workspace_sandbox_store
     app.state.workspace_sandbox_provider = workspace_sandbox_provider
     app.state.workspace_access = workspace_access
     app.state.workspace_lease_reconciler = workspace_reconciler
-    app.state.workspace_attempts = WorkspaceAttemptStore(database) if database is not None else None
+    app.state.workspace_attempts = WorkspaceAttemptStore(
+        database, admission_gate=admission_gate,
+    ) if database is not None else None
     app.state.workspace_files = (
         WorkspaceFiles(workspace_sandbox_provider)
         if settings.workspace_provider == "opensandbox"
@@ -585,7 +614,7 @@ def create_app(
         from app.domain.compute.events import ComputeEvents
         from app.domain.compute.jobs import ComputeJobs
 
-        app.state.compute_jobs = ComputeJobs(database)
+        app.state.compute_jobs = ComputeJobs(database, admission_gate=admission_gate)
         app.state.compute_events = ComputeEvents(database)
         app.state.compute_jobs.events = app.state.compute_events
         for manifest in json.loads(settings.compute_services_json):
@@ -606,13 +635,15 @@ def create_app(
         if app.state.compute_jobs is not None
         else None
     )
+    app.state.pdf_capacity = (
+        PdfCapacityStore(storage, settings.pdf_max_concurrent_parses, admission_gate=admission_gate)
+        if settings.agent_runtime == "pi" else None
+    )
     app.state.pdf_processor = PdfProcessingPool(
         max_concurrent=settings.pdf_max_concurrent_parses,
         queue_timeout_seconds=settings.pdf_queue_timeout_seconds,
         parse_timeout_seconds=settings.pdf_parse_timeout_seconds,
-        shared=PdfCapacityStore(storage, settings.pdf_max_concurrent_parses)
-        if settings.agent_runtime == "pi"
-        else None,
+        shared=app.state.pdf_capacity,
     )
     app.state.af3_executor = af3_executor
     app.state.mcp_executor = mcp_executor
@@ -640,11 +671,13 @@ def create_app(
         else PersistentConversationStore(
             storage,
             af3_min_gpu_memory_mb=settings.af3_min_gpu_memory_mb,
+            admission_gate=admission_gate,
         )
     )
     app.state.tool_runs = ToolRunStore(storage if settings.agent_runtime == "pi" else None)
     app.state.mcp_tool_calls = McpToolCallStore(
-        storage if settings.agent_runtime == "pi" else ":memory:"
+        storage if settings.agent_runtime == "pi" else ":memory:",
+        admission_gate=admission_gate,
     )
     if mcp_servers and mcp_provider is None:
         mcp_provider = MultiRemoteMcp(
@@ -674,14 +707,28 @@ def create_app(
         if mcp_executor == "remote"
         else DisabledMcp()
     )
-    if mcp_executor == "remote":
+    needs_mcp_guard = mcp_executor == "remote" or (
+        admission_gate is not None and not isinstance(app.state.mcp, DisabledMcp)
+    )
+    app.state.mcp_capacity = (
+        McpCapacityStore(storage, settings.mcp_max_concurrent_calls, admission_gate=admission_gate)
+        if (needs_mcp_guard or admission_gate is not None) and settings.agent_runtime == "pi" else None
+    )
+    if needs_mcp_guard:
         app.state.mcp = LimitedMcp(
             app.state.mcp,
             max_calls=settings.mcp_max_concurrent_calls,
             queue_timeout_seconds=settings.mcp_queue_timeout_seconds,
-            shared=McpCapacityStore(storage, settings.mcp_max_concurrent_calls)
-            if settings.agent_runtime == "pi"
-            else None,
+            shared=app.state.mcp_capacity,
+            lease_seconds=max(10, settings.mcp_timeout_seconds + 5),
+        )
+    if admission_gate is not None and app.state.mcp_qualification is not None:
+        app.state.mcp_qualification.executor = AdmissionMcpQualificationExecutor(
+            app.state.mcp_qualification.executor,
+            app.state.mcp_tool_calls,
+            app.state.mcp_capacity,
+            max_calls=settings.mcp_max_concurrent_calls,
+            queue_timeout_seconds=settings.mcp_queue_timeout_seconds,
             lease_seconds=max(10, settings.mcp_timeout_seconds + 5),
         )
     app.state.agent_service = (
@@ -834,6 +881,7 @@ def create_app(
             app.state.compute_jobs.ledger,
             events=app.state.compute_events,
             tool_runs=app.state.tool_run_gateway,
+            admission_gate=admission_gate,
         )
         app.state.compute_jobs.admin_concurrency_limit_for = (
             app.state.admin_store.concurrency_limit_for
@@ -869,6 +917,7 @@ def create_app(
     app.include_router(models.router)
     app.include_router(workspace.router)
     app.include_router(internal.router)
+    app.include_router(release_admission.router)
     app.include_router(internal_compute.router)
     app.include_router(internal_workspace.router)
     app.include_router(admin.router)

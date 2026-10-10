@@ -49,10 +49,12 @@ class WorkspaceAttemptStore:
     """Apply fenced, monotonic attempt transitions without storing output."""
 
     def __init__(
-        self, database: PostgresDatabase, *, clock: Callable[[], float] = time.time
+        self, database: PostgresDatabase, *, clock: Callable[[], float] = time.time,
+        admission_gate=None,
     ) -> None:
         self.db = PostgresStatements(database)
         self.clock = clock
+        self.admission_gate = admission_gate
 
     def get(self, attempt_id: str) -> WorkspaceAttempt | None:
         row = self.db.execute(
@@ -75,6 +77,7 @@ class WorkspaceAttemptStore:
             raise ValueError("Workspace attempt reservation is invalid")
         now = self.clock()
         with self.db:
+            self._check_admission()
             self.db.execute(
                 "INSERT INTO workspace_attempts (attempt_id,run_id,session_id,user_id,status,"
                 "fencing_token,reserved_cpu_core_ms,created_at,updated_at) "
@@ -98,6 +101,7 @@ class WorkspaceAttemptStore:
         fencing_token: int,
         requested_cpu_core_ms: int,
         default_daily_limit_ms: int,
+        *, claim: bool = False,
     ) -> WorkspaceAttempt:
         """Atomically reserve one command budget against settled and active attempts."""
         if requested_cpu_core_ms <= 0 or default_daily_limit_ms < 0:
@@ -106,6 +110,7 @@ class WorkspaceAttemptStore:
         day_start = datetime.combine(now.date(), datetime.min.time(), UTC).timestamp()
         day_end = (datetime.fromtimestamp(day_start, UTC) + timedelta(days=1)).timestamp()
         with self.db:
+            self._check_admission()
             current = self.db.execute(
                 "SELECT " + ",".join(_COLUMNS) + " FROM workspace_attempts "
                 "WHERE attempt_id=? FOR UPDATE",
@@ -123,7 +128,13 @@ class WorkspaceAttemptStore:
             if attempt.reserved_cpu_core_ms:
                 if attempt.reserved_cpu_core_ms != requested_cpu_core_ms:
                     raise WorkspaceConflict("Workspace CPU reservation changed")
-                return attempt
+                if not claim:
+                    return attempt
+                self.db.execute(
+                    "UPDATE workspace_attempts SET status='running',started_at=?,updated_at=? "
+                    "WHERE attempt_id=?", (self.clock(), self.clock(), attempt_id),
+                )
+                return self._required(attempt_id)
             explicit = self.db.execute(
                 "SELECT limit_ms FROM compute_cpu_limits WHERE user_id=?",
                 (attempt.user_id,),
@@ -147,20 +158,26 @@ class WorkspaceAttemptStore:
             )
             if requested_cpu_core_ms > max(0, limit - used - held):
                 raise WorkspaceCpuQuotaExceeded
+            claimed_fields = ",status='running',started_at=?" if claim else ""
+            parameters = (requested_cpu_core_ms, self.clock())
+            if claim:
+                parameters += (self.clock(),)
             self.db.execute(
-                "UPDATE workspace_attempts SET reserved_cpu_core_ms=?,updated_at=? "
-                "WHERE attempt_id=?",
-                (requested_cpu_core_ms, self.clock(), attempt_id),
+                "UPDATE workspace_attempts SET reserved_cpu_core_ms=?,updated_at=?"
+                + claimed_fields + " WHERE attempt_id=?", parameters + (attempt_id,),
             )
         return self._required(attempt_id)
 
     def mark_running(
         self, attempt_id: str, fencing_token: int, provider_process_id: str
     ) -> WorkspaceAttempt:
+        current = self._required(attempt_id)
+        if current.status == "running" and current.provider_process_id is not None:
+            raise WorkspaceConflict("Workspace process is already assigned")
         return self._transition(
             attempt_id,
             fencing_token,
-            expected={"queued"},
+            expected={"queued", "running"},
             status="running",
             assignments={"provider_process_id": provider_process_id, "started_at": self.clock()},
         )
@@ -232,6 +249,10 @@ class WorkspaceAttemptStore:
         values["status"] = status
         values["updated_at"] = self.clock()
         with self.db:
+            if self.admission_gate is not None:
+                from app.domain.release_admission import transaction_lock
+
+                transaction_lock(self.db)
             self.db.execute(
                 "SELECT attempt_id FROM workspace_attempts WHERE attempt_id=? FOR UPDATE",
                 (attempt_id,),
@@ -239,6 +260,10 @@ class WorkspaceAttemptStore:
             current = self._required(attempt_id)
             if current.fencing_token != fencing_token or current.status not in expected:
                 raise WorkspaceConflict("Workspace attempt transition is stale")
+            if status == "running" and current.status == "queued":
+                self._check_admission()
+            if status == "running" and current.provider_process_id is not None:
+                raise WorkspaceConflict("Workspace process is already assigned")
             keys = tuple(values)
             self.db.execute(
                 "UPDATE workspace_attempts SET "
@@ -253,3 +278,7 @@ class WorkspaceAttemptStore:
         if record is None:
             raise WorkspaceConflict("Workspace attempt is unavailable")
         return record
+
+    def _check_admission(self) -> None:
+        if self.admission_gate is not None:
+            self.admission_gate.require_open(self.db)

@@ -16,13 +16,14 @@ from app.ports.providers import ProviderUnavailable
 class McpToolCallStore:
     """Prevent replay of a Pi tool call even when its first outcome is uncertain."""
 
-    def __init__(self, path: str | PostgresDatabase) -> None:
+    def __init__(self, path: str | PostgresDatabase, *, admission_gate=None) -> None:
         """Open shared SQLite storage for durable Pi MCP call identities.
 
         Args:
             path: Database path shared by all Pi API instances.
         """
         self._lock = Lock()
+        self.admission_gate = admission_gate
         if isinstance(path, PostgresDatabase):
             self.db = PostgresStatements(path)
         else:
@@ -67,6 +68,8 @@ class McpToolCallStore:
                     "WHERE run_id=? AND tool_call_id=?", (run_id, tool_call_id),
                 ).fetchone()
                 if row is None:
+                    if self.admission_gate is not None:
+                        self.admission_gate.require_open(self.db)
                     self.db.execute(
                         "INSERT INTO mcp_tool_calls "
                         "(run_id,tool_call_id,name,arguments_hash,status,result_json,created_at) "
@@ -86,6 +89,9 @@ class McpToolCallStore:
             except (sqlite3.Error, psycopg.Error) as exc:
                 self.db.rollback()
                 raise ProviderUnavailable("MCP tool call store unavailable") from exc
+            except BaseException:
+                self.db.rollback()
+                raise
 
     def complete(self, run_id: str, tool_call_id: str, result: McpInvokeResult) -> None:
         """Save the result of a claimed MCP call for future retries.

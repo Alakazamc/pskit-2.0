@@ -79,6 +79,8 @@ class RunsMixin:
         from .admission import is_qualification_context
 
         with self._immediate_transaction():
+            if not self.admission_allowed():
+                return False
             row = self.db.execute(
                 "SELECT user_id,status,context_json FROM agent_runs WHERE id=?", (run_id,),
             ).fetchone()
@@ -143,6 +145,8 @@ class RunsMixin:
 
         claimed: list[tuple[str, str, str, str]] = []
         with self._immediate_transaction():
+            if not self.admission_allowed():
+                return []
             now = _now().isoformat()
             active, users = active_counts(self, now)
             capacity = min(max(0, limit), max(0, max_active - active))
@@ -266,6 +270,7 @@ class RunsMixin:
             return None
         run_id = str(uuid.uuid4())
         with self._immediate_transaction():
+            self.check_admission()
             self._require_not_deleting(user_id)
             self.db.execute(
                 "INSERT INTO agent_messages "
@@ -333,6 +338,7 @@ class RunsMixin:
                     if existing[0] != request_hash:
                         raise IdempotencyConflict
                     return RunRef(run_id=existing[1]), False
+            self.check_admission()
             used_row = self.db.execute(
                 "SELECT used FROM agent_token_usage WHERE user_id=? AND period=?",
                 (user_id, period),

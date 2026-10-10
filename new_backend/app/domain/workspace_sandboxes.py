@@ -107,16 +107,22 @@ class WorkspaceSandboxStore:
         *,
         clock: Callable[[], float] = time.time,
         claim_seconds: float = 60.0,
+        admission_gate=None,
     ) -> None:
         if claim_seconds <= 0:
             raise ValueError("Workspace claim duration must be positive")
         self.db = PostgresStatements(database)
         self.clock = clock
         self.claim_seconds = claim_seconds
+        self.admission_gate = admission_gate
 
     @contextmanager
     def _locked_user(self, user_id: str):
         with self.db:
+            if self.admission_gate is not None:
+                from app.domain.release_admission import transaction_lock
+
+                transaction_lock(self.db)
             # A row lock cannot serialize the first insert because no row exists yet.
             # The transaction-scoped advisory lock closes that creation race.
             self.db.execute(
@@ -160,6 +166,7 @@ class WorkspaceSandboxStore:
         with self._locked_user(user_id):
             current = self.get(user_id)
             if current is None:
+                self._check_admission()
                 token = "claim-" + uuid.uuid4().hex
                 volume_id = "workspace-volume-" + uuid.uuid4().hex
                 self.db.execute(
@@ -185,6 +192,7 @@ class WorkspaceSandboxStore:
             if current.lifecycle_state == "creating":
                 if current.claim_expires_at is not None and current.claim_expires_at > now:
                     return WorkspaceCreationClaim(current, False)
+                self._check_admission()
                 token = "claim-" + uuid.uuid4().hex
                 self.db.execute(
                     "UPDATE workspace_sandboxes SET claim_token=?,claim_expires_at=?,"
@@ -193,6 +201,7 @@ class WorkspaceSandboxStore:
                 )
                 return WorkspaceCreationClaim(self._required_record(user_id), True)
             if current.lifecycle_state == "error" and current.sandbox_id is None:
+                self._check_admission()
                 token = "claim-" + uuid.uuid4().hex
                 self.db.execute(
                     "UPDATE workspace_sandboxes SET lifecycle_state='creating',"
@@ -288,6 +297,7 @@ class WorkspaceSandboxStore:
                 raise WorkspaceConflict("Workspace has unresolved attempts")
             if current.runtime_state == "stopped":
                 return current
+            self._check_admission()
             self.db.execute(
                 "UPDATE workspace_sandboxes SET lifecycle_state='draining',"
                 "runtime_state='unknown',provider_revision=provider_revision+1,updated_at=? "
@@ -372,6 +382,7 @@ class WorkspaceSandboxStore:
                 ):
                     return existing
                 raise WorkspaceConflict("Attempt ID is already assigned")
+            self._check_admission()
             unresolved = self.db.execute(
                 "SELECT attempt_id FROM workspace_sandbox_leases "
                 "WHERE user_id=? AND session_id=? AND state<>'released'",
@@ -492,6 +503,7 @@ class WorkspaceSandboxStore:
                 current.lifecycle_state == "ready" and current.runtime_state != "stopped"
             ):
                 raise WorkspaceConflict("Workspace cannot be replaced in its current state")
+            self._check_admission()
             token = "replace-" + uuid.uuid4().hex
             self.db.execute(
                 "UPDATE workspace_sandboxes SET lifecycle_state='replacing',"
@@ -542,6 +554,10 @@ class WorkspaceSandboxStore:
         if record is None:
             raise WorkspaceConflict("Workspace owner record is unavailable")
         return record
+
+    def _check_admission(self) -> None:
+        if self.admission_gate is not None:
+            self.admission_gate.require_open(self.db)
 
     def _required_lease(self, attempt_id: str) -> WorkspaceLeaseRecord:
         lease = self._lease(attempt_id)

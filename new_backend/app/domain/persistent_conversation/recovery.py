@@ -117,6 +117,8 @@ class RecoveryMixin:
 
         claimed: list[tuple[str, str, str, str]] = []
         with self._immediate_transaction():
+            if not self.admission_allowed():
+                return []
             now = _now().isoformat()
             active, users = active_counts(self, now)
             capacity = max(0, max_active - active)

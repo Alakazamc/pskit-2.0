@@ -45,6 +45,7 @@ _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 _PI_ROOT = Path("/data/pi-sessions")
 _SQLITE_METADATA = {"sqlite_sequence", "sqlite_stat1", "sqlite_stat4"}
 _MIGRATION_ONLY = {"schema_migrations"}
+_ADMISSION_COMPONENT = {"release_admission_migrations", "release_admission_state"}
 _POSTGRES_COMPUTE = {
     "compute_capability_versions",
     "compute_job_data",
@@ -137,6 +138,35 @@ def _identifier(name: str) -> str:
     if not _NAME.fullmatch(name):
         raise ValueError("Unsafe migration schema or table name")
     return name
+
+
+def _refuse_admission_transfer(tables: set[str]) -> None:
+    """Legacy snapshots cannot drop or recreate a deployment's durable hold."""
+    if tables & _ADMISSION_COMPONENT:
+        raise ValueError(
+            "Release admission state requires a PostgreSQL backup; "
+            "legacy SQLite migration cannot preserve ownership"
+        )
+
+
+def _schema_migration_locks(connection: psycopg.Connection, *schemas: str) -> None:
+    """Fence explicit component installers through checks and schema mutation."""
+    for schema in sorted(set(schemas)):
+        connection.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+            (f"pskit-migrations:{schema}",),
+        )
+
+
+def _cleanup_stage(database_url: str, stage: str) -> None:
+    """Clean only our scratch schema; retain any unexpected durable owner state."""
+    with psycopg.connect(database_url) as connection:
+        _schema_migration_locks(connection, stage)
+        if _table_names(connection, stage) & _ADMISSION_COMPONENT:
+            return
+        connection.execute(
+            sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(stage))
+        )
 
 
 def _verify_snapshot(snapshot_dir: Path) -> set[str]:
@@ -335,7 +365,10 @@ def _copy_rows(
     old_tables = {
         row[0] for row in source.execute("SELECT name FROM sqlite_master WHERE type='table'")
     } - _SQLITE_METADATA
-    new_tables = _table_names(destination, staging_schema) - _MIGRATION_ONLY - _POSTGRES_ONLY
+    _refuse_admission_transfer(old_tables)
+    destination_tables = _table_names(destination, staging_schema)
+    _refuse_admission_transfer(destination_tables)
+    new_tables = destination_tables - _MIGRATION_ONLY - _POSTGRES_ONLY
     if old_tables != new_tables:
         raise ValueError("SQLite and PostgreSQL table sets differ")
     counts: dict[str, int] = {}
@@ -439,13 +472,17 @@ def _activate_stage(
         "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
         (f"pskit-activate:{target}",),
     )
+    _schema_migration_locks(connection, stage, target)
+    _refuse_admission_transfer(_table_names(connection, stage))
     exists = connection.execute(
         "SELECT 1 FROM pg_namespace WHERE nspname=%s",
         (target,),
     ).fetchone()
     backup = None
     if exists:
-        for table in _table_names(connection, target) - _MIGRATION_ONLY:
+        target_tables = _table_names(connection, target)
+        _refuse_admission_transfer(target_tables)
+        for table in target_tables - _MIGRATION_ONLY:
             rows = connection.execute(
                 sql.SQL("SELECT 1 FROM {}.{} LIMIT 1").format(
                     sql.Identifier(target),
@@ -507,6 +544,7 @@ def import_sqlite_snapshot(
     _verify_snapshot(snapshot_dir)
     source_hash = _sha256(sqlite_path)
     with psycopg.connect(database_url) as admin:
+        _refuse_admission_transfer(_table_names(admin, target_schema))
         if admin.execute(
             "SELECT 1 FROM pg_namespace WHERE nspname=%s",
             (staging_schema,),
@@ -532,12 +570,7 @@ def import_sqlite_snapshot(
             with psycopg.connect(database_url) as connection:
                 backup = _activate_stage(connection, stage=staging_schema, target=target_schema)
         except BaseException:
-            with psycopg.connect(database_url, autocommit=True) as admin:
-                admin.execute(
-                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
-                        sql.Identifier(staging_schema)
-                    )
-                )
+            _cleanup_stage(database_url, staging_schema)
             raise
     return ImportReport(table_counts=counts, source_sha256=source_hash, backup_schema=backup)
 
@@ -574,6 +607,7 @@ def export_sqlite_snapshot(
                 for row in target.execute("SELECT name FROM sqlite_master WHERE type='table'")
             } - _SQLITE_METADATA
             source_tables = _table_names(source, schema)
+            _refuse_admission_transfer(source_tables)
             for table in sorted(_POSTGRES_ONLY & source_tables):
                 exists = source.execute(
                     sql.SQL("SELECT 1 FROM {}.{} LIMIT 1").format(

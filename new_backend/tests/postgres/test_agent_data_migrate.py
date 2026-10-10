@@ -10,9 +10,11 @@ from deploy.agent.scripts.agent_data_snapshot import snapshot
 from psycopg import sql
 
 from app.db.postgres_migrations import SCHEMA_VERSION, migrate_postgres
+from app.db.release_admission_migrations import migrate_admission_postgres, migrate_admission_sqlite
 from app.domain.catalog import CatalogStore
 from app.domain.identity_policy import IdentityPolicyStore
 from app.domain.persistent_conversation import PersistentConversationStore
+from app.domain.release_admission import DurableAdmissionGate
 from scripts import agent_data_migrate
 
 
@@ -275,3 +277,154 @@ def test_sqlite_export_preserves_new_control_plane_state(pg_schema, tmp_path, ki
         assert not destination.exists()
     finally:
         database.close()
+
+
+def test_core_migration_keeps_admission_component_explicit(pg_schema):
+    dsn, schema = pg_schema
+    migrate_postgres(dsn, schema=schema)
+    with psycopg.connect(dsn) as connection:
+        assert connection.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema=%s "
+            "AND table_name LIKE 'release_admission%%'", (schema,),
+        ).fetchall() == []
+        assert connection.execute(
+            sql.SQL("SELECT count(*) FROM {}.schema_migrations").format(sql.Identifier(schema)),
+        ).fetchone() == (SCHEMA_VERSION,)
+
+
+@pytest.mark.parametrize("state", ["unbound", "open", "closed"])
+def test_legacy_transfer_refuses_existing_admission_without_changing_owner(pg_schema, tmp_path, state):
+    from app.db.postgres import PostgresDatabase
+
+    dsn, schema = pg_schema
+    migrate_postgres(dsn, schema=schema)
+    migrate_admission_postgres(dsn, schema=schema)
+    database = PostgresDatabase(dsn, schema=schema)
+    gate = DurableAdmissionGate(database, environment="staging", project="pskit-agent-staging",
+                                qualification_sha256="a" * 64)
+    owner = {"adapter_id": "synthetic-migration-owner", "qualification_sha256": "a" * 64,
+             "owner_nonce": "b" * 64, "environment": "staging", "project": "pskit-agent-staging",
+             "previous_manifest_sha256": "c" * 64, "target_manifest_sha256": "d" * 64,
+             "scopes": ["agent_runs", "compute_jobs", "workspace_attempts", "scheduler_claims"]}
+    try:
+        if state != "unbound":
+            gate.configure()
+        if state == "closed":
+            gate.enter(owner)
+        with database.connection() as connection:
+            before = connection.execute("SELECT * FROM release_admission_state").fetchall()
+        destination = tmp_path / "rollback.sqlite3"
+        with pytest.raises(ValueError, match="Release admission state requires a PostgreSQL backup"):
+            agent_data_migrate.export_sqlite_snapshot(dsn, destination, schema=schema)
+        assert not destination.exists()
+        archive, _ = _sample_snapshot(tmp_path)
+        snapshot_before = (archive / "agent.sqlite3").read_bytes()
+        with pytest.raises(ValueError, match="Release admission state requires a PostgreSQL backup"):
+            agent_data_migrate.import_sqlite_snapshot(
+                archive / "agent.sqlite3", dsn,
+                staging_schema=f"{schema}_stage", target_schema=schema,
+            )
+        assert (archive / "agent.sqlite3").read_bytes() == snapshot_before
+        with database.connection() as connection:
+            assert connection.execute("SELECT * FROM release_admission_state").fetchall() == before
+            assert connection.execute("SELECT count(*) FROM agent_messages").fetchone() == (0,)
+        if state == "closed":
+            assert gate.verify(owner)["state"] == "closed"
+    finally:
+        database.close()
+
+
+def test_legacy_import_refuses_sqlite_admission_component_without_changing_snapshot(pg_schema, tmp_path):
+    dsn, schema = pg_schema
+    migrate_postgres(dsn, schema=schema)
+    archive, _ = _sample_snapshot(tmp_path)
+    # Build a fresh, valid manifest for an offline source that already has the
+    # independently installed component. Do not tamper with the old archive.
+    source = tmp_path / "source-with-admission"
+    source.mkdir()
+    database = source / "agent.sqlite3"
+    store = PersistentConversationStore(str(database))
+    migrate_admission_sqlite(store.db)
+    store.db.close()
+    admitted_archive = tmp_path / "admission-snapshot"
+    snapshot(source, admitted_archive)
+    before = (admitted_archive / "agent.sqlite3").read_bytes()
+    with pytest.raises(ValueError, match="Release admission state requires a PostgreSQL backup"):
+        agent_data_migrate.import_sqlite_snapshot(
+            admitted_archive / "agent.sqlite3", dsn,
+            staging_schema=f"{schema}_stage", target_schema=schema,
+        )
+    assert (admitted_archive / "agent.sqlite3").read_bytes() == before
+    assert (archive / "agent.sqlite3").is_file()
+
+
+@pytest.mark.parametrize("installation", ["before_copy", "after_copy"])
+def test_import_preserves_unexpected_stage_admission_hold(pg_schema, tmp_path, monkeypatch, installation):
+    from app.db.postgres import PostgresDatabase
+
+    dsn, target = pg_schema
+    stage = f"{target}_stage"
+    migrate_postgres(dsn, schema=target)
+    archive, _ = _sample_snapshot(tmp_path)
+    pi_root = tmp_path / "new-pi"
+    agent_data_migrate.copy_pi_transcripts(archive, pi_root)
+    original = agent_data_migrate._copy_rows
+    saved = []
+    owner = {
+        "adapter_id": "synthetic-stage-owner", "qualification_sha256": "a" * 64,
+        "owner_nonce": "b" * 64, "environment": "staging", "project": "pskit-agent-staging",
+        "previous_manifest_sha256": "c" * 64, "target_manifest_sha256": "d" * 64,
+        "scopes": ["agent_runs", "compute_jobs", "workspace_attempts", "scheduler_claims"],
+    }
+
+    def install_hold():
+        migrate_admission_postgres(dsn, schema=stage)
+        database = PostgresDatabase(dsn, schema=stage)
+        try:
+            gate = DurableAdmissionGate(database, environment="staging", project="pskit-agent-staging",
+                                        qualification_sha256="a" * 64)
+            gate.configure()
+            gate.enter(owner)
+            with database.connection() as connection:
+                saved.extend(connection.execute("SELECT * FROM release_admission_state").fetchall())
+        finally:
+            database.close()
+
+    def injected_copy(*args, **kwargs):
+        if installation == "before_copy":
+            install_hold()
+        counts = original(*args, **kwargs)
+        if installation == "after_copy":
+            install_hold()
+        return counts
+
+    monkeypatch.setattr(agent_data_migrate, "_copy_rows", injected_copy)
+    try:
+        with pytest.raises(ValueError, match="Release admission state requires a PostgreSQL backup"):
+            agent_data_migrate.import_sqlite_snapshot(
+                archive / "agent.sqlite3", dsn, staging_schema=stage, target_schema=target, pi_root=pi_root,
+            )
+        with psycopg.connect(dsn) as connection:
+            assert connection.execute("SELECT 1 FROM pg_namespace WHERE nspname=%s", (stage,)).fetchone() == (1,)
+            assert connection.execute(
+                sql.SQL("SELECT * FROM {}.release_admission_state").format(sql.Identifier(stage)),
+            ).fetchall() == saved
+            assert connection.execute(
+                sql.SQL("SELECT count(*) FROM {}.agent_messages").format(sql.Identifier(target)),
+            ).fetchone() == (0,)
+            assert connection.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema=%s "
+                "AND table_name LIKE 'release_admission%%'", (target,),
+            ).fetchall() == []
+        database = PostgresDatabase(dsn, schema=stage)
+        try:
+            gate = DurableAdmissionGate(database, environment="staging", project="pskit-agent-staging",
+                                        qualification_sha256="a" * 64)
+            assert gate.verify(owner)["state"] == "closed"
+        finally:
+            database.close()
+    finally:
+        # This is a dedicated synthetic fixture, not migration cleanup. Keep
+        # production cleanup conservative while leaving no local test schemas.
+        with psycopg.connect(dsn, autocommit=True) as connection:
+            connection.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(stage)))

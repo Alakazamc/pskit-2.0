@@ -21,9 +21,11 @@ class ComputeLeases:
         lease_seconds=60,
         events=None,
         tool_runs=None,
+        admission_gate=None,
     ):
         self.database, self.ledger = database, ledger
-        self.jobs = ComputeJobs(database, ledger)
+        self.admission_gate = admission_gate
+        self.jobs = ComputeJobs(database, ledger, admission_gate=admission_gate)
         self.events = events
         self.jobs.events = events
         self.tool_runs = tool_runs
@@ -75,6 +77,8 @@ class ComputeLeases:
             ).fetchone()
             if prior:
                 return self._grant(connection, prior[0]).model_copy(update={"recovered": True})
+            if self.admission_gate is not None and not self.admission_gate.allows(connection):
+                return None
             rows = connection.execute(
                 "SELECT j.id,j.user_id FROM agent_jobs j JOIN compute_job_data d ON d.job_id=j.id "
                 "WHERE d.service_id=%s AND j.status='queued' ORDER BY j.ordinal "

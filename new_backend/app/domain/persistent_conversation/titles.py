@@ -35,6 +35,8 @@ class TitlesMixin:
                 "UPDATE agent_session_titles SET status='failed' WHERE status='running' AND started_at<?",
                 ((_now() - timedelta(seconds=stale_seconds)).isoformat(),),
             )
+            if not self.admission_allowed():
+                return None
             if self.db.execute(
                 "SELECT COUNT(*) FROM agent_session_titles WHERE status='running'",
             ).fetchone()[0] >= 2:

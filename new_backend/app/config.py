@@ -24,6 +24,11 @@ class Settings:
     agent_db_path: str = "./data/agent.sqlite3"
     database_url: str = field(default_factory=lambda: os.getenv("RESEARCH_AGENT_DATABASE_URL", ""))
     database_schema: str = field(default_factory=lambda: os.getenv("RESEARCH_AGENT_DATABASE_SCHEMA", "pskit"))
+    release_admission_enabled: bool = False
+    release_admission_environment: Literal["prod", "staging"] = "prod"
+    release_admission_project: str = "pskit-agent-cloud"
+    release_admission_key: str = field(default="", repr=False)
+    release_admission_qualification_sha256: str = ""
     pdf_parse_timeout_seconds: float = 30.0
     pdf_max_concurrent_parses: int = 2
     pdf_queue_timeout_seconds: float = 5.0
@@ -139,6 +144,11 @@ class Settings:
             agent_db_path=os.getenv("RESEARCH_AGENT_DB_PATH", "./data/agent.sqlite3"),
             database_url=os.getenv("RESEARCH_AGENT_DATABASE_URL", ""),
             database_schema=os.getenv("RESEARCH_AGENT_DATABASE_SCHEMA", "pskit"),
+            release_admission_enabled=os.getenv("RESEARCH_AGENT_RELEASE_ADMISSION_ENABLED", "false").lower() == "true",
+            release_admission_environment=os.getenv("RESEARCH_AGENT_RELEASE_ADMISSION_ENVIRONMENT", "prod"),
+            release_admission_project=os.getenv("RESEARCH_AGENT_RELEASE_ADMISSION_PROJECT", "pskit-agent-cloud"),
+            release_admission_key=os.getenv("RESEARCH_AGENT_RELEASE_ADMISSION_KEY", ""),
+            release_admission_qualification_sha256=os.getenv("RESEARCH_AGENT_RELEASE_ADMISSION_QUALIFICATION_SHA256", ""),
             pdf_parse_timeout_seconds=float(os.getenv("RESEARCH_AGENT_PDF_PARSE_TIMEOUT_SECONDS", "30")),
             pdf_max_concurrent_parses=int(os.getenv("RESEARCH_AGENT_PDF_MAX_CONCURRENT_PARSES", "2")),
             pdf_queue_timeout_seconds=float(os.getenv("RESEARCH_AGENT_PDF_QUEUE_TIMEOUT_SECONDS", "5")),

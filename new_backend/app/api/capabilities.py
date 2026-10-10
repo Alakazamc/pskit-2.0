@@ -1,4 +1,5 @@
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -10,6 +11,7 @@ from app.api.runs import ConversationStoreDep
 from app.contracts.capabilities import Af3Job, Af3JobRequest, McpInvokeResult, McpTool
 from app.domain.af3_requests import Af3IdempotencyConflict
 from app.domain.quota import GpuQuotaExceeded
+from app.domain.release_admission import AdmissionClosed
 from app.domain.tool_runs import ToolRun
 from app.ports.providers import Af3Provider, McpProvider, ProviderUnavailable
 
@@ -52,41 +54,41 @@ async def invoke_mcp_tool(
     if not request.app.state.catalog.tool_allowed_for(user.id, name):
         raise HTTPException(status_code=403, detail={"code": "TOOL_NOT_ALLOWED"})
     validate_mcp_arguments(mcp, name, arguments)
-    calls = request.app.state.mcp_tool_calls if idempotency_key else None
-    scope = f"public:{user.id}"
-    if calls is not None:
-        try:
-            state, cached = calls.claim(scope, idempotency_key, name, arguments)
-        except ProviderUnavailable as exc:
-            raise HTTPException(status_code=503, detail={"code": "MCP_LEDGER_UNAVAILABLE"}) from exc
-        if state == "conflict":
-            raise HTTPException(status_code=409, detail={"code": "MCP_TOOL_CALL_CONFLICT"})
-        if state == "unknown":
-            raise HTTPException(status_code=409, detail={"code": "MCP_TOOL_CALL_OUTCOME_UNKNOWN"})
-        if cached is not None:
-            return cached
+    calls = request.app.state.mcp_tool_calls
+    # Unkeyed calls stay distinct but still retain evidence of a dispatched
+    # unknown outcome. A released execution slot cannot erase that evidence.
+    call_id = idempotency_key or str(uuid4())
+    scope = f"public:{user.id}" if idempotency_key else f"public-unkeyed:{user.id}"
+    try:
+        state, cached = calls.claim(scope, call_id, name, arguments)
+    except ProviderUnavailable as exc:
+        raise HTTPException(status_code=503, detail={"code": "MCP_LEDGER_UNAVAILABLE"}) from exc
+    if state == "conflict":
+        raise HTTPException(status_code=409, detail={"code": "MCP_TOOL_CALL_CONFLICT"})
+    if state == "unknown":
+        raise HTTPException(status_code=409, detail={"code": "MCP_TOOL_CALL_OUTCOME_UNKNOWN"})
+    if cached is not None:
+        return cached
     try:
         result = await mcp.invoke(name, arguments)
+    except AdmissionClosed:
+        calls.release_before_invoke(scope, call_id)
+        raise
     except McpCapacityExceeded as exc:
-        if calls is not None:
-            calls.release_before_invoke(scope, idempotency_key)
+        calls.release_before_invoke(scope, call_id)
         raise HTTPException(status_code=429, detail={"code": "MCP_CAPACITY_EXCEEDED"}) from exc
     except ProviderUnavailable as exc:
-        if calls is not None:
-            calls.mark_unknown(scope, idempotency_key)
+        calls.mark_unknown(scope, call_id)
         raise HTTPException(status_code=502, detail={"code": "MCP_UPSTREAM_FAILED"}) from exc
     except BaseException:
-        if calls is not None:
-            calls.mark_unknown(scope, idempotency_key)
+        calls.mark_unknown(scope, call_id)
         raise
     if result is None:
-        if calls is not None:
-            calls.mark_unknown(scope, idempotency_key)
+        calls.mark_unknown(scope, call_id)
         raise HTTPException(status_code=404, detail="Tool not found")
     run = request.app.state.tool_runs.add(user.id, name, arguments, result.result)
     answer = result.model_copy(update={"run_id": run.id})
-    if calls is not None:
-        calls.complete(scope, idempotency_key, answer)
+    calls.complete(scope, call_id, answer)
     return answer
 
 

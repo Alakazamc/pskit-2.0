@@ -44,7 +44,9 @@ def accounting_db():
             # Exact production table definitions, not permissive substitutes or real auth/global roles.
             migrations = rc.ROOT / "new_backend/app/db/postgres_migrations"
             connection.execute((migrations / "001_core.sql").read_text())
+            connection.execute((migrations / "002_components.sql").read_text())
             connection.execute((migrations / "004_compute.sql").read_text())
+            connection.execute((migrations / "007_session_titles.sql").read_text())
             yield connection
         finally:
             connection.execute(
@@ -58,6 +60,51 @@ def job(connection, accounting):
         "gpu_accounting_status) VALUES ('job','synthetic-user','completed',100,1,'2026-10-10',%s)",
         (accounting,),
     )
+
+
+@pytest.mark.parametrize("component", ["mcp", "pdf"])
+@pytest.mark.parametrize("expires_at", [1.0, 99999999999.0])
+def test_retained_execution_slot_blocks_release_even_after_expiry(
+    accounting_db, component, expires_at
+):
+    # Expiry is not evidence of provider exit. Every retained slot is unresolved.
+    accounting_db.execute(
+        f"INSERT INTO {component}_execution_leases(token,expires_at) VALUES (%s,%s)",
+        ("synthetic-slot", expires_at),
+    )
+    assert accounting_db.execute(probe_queries()[f"{component}_leases"]).fetchone()[0] == 1
+
+
+@pytest.mark.parametrize(
+    "status,expected",
+    [("running", 1), ("unknown", 1), ("future-state", 1), ("", 1),
+     ("completed", 0), ("failed", 0)],
+)
+def test_mcp_call_ledger_preserves_unknown_work_after_slot_release(
+    accounting_db, status, expected
+):
+    accounting_db.execute(
+        "INSERT INTO mcp_tool_calls(run_id,tool_call_id,name,arguments_hash,status,created_at) "
+        "VALUES ('synthetic-scope','synthetic-call','synthetic-tool','synthetic-hash',%s,'2026-10-10')",
+        (status,),
+    )
+    assert accounting_db.execute(probe_queries()["mcp_leases"]).fetchone()[0] == 0
+    assert accounting_db.execute(probe_queries()["mcp_calls_unresolved"]).fetchone()[0] == expected
+
+
+@pytest.mark.parametrize(
+    "status,expected",
+    [("running", 1), ("unknown", 1), ("future-state", 1), ("", 1),
+     ("waiting", 0), ("pending", 0), ("generated", 0), ("failed", 0), ("manual", 0)],
+)
+def test_title_call_activity_and_unknown_states_block_release(
+    accounting_db, status, expected
+):
+    accounting_db.execute(
+        "INSERT INTO agent_session_titles(session_id,user_id,status,created_at) "
+        "VALUES ('synthetic-session','synthetic-user',%s,'2026-10-10')", (status,),
+    )
+    assert accounting_db.execute(probe_queries()["title_calls"]).fetchone()[0] == expected
 
 
 @pytest.mark.parametrize(

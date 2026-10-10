@@ -20,7 +20,7 @@ class _CapacityStore:
     label: str
     migrate: Callable[[sqlite3.Connection], None]
 
-    def __init__(self, path: str | PostgresDatabase, max_calls: int) -> None:
+    def __init__(self, path: str | PostgresDatabase, max_calls: int, *, admission_gate=None) -> None:
         """Open a shared lease database and enforce one common capacity.
 
         Args:
@@ -31,6 +31,7 @@ class _CapacityStore:
             ValueError: Another instance configured a different limit.
         """
         self._lock = Lock()
+        self.admission_gate = admission_gate
         if isinstance(path, PostgresDatabase):
             self.db = PostgresStatements(path)
         else:
@@ -74,6 +75,8 @@ class _CapacityStore:
                     return None
                 raise ProviderUnavailable(f"{self.label} capacity store unavailable") from exc
             try:
+                if self.admission_gate is not None:
+                    self.admission_gate.require_open(self.db)
                 now = time.time()
                 self.db.execute(f"DELETE FROM {self.lease_table} WHERE expires_at<=?", (now,))
                 count = self.db.execute(f"SELECT COUNT(*) FROM {self.lease_table}").fetchone()[0]
@@ -93,6 +96,9 @@ class _CapacityStore:
             except (sqlite3.Error, psycopg.Error) as exc:
                 self.db.rollback()
                 raise ProviderUnavailable(f"{self.label} capacity store unavailable") from exc
+            except BaseException:
+                self.db.rollback()
+                raise
 
     def renew(self, token: str, lease_seconds: float) -> bool:
         """Extend an unexpired lease owned by its opaque token.

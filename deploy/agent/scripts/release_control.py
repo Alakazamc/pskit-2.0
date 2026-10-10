@@ -6,18 +6,20 @@ import argparse
 import copy
 import fcntl
 import hashlib
+import ipaddress
 import json
 import math
 import os
 import re
 import secrets
+import stat
 import subprocess
 import sys
 import time
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import ProxyHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from deploy.agent.scripts.production_config import read_env, validate_production_auth
 from deploy.agent.scripts.release_files import (
@@ -61,6 +63,10 @@ ACTIVITY_QUERIES = {
     "workspace_unknown": "SELECT count(*) FROM workspace_sandboxes WHERE runtime_state='unknown' OR lifecycle_state IN ('creating','draining','replacing','error')",
     "compute_outbox": "SELECT count(*) FROM compute_outbox WHERE consumed_at IS NULL",
     "device_leases": "SELECT count(*) FROM compute_device_leases",
+    "title_calls": "SELECT count(*) FROM agent_session_titles WHERE status IS NULL OR status NOT IN ('waiting','pending','generated','failed','manual')",
+    "mcp_leases": "SELECT count(*) FROM mcp_execution_leases",
+    "pdf_leases": "SELECT count(*) FROM pdf_execution_leases",
+    "mcp_calls_unresolved": "SELECT count(*) FROM mcp_tool_calls WHERE status IS NULL OR status NOT IN ('completed','failed')",
 }
 ACTIVITY_KEYS = (
     "runs_active",
@@ -158,6 +164,71 @@ def get_http(url: str) -> tuple[int, bytes]:
         raise ReleaseError("HTTP release probe is unavailable") from error
 
 
+def _receiver_url(url):
+    try:
+        parsed = urlsplit(url)
+        address = ipaddress.ip_address(parsed.hostname or "")
+        if (parsed.scheme not in {"http", "https"} or parsed.username or parsed.password
+                or parsed.query or parsed.fragment or not parsed.path or len(url) > 2048
+                or parsed.port is not None and not 1 <= parsed.port <= 65535
+                or not address.is_loopback and (not address.is_private or address.is_reserved
+                    or address.is_unspecified or address.is_multicast or address.is_link_local)):
+            raise ValueError
+    except (TypeError, ValueError):
+        raise ReleaseError("Authenticated Receiver URL must be an explicit private IP") from None
+
+
+def _receiver_token(path):
+    """Pin every path component and read one bounded mode-0600 token."""
+    try:
+        path = Path(path)
+        if not path.is_absolute():
+            raise ValueError
+        with directory_fd(path.parent) as parent:
+            descriptor = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent)
+            with os.fdopen(descriptor, "rb") as stream:
+                before = os.fstat(stream.fileno())
+                if not stat.S_ISREG(before.st_mode) or stat.S_IMODE(before.st_mode) != 0o600 or before.st_size > 257:
+                    raise ValueError
+                value = stream.read(258)
+                after = os.fstat(stream.fileno())
+                if (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+                    raise ValueError
+        token = value.removesuffix(b"\n").decode("ascii")
+        if not 32 <= len(token) <= 256 or any(not 33 <= ord(char) <= 126 for char in token):
+            raise ValueError
+        return token
+    except (OSError, TypeError, ValueError, UnicodeError):
+        raise ReleaseError("Receiver activity authentication file is unavailable or unsafe") from None
+
+
+class _ReceiverNoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, new_url):
+        return None
+
+
+def _receiver_object(pairs):
+    value = dict(pairs)
+    if len(value) != len(pairs):
+        raise ValueError("Duplicate receiver evidence member")
+    return value
+
+
+def get_receiver_http(url: str, token: str) -> tuple[int, bytes]:
+    _receiver_url(url)
+    if not 32 <= len(token) <= 256 or any(not 33 <= ord(char) <= 126 for char in token):
+        raise ReleaseError("Receiver activity authentication is invalid")
+    opener = build_opener(ProxyHandler({}), _ReceiverNoRedirect())
+    try:
+        with opener.open(Request(url, method="GET", headers={"Authorization": "Bearer " + token}), timeout=5) as response:
+            return response.status, response.read(64 * 1024 + 1)
+    except HTTPError as error:
+        error.close()
+        return error.code, b""
+    except (OSError, URLError):
+        raise ReleaseError("Receiver activity probe is unavailable") from None
+
+
 def normalized(model: dict, image: str) -> dict:
     result = copy.deepcopy(model)
     backend_consumers = {
@@ -178,7 +249,8 @@ def normalized(model: dict, image: str) -> dict:
 
 class Controller:
     def __init__(
-        self, path: Path, environment: str, *, runner=run_command, http=get_http
+        self, path: Path, environment: str, *, runner=run_command, http=get_http,
+        receiver_http=get_receiver_http,
     ):
         self.config = json.loads(safe_read(path, private=True, limit=64 * 1024))
         required = {
@@ -198,7 +270,7 @@ class Controller:
         }
         if (
             not required <= set(self.config)
-            or set(self.config) - required - {"admission_barrier"}
+            or set(self.config) - required - {"admission_barrier", "receiver_activity_auth"}
             or self.config["schema_version"] != CONTROL_VERSION
             or environment not in {"prod", "staging"}
             or self.config["environment"] != environment
@@ -207,6 +279,7 @@ class Controller:
                 "Explicit environment and private controller configuration disagree"
             )
         self.environment, self.runner, self.http = environment, runner, http
+        self.receiver_http = receiver_http
         self.repository = Path(self.config["repository"])
         self.cloud_path = Path(self.config["cloud_env_file"])
         self.backend_path = Path(self.config["backend_env_file"])
@@ -259,6 +332,14 @@ class Controller:
         urls = self.config["receiver_activity_urls"]
         if not isinstance(urls, list) or any(not isinstance(url, str) for url in urls):
             raise ReleaseError("Receiver activity endpoints must be an explicit list")
+        authentication = self.config.get("receiver_activity_auth", {})
+        if not isinstance(authentication, dict) or set(authentication) - set(urls):
+            raise ReleaseError("Receiver activity authentication must match configured endpoints")
+        for url, identity in authentication.items():
+            _receiver_url(url)
+            if (not isinstance(identity, dict) or set(identity) != {"token_file"}
+                    or not isinstance(identity["token_file"], str) or not Path(identity["token_file"]).is_absolute()):
+                raise ReleaseError("Receiver activity authentication requires an absolute private token file")
         if not isinstance(self.config["receiver_activity_required"], bool):
             raise ReleaseError("Receiver activity requirement must be explicit")
         if environment == "prod" and not self.config["receiver_activity_required"]:
@@ -335,7 +416,34 @@ class Controller:
             )
         return identity
 
+    def _qualified_admission(self, manifest: dict) -> None:
+        """Never restart or roll back into an image without the same proven guard."""
+        adapter = self._admission_config()
+        expected = {"component_version": 1, "enforcement_version": "pskit.db-admission.v1",
+                    "qualification_sha256": adapter["qualification_sha256"]}
+        if manifest.get("admission") != expected:
+            raise ReleaseError("The backend Manifest lacks qualified admission enforcement")
+        backend = read_env(self.backend_path)
+        expected_environment = {
+            "RESEARCH_AGENT_RUNTIME": "pi",
+            "RESEARCH_AGENT_RELEASE_ADMISSION_ENABLED": "true",
+            "RESEARCH_AGENT_RELEASE_ADMISSION_ENVIRONMENT": self.environment,
+            "RESEARCH_AGENT_RELEASE_ADMISSION_PROJECT": manifest["compose"]["project"],
+            "RESEARCH_AGENT_RELEASE_ADMISSION_QUALIFICATION_SHA256": adapter["qualification_sha256"],
+        }
+        if any(backend.get(key) != value for key, value in expected_environment.items()) or not (
+            32 <= len(backend.get("RESEARCH_AGENT_RELEASE_ADMISSION_KEY", "")) <= 256
+        ):
+            raise ReleaseError("The backend configuration lacks qualified admission enforcement")
+        resolved = self.render(manifest)["services"]["backend"].get("environment", {})
+        if any(str(resolved.get(key, "")) != value for key, value in expected_environment.items()) or (
+            resolved.get("RESEARCH_AGENT_RELEASE_ADMISSION_KEY")
+            != backend["RESEARCH_AGENT_RELEASE_ADMISSION_KEY"]
+        ):
+            raise ReleaseError("The resolved backend lacks qualified admission enforcement")
+
     def _admission_command(self, operation: str, pending: dict, manifest: dict) -> None:
+        self._qualified_admission(manifest)
         adapter = self._admission_config()
         identity = self._admission_identity(pending, manifest)
         request = {
@@ -641,17 +749,23 @@ class Controller:
                 "Receiver journal/outbox evidence is unavailable; API release refused"
             )
         for url in urls:
-            code, body = self.http(url)
+            identity = self.config.get("receiver_activity_auth", {}).get(url)
+            code, body = (self.receiver_http(url, _receiver_token(identity["token_file"]))
+                          if identity is not None else self.http(url))
+            if not isinstance(body, bytes) or len(body) > 64 * 1024:
+                raise ReleaseError("Receiver activity evidence is invalid")
             try:
-                data = json.loads(body)
-            except (ValueError, UnicodeError):
+                data = json.loads(body, object_pairs_hook=_receiver_object)
+            except (ValueError, UnicodeError, RecursionError):
                 raise ReleaseError("Receiver activity evidence is invalid") from None
             if (
                 code != 200
+                or not isinstance(data, dict)
                 or set(data) != {"schema_version", "observed_at", "counts"}
                 or data["schema_version"] != "pskit.receiver-activity.v1"
                 or type(data["observed_at"]) not in {int, float}
                 or not 0 <= time.time() - data["observed_at"] <= 30
+                or not isinstance(data["counts"], dict)
                 or set(data["counts"])
                 != {"active", "unknown", "journal_pending", "outbox_pending"}
                 or any(
@@ -704,6 +818,12 @@ class Controller:
             raise ReleaseError(
                 "Interrupted release requires an explicit rollback before new releases"
             )
+        admission = "unavailable"
+        if self.config.get("admission_barrier") is not None:
+            self._qualified_admission(current)
+            # This read-only check validates artifact/configuration pins. Only
+            # the actual adapter challenge verifies a server-enforced hold.
+            admission = "qualified_configuration; runtime_observation_required"
         return {
             "status": "passed",
             "environment": self.environment,
@@ -711,9 +831,7 @@ class Controller:
             "receiver_journal": "unverified"
             if not self.config["receiver_activity_urls"]
             else "configured",
-            "api_admission": "configured"
-            if self.config.get("admission_barrier") is not None
-            else "unavailable",
+            "api_admission": admission,
         }
 
     def status(self) -> dict:
@@ -876,6 +994,8 @@ class Controller:
             return
         if component == "api":
             self._admission_config()
+            self._qualified_admission(current_api)
+            self._qualified_admission(candidate)
         self._compatible(current_api, candidate)
         self._live_backend(current_api)
         self._activity(current_api)

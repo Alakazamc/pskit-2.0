@@ -24,6 +24,7 @@ class PersistentConversationStore(WorkspaceMixin, RunsMixin, Af3Mixin, UsageMixi
 
     def __init__(
         self, database: PostgresDatabase | str, *, af3_min_gpu_memory_mb: int = 0,
+        admission_gate=None,
     ) -> None:
         """Open the PostgreSQL store or a temporary legacy SQLite store.
 
@@ -35,6 +36,7 @@ class PersistentConversationStore(WorkspaceMixin, RunsMixin, Af3Mixin, UsageMixi
             ValueError: The database has an unsupported or incomplete schema.
         """
         super().__init__()
+        self.admission_gate = admission_gate
         self.af3_resources = ComputeResourceRequirements(
             min_gpu_memory_mb=af3_min_gpu_memory_mb,
         )
@@ -160,6 +162,15 @@ class PersistentConversationStore(WorkspaceMixin, RunsMixin, Af3Mixin, UsageMixi
             self.db.execute("BEGIN IMMEDIATE")
             with self.db:
                 yield
+
+    def check_admission(self) -> None:
+        """Guard new work inside the caller's whole write transaction."""
+        if self.admission_gate is not None:
+            self.admission_gate.require_open(self.db)
+
+    def admission_allowed(self) -> bool:
+        """Preserve empty scheduler claims while a configured gate is closed."""
+        return self.admission_gate is None or self.admission_gate.allows(self.db)
 
     def _require_not_deleting(self, user_id: str) -> None:
         """Reject a guest whose cleanup has started under the caller's write lock.

@@ -18,6 +18,7 @@ entrypoint = "app.main:app"
 include = ["app*", "pskit_compute*"]
 
 [tool.setuptools.package-data]
+"app.db" = ["release_admission_v1.sql"]
 "app.db.postgres_migrations" = ["*.sql"]
 
 [tool.ruff]
