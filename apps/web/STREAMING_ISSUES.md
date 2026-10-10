@@ -2,7 +2,7 @@
 
 ## 📋 问题总览
 
-基于对 `new_frontend` 代码的深入分析，发现以下潜在的流式输出问题：
+基于对 `apps/web` 代码的深入分析，发现以下潜在的流式输出问题：
 
 ## 🔴 高优先级问题
 
@@ -284,5 +284,5 @@ export function projectEvents(previous: RunView, incoming: RunEvent[]): RunView 
 ---
 
 **生成时间：** 2026-10-07  
-**分析范围：** new_frontend/src/features/chat/  
+**分析范围：** apps/web/src/features/chat/
 **关键文件：** useRunEvents.ts, events.ts, http.ts, Conversation.tsx

@@ -1,8 +1,8 @@
 # Research Agent API 契约
 
-`openapi.json` 和 `run-event.schema.json` 由 `new_backend/scripts/export_openapi.py` 从 FastAPI 与 Pydantic 导出。公开路由使用 `/api/v1`；`/internal` 供 Pi 工具和计算 Worker 使用，不包含在公开 OpenAPI 中。前端统一通过 `new_frontend/src/api/` 访问 Python API，开发环境由 Vite 代理。
+`openapi.json` 和 `run-event.schema.json` 由 `apps/api/scripts/export_openapi.py` 从 FastAPI 与 Pydantic 导出。公开路由使用 `/api/v1`；`/internal` 供 Pi 工具和计算 Worker 使用，不包含在公开 OpenAPI 中。前端统一通过 `apps/web/src/api/` 访问 Python API，开发环境由 Vite 代理。
 
-更新契约时，先在 `new_backend/` 运行 `PYTHONPATH=. python scripts/export_openapi.py`，再在 `new_frontend/` 运行 `npm run generate:api`。前者从同一 Pydantic `RunEvent` 联合类型导出 `run-event.schema.json` 和 `src/api/generated-events.ts`；前端 `RunEvent`、`PlanStep` 直接引用生成类型。后者从 OpenAPI 生成 `src/api/generated/`，使用固定版本的 `@hey-api/openapi-ts`。前端身份、项目、会话、用量、文件和产物等 DTO 已引用生成类型；`contract-typecheck.ts` 还检查部分 `ResearchApi` 返回值与生成的路由响应兼容。后端测试会校验事件 TS 文件与当前 Python 模型完全一致。
+更新契约时，先在 `apps/api/` 运行 `PYTHONPATH=. python scripts/export_openapi.py`，再在 `apps/web/` 运行 `npm run generate:api`。前者从同一 Pydantic `RunEvent` 联合类型导出 `run-event.schema.json` 和 `src/api/generated-events.ts`；前端 `RunEvent`、`PlanStep` 直接引用生成类型。后者从 OpenAPI 生成 `src/api/generated/`，使用固定版本的 `@hey-api/openapi-ts`。前端身份、项目、会话、用量、文件和产物等 DTO 已引用生成类型；`contract-typecheck.ts` 还检查部分 `ResearchApi` 返回值与生成的路由响应兼容。后端测试会校验事件 TS 文件与当前 Python 模型完全一致。
 
 Python 提供演示和真实身份模式。演示模式可用 `/auth/demo`；真实模式的邮箱、Google OAuth、刷新与登出接口由 Python 调用 Supabase Auth。Refresh Token 保存在 HttpOnly Cookie，浏览器不会直接调用 Supabase。真实 Supabase 邮件、OAuth 回调仍需部署后联调。
 匿名入口为 `POST /api/v1/auth/anonymous`，可携带 Turnstile `captcha_token`；游客绑定新邮箱和 Google 身份仍由 Python 调用 Supabase。游客配额、上传和 GPU 限制由服务端执行。长期不活跃游客由独立运维命令清理，不提供浏览器删除接口；清理期间的请求返回 `GUEST_ACCOUNT_DELETING`（410）。

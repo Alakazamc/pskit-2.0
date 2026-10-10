@@ -36,16 +36,16 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: new_backend/requirements.lock
+          cache-dependency-path: apps/api/requirements.lock
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: new_backend/pi/package-lock.json
+          cache-dependency-path: apps/api/pi/package-lock.json
       - name: Install Python dependencies with the runtime constraint
-        run: python -m pip install -c new_backend/requirements.lock -e 'new_backend[dev]'
+        run: python -m pip install -c apps/api/requirements.lock -e 'apps/api[dev]'
       - name: Install pinned Pi for backend protocol integration
-        run: npm ci --prefix new_backend/pi
+        run: npm ci --prefix apps/api/pi
       - name: Lint, compile, unit and PostgreSQL 17 tests in isolated configuration
         run: python scripts/ci_new_stack.py backend --timeout 1800 --report-dir "${RUNNER_TEMP}/backend-results"
       - uses: actions/upload-artifact@v4
@@ -67,8 +67,8 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: new_frontend/package-lock.json
-      - run: npm ci --prefix new_frontend
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci --prefix apps/web
       - name: React types, lint, Vitest and build including Molstar verification
         run: python scripts/ci_new_stack.py frontend --timeout 720
 
@@ -84,8 +84,8 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: new_backend/pi/package-lock.json
-      - run: npm ci --prefix new_backend/pi
+          cache-dependency-path: apps/api/pi/package-lock.json
+      - run: npm ci --prefix apps/api/pi
       - name: Pinned Pi extension tests
         run: python scripts/ci_new_stack.py pi --timeout 300
 
@@ -101,13 +101,13 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: new_frontend/package-lock.json
-      - run: python -m pip install -c new_backend/requirements.lock -e 'new_backend[dev]'
-      - run: npm ci --prefix new_frontend
+          cache-dependency-path: apps/web/package-lock.json
+      - run: python -m pip install -c apps/api/requirements.lock -e 'apps/api[dev]'
+      - run: npm ci --prefix apps/web
       - name: Regenerate OpenAPI, Event, Compute and TypeScript and reject drift
         run: python scripts/check_new_stack_contracts.py
       - name: Confirm the checked-in contract tree is unchanged
-        run: git diff --exit-code -- contracts new_frontend/src/api/generated new_frontend/src/api/generated-events.ts new_frontend/src/api/generated-compute.ts
+        run: git diff --exit-code -- contracts apps/web/src/api/generated apps/web/src/api/generated-events.ts apps/web/src/api/generated-compute.ts
 
   gateway-protocol:
     runs-on: ubuntu-latest
@@ -145,15 +145,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install -c new_backend/requirements.lock -e 'new_backend[dev]'
+      - run: python -m pip install -c apps/api/requirements.lock -e 'apps/api[dev]'
       - name: Synthetic local, Staging, production and OpenSandbox Compose models
         run: python scripts/ci_render_compose.py
       - name: Deployment and CI runner regression tests
         run: python scripts/ci_new_stack.py deployment --timeout 600
       - name: Lint new CI entrypoints
         run: python -m ruff check scripts/ci_new_stack.py scripts/ci_pg_guard.py scripts/ci_render_compose.py scripts/test_ci_new_stack.py
-      - name: Build the current backend with the official new_backend context
-        run: docker build -f deploy/agent/backend.Dockerfile -t pskit-agent-backend:ci new_backend
+      - name: Build the current backend with the official apps/api context
+        run: docker build -f deploy/agent/backend.Dockerfile -t pskit-agent-backend:ci apps/api
       - name: Check non-root user, Python/Pi versions, runtime imports and secret exclusion
         env:
           PSKIT_BACKEND_IMAGE: pskit-agent-backend:ci

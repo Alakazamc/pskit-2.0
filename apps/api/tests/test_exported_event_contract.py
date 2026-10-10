@@ -7,7 +7,7 @@ from app.contracts.conversation import RunEvent
 from app.main import create_app
 from scripts.export_openapi import render_event_types
 
-CONTRACTS = Path(__file__).resolve().parents[2] / "contracts"
+CONTRACTS = Path(__file__).resolve().parents[3] / "contracts"
 
 
 def test_exported_contracts_match_python_models() -> None:
@@ -32,5 +32,5 @@ def test_approval_response_always_declares_nullable_job_id() -> None:
 
 def test_generated_frontend_sse_types_match_python_event_schema() -> None:
     schema = TypeAdapter(RunEvent).json_schema()
-    generated = CONTRACTS.parent / "new_frontend" / "src" / "api" / "generated-events.ts"
+    generated = CONTRACTS.parent / "apps/web" / "src" / "api" / "generated-events.ts"
     assert generated.read_text(encoding="utf-8") == render_event_types(schema)

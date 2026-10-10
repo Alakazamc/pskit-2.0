@@ -4,8 +4,8 @@ services:
   backend:
     image: pskit-agent-backend:local
     build:
-      context: ../../new_backend
-      dockerfile: ../deploy/agent/backend.Dockerfile
+      context: ../../apps/api
+      dockerfile: ../../deploy/agent/backend.Dockerfile
     env_file:
       - ${AGENT_BACKEND_ENV_FILE:-./local.backend.env}
     environment:

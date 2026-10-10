@@ -64,7 +64,7 @@ AGENT_SANDBOX_POSTGRES_SCHEMA=pskit
 `scripts/sandbox_smoke.py` 拒绝生产项目和用户 ID，只接受新的 `pskit-sandbox-test-*` 项目及 `sandbox-test-*` 用户/会话。它启动私有临时 PostgreSQL、gateway、manager 与本地模型 stub，运行真实 Pi；HTTP 从测试 backend 的 app 网络发起，兼容 Docker daemon 不在 WSL localhost 的情况。用户卷保留，退出时仅清理测试容器/网络。
 
 ```bash
-new_backend/.venv/bin/python deploy/agent/scripts/sandbox_smoke.py \
+apps/api/.venv/bin/python deploy/agent/scripts/sandbox_smoke.py \
   --project pskit-sandbox-test-example \
   --image sha256:<本次完整应用镜像ID> \
   --gateway-image nginx@sha256:<固定digest>
@@ -72,4 +72,4 @@ new_backend/.venv/bin/python deploy/agent/scripts/sandbox_smoke.py \
 
 测试覆盖两用户三会话、文件字节往返、活动超过测试空闲窗口、实际网络/DNS/出口拒绝、排空保卷、停止和 transcript 恢复。独立项目 `pskit-sandbox-test-oct04j` 验收 exit0；沙箱范围45项、真实 PostgreSQL4项通过；最终全后端603项通过，无PostgreSQL skip。模型是本地替身；没有付费推理，也不代表已在生产启用。完整结果及失败记录见 [验收记录](../../docs/research/2026-10-04-user-sandbox-implementation-validation.md)。
 
-科研模型的 Completed/Pending/Failed、用量与额度协议独立于 CPU sandbox，见 [COMPUTE_SERVICES.md](../../new_backend/COMPUTE_SERVICES.md)。
+科研模型的 Completed/Pending/Failed、用量与额度协议独立于 CPU sandbox，见 [COMPUTE_SERVICES.md](../../apps/api/COMPUTE_SERVICES.md)。

@@ -671,7 +671,7 @@ def write_report(path: Path, report: dict) -> None:
 def freeze_source(destination: Path, source_ref: str | None) -> str:
     """Freeze the working app or an exact local Git commit without checking out files."""
     if source_ref is None:
-        shutil.copytree(ROOT / "new_backend/app", destination / "app",
+        shutil.copytree(ROOT / "apps/api/app", destination / "app",
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".env", ".env.*"))
         return subprocess.run(["/usr/bin/git", "-C", str(ROOT), "rev-parse", "HEAD"],
                               capture_output=True, text=True, check=True, timeout=10).stdout.strip()
@@ -679,7 +679,7 @@ def freeze_source(destination: Path, source_ref: str | None) -> str:
         raise ValueError("source-ref must be a local commit SHA, not a branch or executable option")
     revision = subprocess.run(["/usr/bin/git", "-C", str(ROOT), "rev-parse", "--verify", f"{source_ref}^{{commit}}"],
                               capture_output=True, text=True, check=True, timeout=10).stdout.strip()
-    archive = subprocess.run(["/usr/bin/git", "-C", str(ROOT), "archive", revision, "new_backend/app"],
+    archive = subprocess.run(["/usr/bin/git", "-C", str(ROOT), "archive", revision, "apps/api/app"],
                              capture_output=True, check=True, timeout=30).stdout
     if len(archive) > 20 * 1024 * 1024:
         raise ValueError("App snapshot unexpectedly exceeds the 20MiB source limit")
@@ -688,11 +688,12 @@ def freeze_source(destination: Path, source_ref: str | None) -> str:
             if member.isdir():
                 continue
             parts = Path(member.name).parts
-            if not member.isfile() or parts[:2] != ("new_backend", "app") or ".." in parts:
+            if (not member.isfile() or parts[:3] != ("apps", "api", "app")
+                    or len(parts) <= 3 or ".." in parts):
                 raise ValueError("App Git archive contains unsupported entries")
             if member.name.endswith((".pyc", "/.env")) or "/.env." in member.name:
                 raise ValueError("App Git archive contains private/generated files")
-            path = destination.joinpath(*parts[1:])
+            path = destination.joinpath("app", *parts[3:])
             path.parent.mkdir(parents=True, exist_ok=True)
             with bundle.extractfile(member) as incoming, path.open("wb") as outgoing:
                 shutil.copyfileobj(incoming, outgoing)
@@ -789,7 +790,7 @@ def main() -> None:
             "source_revision": revision, "runtime_source_sha256": source_hashes,
             "app_tree_sha256": hashlib.sha256(json.dumps(tree_hashes, sort_keys=True).encode()).hexdigest(),
             "source_kind": "local-git-commit" if args.source_ref else "working-tree-snapshot",
-            "source_snapshot": "only new_backend/app, frozen before measurements; no .env/data/credentials",
+            "source_snapshot": "only apps/api/app, frozen before measurements; no .env/data/credentials",
             "machine": {"platform": platform.platform(), "python": platform.python_version(),
                         "cpu_count": os.cpu_count(), "psycopg": psycopg.__version__},
             "postgres": pg_info, "parameters": {"idle_seconds": args.idle_seconds,

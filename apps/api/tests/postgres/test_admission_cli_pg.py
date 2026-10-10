@@ -18,7 +18,7 @@ from app.db.postgres_migrations import migrate_postgres
 from app.db.release_admission_migrations import migrate_admission_postgres
 from app.main import create_app
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 QUALIFICATION = "a" * 64
 KEY = "synthetic-admission-key-never-log-" + "k" * 32
 

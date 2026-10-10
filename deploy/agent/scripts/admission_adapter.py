@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 # the approved host entrypoint, not discovered through an untrusted PATH.
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "new_backend"))
+sys.path.insert(0, str(ROOT / "apps/api"))
 
 import httpx
 from app.db.postgres import PostgresDatabase

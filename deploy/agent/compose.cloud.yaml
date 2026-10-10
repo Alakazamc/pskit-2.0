@@ -31,7 +31,7 @@ services:
     image: ${AGENT_BACKEND_IMAGE:?set AGENT_BACKEND_IMAGE}
     volumes: !override
       - type: bind
-        source: ${AGENT_AF3_PROXY_SCRIPT:-../../new_backend/scripts/af3_callback_proxy.py}
+        source: ${AGENT_AF3_PROXY_SCRIPT:-../../apps/api/scripts/af3_callback_proxy.py}
         target: /app/scripts/af3_callback_proxy.py
         read_only: true
       - type: bind

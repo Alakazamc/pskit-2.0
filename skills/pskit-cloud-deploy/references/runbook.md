@@ -47,8 +47,8 @@ python3 deploy/agent/scripts/production_config.py \
 # Load only the public site key from the same validated production marker.
 TURNSTILE_SITE_KEY=$(python3 -c 'from pathlib import Path; from deploy.agent.scripts.production_config import read_env; print(read_env(Path("deploy/agent/cloud.env"))["TURNSTILE_SITE_KEY"])')
 docker build --label org.opencontainers.image.revision="$COMMIT" \
-  -f deploy/agent/backend.Dockerfile -t "$IMAGE" new_backend
-(cd new_frontend && VITE_AUTH_MODE=supabase VITE_API_BASE_URL=/api/v1 \
+  -f deploy/agent/backend.Dockerfile -t "$IMAGE" apps/api
+(cd apps/web && VITE_AUTH_MODE=supabase VITE_API_BASE_URL=/api/v1 \
   VITE_TURNSTILE_SITE_KEY="$TURNSTILE_SITE_KEY" npm run build)
 docker image inspect --format '{{.Id}}' "$IMAGE"
 ```

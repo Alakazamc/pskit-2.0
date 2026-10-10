@@ -25,7 +25,7 @@ def acceptance_command(environ):
         or not target.path.strip("/")
     ):
         raise ValueError("TEST_POSTGRES_DSN must point to an isolated local test database")
-    directory = Path(__file__).resolve().parents[3] / "new_backend"
+    directory = Path(__file__).resolve().parents[3] / "apps/api"
     paths = ["tests/test_management_wiring.py"]
     for folder in ("tests", "tests/postgres"):
         paths.extend(

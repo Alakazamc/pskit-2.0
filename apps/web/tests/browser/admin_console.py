@@ -12,8 +12,8 @@ from pathlib import Path
 
 from playwright.async_api import async_playwright
 
-ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / "new_backend"))
+ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(ROOT / "apps/api"))
 from app.contracts.admin import (
     AdminJob,
     AdminMe,

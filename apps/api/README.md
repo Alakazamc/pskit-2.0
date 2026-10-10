@@ -2,11 +2,11 @@
 
 独立 Python FastAPI 服务。默认启用进程内 mock：项目、会话、Token 配额、每日 GPU 配额、MCP 和 AF3 都无需外部服务。Skill 由 `skills/*/manifest.json` 与 `SKILL.md` 提供；资源目录来自当前 MCP 提供者。
 
-**数据库迁移状态（2026-10-03）：** `RESEARCH_AGENT_MODE=live` 必须设置 `RESEARCH_AGENT_DATABASE_URL`，所有新后端业务表位于共享 Supabase PostgreSQL 的私有 `pskit` schema；Web 进程只检查迁移版本，不自动迁移。`GET /health/ready` 在数据库不可用或版本不符时返回 503。下面涉及 SQLite 路径、备份和 `PRAGMA` 的说明只适用于旧部署与离线迁移工具；正式切换见 `deploy/agent/SINGLE_POSTGRES_CUTOVER.md`（迁移计划第 10 步生成）。
+**数据库迁移状态（2026-10-03）：** `RESEARCH_AGENT_MODE=live` 必须设置 `RESEARCH_AGENT_DATABASE_URL`，所有新后端业务表位于共享 Supabase PostgreSQL 的私有 `pskit` schema；Web 进程只检查迁移版本，不自动迁移。`GET /health/ready` 在数据库不可用或版本不符时返回 503。下面涉及 SQLite 路径、备份和 `PRAGMA` 的说明只适用于旧部署与离线迁移工具；正式切换见 `../../deploy/agent/SINGLE_POSTGRES_CUTOVER.md`（迁移计划第 10 步生成）。
 
-**沙箱与管理台（2026-10-04）：** PostgreSQL schema v5/v6 保存用户沙箱、管理角色、模型策略、发布与审计。管理入口、受控授权和配置见 [ADMIN.md](ADMIN.md)；每用户容器及多会话工作区见 [SANDBOX.md](../deploy/agent/SANDBOX.md)。本轮完成本地隔离验收，尚未发布到生产。
+**沙箱与管理台（2026-10-04）：** PostgreSQL schema v5/v6 保存用户沙箱、管理角色、模型策略、发布与审计。管理入口、受控授权和配置见 [ADMIN.md](ADMIN.md)；每用户容器及多会话工作区见 [SANDBOX.md](../../deploy/agent/SANDBOX.md)。本轮完成本地隔离验收，尚未发布到生产。
 
-**对话自动命名（2026-10-05）：** 新前端对话在首个完整回复完成后独立请求简短标题。默认沿用首轮模型，可用 `RESEARCH_AGENT_TITLE_MODEL` 指定已开放的小模型；`RESEARCH_AGENT_TITLE_TIMEOUT_SECONDS` 默认 15 秒。额外调用计入 Token 额度，手动改名优先，失败保留临时标题。生产发布前需运行 PostgreSQL schema v7 迁移。行为和本地验证见 [自动命名说明](../docs/verification/2026-10-05-session-titles.md)。
+**对话自动命名（2026-10-05）：** 新前端对话在首个完整回复完成后独立请求简短标题。默认沿用首轮模型，可用 `RESEARCH_AGENT_TITLE_MODEL` 指定已开放的小模型；`RESEARCH_AGENT_TITLE_TIMEOUT_SECONDS` 默认 15 秒。额外调用计入 Token 额度，手动改名优先，失败保留临时标题。生产发布前需运行 PostgreSQL schema v7 迁移。行为和本地验证见 [自动命名说明](../../docs/verification/2026-10-05-session-titles.md)。
 
 ## 代码目录
 
@@ -21,7 +21,7 @@
 ## 启动
 
 ```bash
-cd new_backend
+cd apps/api
 python -m pip install -e ".[dev]"
 python -m uvicorn app.main:app --host 127.0.0.1 --port 18080
 ```
@@ -36,7 +36,7 @@ Pi 持久库用 SQLite `PRAGMA user_version` 标记当前核心 schema 版本为
 - `RESEARCH_AGENT_MODE=mock`（默认）：`POST /api/v1/auth/demo` 按邮箱颁发进程内演示令牌，其他 mock 路由按用户隔离。
 - `RESEARCH_AGENT_MODE=live`：关闭演示登录。浏览器只调用 Python 的 `/api/v1/auth/login`、`/refresh`、`/logout`、`/google/start`、`/signup`、`/verify` 和密码找回/更新接口；Python 向 Supabase Auth 交换 JWT 并验证用户。Refresh Token 放在 HttpOnly Cookie，JWT 保存在浏览器内存。依赖 Refresh Cookie 的写请求会先读取 `GET /api/v1/auth/csrf`，再携带 `X-CSRF-Token`；Python 将短期签名令牌绑定到当前 Refresh Token，并严格校验请求 `Origin` 是否等于 `RESEARCH_AGENT_FRONTEND_URL`。令牌只保存在前端内存且响应禁止缓存。生产环境应单独配置至少 32 字符的 `RESEARCH_AGENT_AUTH_CSRF_SECRET`；兼容升级期间未配置时暂时复用 `RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET`。只启用认证时仅需服务端的 `SUPABASE_URL` 和 `SUPABASE_PUBLISHABLE_KEY`。live 启动时验证 Supabase URL；Pi 模式还验证模型网关 URL，拒绝非 HTTP(S)、嵌入凭据或查询参数，允许本机自托管 HTTP 地址。未部署的 MCP 与 AF3 默认关闭。Google OAuth state 存在 `RESEARCH_AGENT_DB_PATH` 的 SQLite 文件中；多个实例必须共享这一数据库。
 
-本机固定版本 Supabase Docker 配置、验证码邮件服务及启动命令见 [`../infra/supabase/PSKIT.md`](../infra/supabase/PSKIT.md)。本地 `new_backend/.env` 当前配置 Supabase 认证、Pi Agent 和 AF3 callback；服务由 `deploy/systemd/pskit-new-backend.service` 加载该文件。手动运行时需使用 `uvicorn --env-file .env`。`new_frontend/.env.local` 对应 `VITE_AUTH_MODE=supabase`。两份文件均被 Git 忽略，真实凭据不会进入仓库。
+本机固定版本 Supabase Docker 配置、验证码邮件服务及启动命令见 [`../../infra/supabase/PSKIT.md`](../../infra/supabase/PSKIT.md)。本地 `apps/api/.env` 配置 Supabase 认证、Pi Agent 和 AF3 callback；服务模板位于 `deploy/systemd/pskit-new-backend.service`。手动运行时需使用 `uvicorn --env-file .env`。`apps/web/.env.local` 对应 `VITE_AUTH_MODE=supabase`。两份文件均被 Git 忽略，真实凭据不会进入仓库。
 
 游客在 mock 模式可通过 `POST /api/v1/auth/anonymous` 创建身份，再以 `POST /api/v1/auth/upgrade/email` 绑定新邮箱、`POST /api/v1/auth/upgrade/email/verify` 输入验证码；mock 验证码固定为 `000000`，仅供接口联调。live 模式的匿名入口默认关闭；启用时须配置 `RESEARCH_AGENT_ANONYMOUS_ENABLED=true`、Supabase 匿名登录、Turnstile CAPTCHA 和共享限速密钥。前端另配公开的 `VITE_TURNSTILE_SITE_KEY`；Turnstile 验证密钥只保存在 Supabase。Python 将前端的一次性 CAPTCHA 令牌提交给 Supabase Auth，浏览器不直接调用 Supabase。邮箱升级由 Python 使用当前游客令牌调用 Supabase 用户邮箱更新及 `email_change` OTP 验证，验证成功后必须确认用户 ID 不变且 `is_anonymous=false` 才更新会员等级。Supabase 项目需启用手动身份关联和邮件确认，并把 Email Change 邮件模板设置为包含可输入的六位验证码；关闭邮件自动确认，否则可能跳过所需的验证码步骤。用户随后可通过 `/api/v1/auth/password/update` 设置密码。本机自托管 Supabase 已完成普通邮箱注册、验证码确认及登录联调；游客邮箱升级仍需启用 CAPTCHA 后单独联调。参见 [Supabase 匿名用户升级说明](https://supabase.com/docs/guides/auth/auth-anonymous)及 [CAPTCHA 配置说明](https://supabase.com/docs/guides/auth/auth-captcha)。
 
@@ -47,14 +47,14 @@ Pi 持久库用 SQLite `PRAGMA user_version` 标记当前核心 schema 版本为
 Agent 可独立选择运行模式。默认 `RESEARCH_AGENT_RUNTIME=mock` 保留第一阶段的模拟回复，AF3 mock 由 Python 后台自动推进并产生 Run 事件。设置 `RESEARCH_AGENT_RUNTIME=pi` 后，聊天由 Pi RPC 执行，AF3 mock 完成时自动唤醒同一 Pi 会话。该模式需要 Pi CLI 和可用的模型凭据：
 
 ```bash
-cd new_backend/pi
+cd apps/api/pi
 npm ci --ignore-scripts
 cd ..
 RESEARCH_AGENT_RUNTIME=pi RESEARCH_AGENT_PI_PROVIDER=deepseek RESEARCH_AGENT_PI_MODEL=deepseek-chat \
   python -m uvicorn app.main:app --host 127.0.0.1 --port 18080
 ```
 
-模型密钥只放服务端环境变量。mock 身份模式下，Pi 可按 `RESEARCH_AGENT_PI_PROVIDER` 和 `RESEARCH_AGENT_PI_MODEL` 选择现有模型。live 身份 + Pi 模式可使用服务端 `MODEL_GATEWAY_BASE_URL`、`MODEL_GATEWAY_MODEL` 和 `MODEL_GATEWAY_API_KEY` 连接 OpenAI 兼容入口，例如 LiteLLM、New API 或直连提供方；Pi 请求先到 Python 的 `/internal/model/v1/chat/completions`，只持有当前 Run 的临时凭据，真实网关密钥不会传给 Pi 或浏览器。设置 `MODEL_GATEWAY_KIND=litellm` 后，代理按 Run 的可信归属用户填充 LiteLLM `user` 字段和 `x-litellm-end-user-id`，供用户费用归属与预算使用；本机部署、团队虚拟密钥和预算建立步骤见 [`../infra/litellm/README.md`](../infra/litellm/README.md)。旧的 `NEW_API_BASE_URL` 与 `NEW_API_MODEL` 暂时可作为网关地址和模型名的兼容别名，但密钥统一使用 `MODEL_GATEWAY_API_KEY`；`NEW_API_USER_TOKENS_JSON` 非空时启动会拒绝。没有可用密钥时，发消息会返回 `MODEL_NOT_CONFIGURED`，不会先扣额度。若 FastAPI 不在 18080 端口，设置 `RESEARCH_AGENT_INTERNAL_API_URL` 为它可从 Pi 子进程访问的地址。Pi 的安装版本固定在 `pi/package-lock.json`。本机回环网关替身已验证真实 Pi CLI 的 MCP 工具调用、工具结果回传、AF3 提交后停止和同一会话的 `/pskit_resume`。A6000 真实 AF3 计算已在隔离数据库中完成端到端烟测；现有 live 用户账号与 Pi 自动唤醒尚未做真实 AF3 端到端验证。
+模型密钥只放服务端环境变量。mock 身份模式下，Pi 可按 `RESEARCH_AGENT_PI_PROVIDER` 和 `RESEARCH_AGENT_PI_MODEL` 选择现有模型。live 身份 + Pi 模式可使用服务端 `MODEL_GATEWAY_BASE_URL`、`MODEL_GATEWAY_MODEL` 和 `MODEL_GATEWAY_API_KEY` 连接 OpenAI 兼容入口，例如 LiteLLM、New API 或直连提供方；Pi 请求先到 Python 的 `/internal/model/v1/chat/completions`，只持有当前 Run 的临时凭据，真实网关密钥不会传给 Pi 或浏览器。设置 `MODEL_GATEWAY_KIND=litellm` 后，代理按 Run 的可信归属用户填充 LiteLLM `user` 字段和 `x-litellm-end-user-id`，供用户费用归属与预算使用；本机部署、团队虚拟密钥和预算建立步骤见 [`../../infra/litellm/README.md`](../../infra/litellm/README.md)。旧的 `NEW_API_BASE_URL` 与 `NEW_API_MODEL` 暂时可作为网关地址和模型名的兼容别名，但密钥统一使用 `MODEL_GATEWAY_API_KEY`；`NEW_API_USER_TOKENS_JSON` 非空时启动会拒绝。没有可用密钥时，发消息会返回 `MODEL_NOT_CONFIGURED`，不会先扣额度。若 FastAPI 不在 18080 端口，设置 `RESEARCH_AGENT_INTERNAL_API_URL` 为它可从 Pi 子进程访问的地址。Pi 的安装版本固定在 `pi/package-lock.json`。本机回环网关替身已验证真实 Pi CLI 的 MCP 工具调用、工具结果回传、AF3 提交后停止和同一会话的 `/pskit_resume`。A6000 真实 AF3 计算已在隔离数据库中完成端到端烟测；现有 live 用户账号与 Pi 自动唤醒尚未做真实 AF3 端到端验证。
 
 Pi 子进程提前退出或 RPC 超时时，首次 Run 在没有新工具副作用的前提下由 SQLite 队列退避重试，最多执行三次。`run.retrying` 会提示前端清除上一尝试的流式残留；工具已启动则失败关闭，模型限流耗尽后也不会在 Python 再重放整轮。AF3 完成后的恢复同样最多尝试三次，第三次中断会写入 `PI_RESUME_FAILED` 终态。该重试保证仅适用于共用同一 SQLite 文件的实例。
 
@@ -109,7 +109,7 @@ Pi 模式在请求入口按用户文本、选中 Skill 和附件上下文长度�
 | `pi/` | 固定版本的 Pi CLI、系统提示与 AF3 工具扩展 |
 | `tests/` | 公共 HTTP、SSE、配额与适配器测试 |
 
-HTTP 与 SSE 事件契约快照在 `../contracts/openapi.json` 和 `../contracts/run-event.schema.json`，更新命令：
+HTTP 与 SSE 事件契约快照在 `../../contracts/openapi.json` 和 `../../contracts/run-event.schema.json`，更新命令：
 
 ```bash
 PYTHONPATH=. python scripts/export_openapi.py

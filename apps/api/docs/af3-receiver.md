@@ -1,6 +1,6 @@
 # AF3 常驻任务接收器
 
-`new_backend` 的 SQLite `agent_jobs` 是持久任务队列，不需要额外 MQ。`scripts/af3_receiver.py` 只依赖 Python 标准库，适合放进已固定版本的 AF3 镜像。它分为两个常驻进程，部署在两个容器中，共享一个持久卷：
+`apps/api` 的 SQLite `agent_jobs` 是持久任务队列，不需要额外 MQ。`scripts/af3_receiver.py` 只依赖 Python 标准库，适合放进已固定版本的 AF3 镜像。它分为两个常驻进程，部署在两个容器中，共享一个持久卷：
 
 - **receiver**：通过后端 HTTP 领取任务、续报进度、上传产物及回传结果；领取与上传状态写入共享卷中的 SQLite journal。
 - **compute-loop**：监视共享卷内的输入文件，直接调用镜像内 `/app/alphafold/run_alphafold.py`。每个任务在同一容器内运行，不再为每次预测调用 `docker run`。
@@ -12,7 +12,7 @@
 - 镜像：`af3_mar5_jhli_2026_0923:v1`，ID `sha256:5b5b00bad590...`；没有使用 `latest`。
 - A6000 容器：`pskit-af3-receiver-cloud-20261002`、`pskit-af3-compute-real-test-20261002`。旧接收器 `pskit-af3-receiver-real-test-20261002` 已停，旧 PSKit/AF3 容器未修改。计算容器固定使用主机 GPU 3，容器内设备索引 0，最多 5 个 diffusion samples。
 - 持久目录：`/data/jhli/pskit-af3-receiver-test-20261002/spool`。计算容器只读挂载 `/home/public/database/alphafold3` 到 `/data/af3/database`，`/data/hzeng/af3/model-parameters` 到 `/data/af3/models`；进程以 UID 1006 运行。
-- 当前接收器从 A6000 的 WireGuard 地址 `10.9.8.2` 主动访问阿里云 `10.9.8.1:18184`。阿里云 Nginx 仅允许 A6000，并转发到只暴露在云端回环地址的 AF3 回调代理；代理只开放指定 worker 的 AF3 路由并校验回调密钥。新密钥放在 A6000 的 `receiver.cloud.env`（`0600`），不进入 Git。带密钥的 owned-jobs 只读请求已从 A6000 验证通过；云端测试账号的 GPU 额度仍为 0，尚未提交真实任务。云端部署记录见 [`../../deploy/agent/OPERATIONS.md`](../../deploy/agent/OPERATIONS.md)。
+- 当前接收器从 A6000 的 WireGuard 地址 `10.9.8.2` 主动访问阿里云 `10.9.8.1:18184`。阿里云 Nginx 仅允许 A6000，并转发到只暴露在云端回环地址的 AF3 回调代理；代理只开放指定 worker 的 AF3 路由并校验回调密钥。新密钥放在 A6000 的 `receiver.cloud.env`（`0600`），不进入 Git。带密钥的 owned-jobs 只读请求已从 A6000 验证通过；云端测试账号的 GPU 额度仍为 0，尚未提交真实任务。云端部署记录见 [`../../../deploy/agent/OPERATIONS.md`](../../../deploy/agent/OPERATIONS.md)。
 - 原 WSL `127.0.0.1:18080` 后端、`127.0.0.1:18084` 回调代理和 SSH 反向隧道的用户级服务定义仍保留在 `deploy/systemd/`，供本地联调使用；旧接收器停用后不再承接当前任务。计算容器和新接收器均设为 Docker `restart=unless-stopped`。断网期间本地 spool 会保留未确认结果。
 
 隔离数据库 `/tmp/pskit-af3-real-integration.sqlite3` 中的真实 AF3 小任务 `d7839662-29d9-4230-b534-c778b26bbd0e` 已完成：`simulation=false`、7 个产物、可下载的 CIF 为 12774 字节、GPU 结算 1 分钟；后端确认后远端任务目录清除。烟测使用 1 个 diffusion sample，常驻计算容器当前配置为 5 个。该任务验证了领取、真实镜像调用、进度、产物和用量回调。**现有 live 用户账号尚未提交过 AF3 任务**，Pi 在后台任务结束后的自动分析唤醒也尚未做真实模型端到端验证。

@@ -351,7 +351,7 @@ its presence and a well-formed receipt are not independent proof of enforcement.
 
 ### Local adapter implementation and adoption boundaries
 
-`new_backend/app/domain/release_admission.py` stores one durable deployment binding
+`apps/api/app/domain/release_admission.py` stores one durable deployment binding
 and hold owner in the existing private PostgreSQL schema. Component version 1 is
 installed only by the explicit migration entrypoints; application startup never runs
 DDL. Core schema version 13 and the ordinary `migrate_postgres` table set are
@@ -402,7 +402,7 @@ not a user, model or receiver credential. The private adapter config has this ex
 Keep its parent directory `0700` and file `0600`, owned by the operator. Use an
 explicit loopback IP and port. `backend_url` addresses the app directly (no `/api/v1`
 prefix); the application observation route is `/internal/release-admission`.
-The thin entry defaults to the checkout's `new_backend/.venv/bin/python`. On a host
+The thin entry defaults to the checkout's `apps/api/.venv/bin/python`. On a host
 using another approved environment, configure the command arrays with that absolute
 interpreter followed by the absolute `admission_adapter.py` path. The controller
 does not forward arbitrary interpreter environment variables and never installs a

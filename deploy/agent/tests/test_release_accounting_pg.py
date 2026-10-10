@@ -42,7 +42,7 @@ def accounting_db():
                 sql.SQL("SET search_path TO {}").format(sql.Identifier(schema))
             )
             # Exact production table definitions, not permissive substitutes or real auth/global roles.
-            migrations = rc.ROOT / "new_backend/app/db/postgres_migrations"
+            migrations = rc.ROOT / "apps/api/app/db/postgres_migrations"
             connection.execute((migrations / "001_core.sql").read_text())
             connection.execute((migrations / "002_components.sql").read_text())
             connection.execute((migrations / "004_compute.sql").read_text())

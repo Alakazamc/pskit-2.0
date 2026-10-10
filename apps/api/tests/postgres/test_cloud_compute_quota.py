@@ -21,7 +21,7 @@ from app.main import create_app
 def cloud_compute_api(pg_schema, monkeypatch, tmp_path):
     dsn, schema = pg_schema
     migrate_postgres(dsn, schema=schema)
-    template = Path(__file__).resolve().parents[3] / "deploy/agent/cloud.backend.env.example"
+    template = Path(__file__).resolve().parents[4] / "deploy/agent/cloud.backend.env.example"
     values = dict(line.split("=", 1) for line in template.read_text().splitlines()
                   if line and not line.startswith("#") and "=" in line)
     environment = render_backend(tmp_path, ["compose.postgres.yaml"], 60)

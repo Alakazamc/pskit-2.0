@@ -6,7 +6,7 @@
 
 | 组件 | 固定版本 | 发布要求 |
 | --- | --- | --- |
-| Python SDK | `opensandbox==1.1.0` | `new_backend/pyproject.toml` 锁定 |
+| Python SDK | `opensandbox==1.1.0` | `apps/api/pyproject.toml` 锁定 |
 | OpenSandbox Server | `1.1.0`，上游提交 `b1a29cf93a823a95913f7943010febb3f29de05c` | 固定 base digest 构建派生镜像并记录最终 digest |
 | execd | `1.1.0` + PSKit gVisor 兼容层 | 固定 base digest 构建派生镜像并在私有 TOML 写最终 digest |
 | egress | `1.1.7` | 私有 TOML 写完整 digest；gVisor 模式当前不启用 sidecar |

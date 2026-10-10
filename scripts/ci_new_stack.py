@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCOPES = ("new_backend", "new_frontend", "deploy/agent", "infra", "contracts", "scripts",
+SCOPES = ("apps/api", "apps/web", "deploy/agent", "infra", "contracts", "scripts",
           ".github", "deploy_to_cloud.sh", "skills/pskit-cloud-deploy")
 SAFE_ENV = ("PATH", "LANG", "LC_ALL", "TZ", "SYSTEMROOT", "WINDIR", "CI")
 
@@ -28,7 +28,7 @@ def isolated_env(directory: Path, source: Path) -> dict[str, str]:
         "HOME": str(home), "TMPDIR": str(directory),
         "XDG_CACHE_HOME": str(directory / "cache"),
         "PYTHONPYCACHEPREFIX": str(directory / "pycache"),
-        "PYTHONPATH": os.pathsep.join(map(str, (source, source / "new_backend",
+        "PYTHONPATH": os.pathsep.join(map(str, (source, source / "apps/api",
                                                source / "scripts"))),
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
         "RESEARCH_AGENT_MODE": "mock", "RESEARCH_AGENT_RUNTIME": "mock",
@@ -177,9 +177,9 @@ def main() -> None:
                 log=reports / f"{options.stage}.log" if reports else None)
 
         if options.stage == "backend":
-            link_dependencies(source, "new_backend/pi")
+            link_dependencies(source, "apps/api/pi")
             env.update(TEST_POSTGRES_DSN=dsn, PSKIT_CI_REQUIRE_POSTGRES="1")
-            backend = source / "new_backend"
+            backend = source / "apps/api"
             check([sys.executable, "-m", "ruff", "check", "app", "tests"], backend)
             check([sys.executable, "-m", "compileall", "-q", "app", "pskit_compute", "tests"],
                   backend)
@@ -203,12 +203,12 @@ def main() -> None:
                 xml = [f"--junitxml={reports / 'backend.xml'}"] if reports else []
                 check([*command, *xml, *(str(backend / target) for target in targets)])
         elif options.stage == "frontend":
-            link_dependencies(source, "new_frontend")
+            link_dependencies(source, "apps/web")
             for task in ("typecheck", "lint", "test", "build"):
-                check(["npm", "run", task], source / "new_frontend")
+                check(["npm", "run", task], source / "apps/web")
         elif options.stage == "pi":
-            link_dependencies(source, "new_backend/pi")
-            check(["node", "--test", "extension.test.js"], source / "new_backend/pi")
+            link_dependencies(source, "apps/api/pi")
+            check(["node", "--test", "extension.test.js"], source / "apps/api/pi")
         else:
             env.update(TEST_POSTGRES_DSN=dsn, PSKIT_CI_REQUIRE_POSTGRES="1")
             check([sys.executable, "-m", "pytest", "-q", "-p", "pytest_asyncio.plugin",

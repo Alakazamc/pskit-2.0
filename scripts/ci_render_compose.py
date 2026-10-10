@@ -104,7 +104,7 @@ def check_agent(model: dict, target: str, sandbox: bool = False) -> None:
     for service in services.values():
         assert all(port.get("host_ip") == "127.0.0.1" for port in service.get("ports", []))
     if target == "local":
-        assert backend["build"]["context"] == str(ROOT / "new_backend")
+        assert backend["build"]["context"] == str(ROOT / "apps/api")
         return
     assert "build" not in backend
     assert "web" not in services

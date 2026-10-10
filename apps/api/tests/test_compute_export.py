@@ -10,11 +10,11 @@ from pathlib import Path
 
 def test_export_contains_the_service_return_protocol_and_worker_receipts(tmp_path):
     root = Path(__file__).resolve().parents[1]
-    script = tmp_path / "new_backend/scripts/export_openapi.py"
+    script = tmp_path / "apps/api/scripts/export_openapi.py"
     script.parent.mkdir(parents=True)
     shutil.copyfile(root / "scripts/export_openapi.py", script)
     (tmp_path / "contracts").mkdir()
-    (tmp_path / "new_frontend/src/api").mkdir(parents=True)
+    (tmp_path / "apps/web/src/api").mkdir(parents=True)
     env = {key: value for key, value in os.environ.items()
            if not key.startswith(("RESEARCH_AGENT_", "SUPABASE_", "MODEL_GATEWAY_", "NEW_API_"))
            and key != "TEST_POSTGRES_DSN"}

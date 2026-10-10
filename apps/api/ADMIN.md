@@ -33,7 +33,7 @@ RESEARCH_AGENT_ADMIN_SERVICE_CREDENTIALS_JSON={"lab-token":"LAB_PREDICTOR_TOKEN"
 
 MCP 地址配置还需 `allowed_tools`。实际凭据写入服务器私有环境中的 `LAB_PREDICTOR_TOKEN`，不填入草稿 JSON。连接检查与 schema 检查不运行推理；schema 改变不自动修改已发布能力。通过校验的服务进入配置发布包，发布、审计和 outbox 同事务提交；已创建作业保留原能力快照。
 
-完整 HTTP 字段与分页约定见 [管理 API 契约](../docs/contracts/2026-10-04-admin-api.md)。模型提供方的 SDK 和 Completed/Pending/UsageReport 约定见 [计算服务接入](COMPUTE_SERVICES.md)。
+完整 HTTP 字段与分页约定见 [管理 API 契约](../../docs/contracts/2026-10-04-admin-api.md)。模型提供方的 SDK 和 Completed/Pending/UsageReport 约定见 [计算服务接入](COMPUTE_SERVICES.md)。
 
 ## 配额与运行管理
 
@@ -52,9 +52,9 @@ MCP 地址配置还需 `allowed_tools`。实际凭据写入服务器私有环境
 本地验收使用独立测试数据库，每条测试创建并删除随机 schema，以合成身份访问真实应用 HTTP 边界：
 
 ```bash
-cd new_backend
+cd apps/api
 export TEST_POSTGRES_DSN='<isolated-loopback-test-database-dsn>'
 PYTHONPATH=.:.. .venv/bin/python ../deploy/agent/scripts/admin_smoke.py
 ```
 
-该脚本拒绝非本机数据库地址，不调用付费模型。React 行为测试通过 HTTP 替身注入契约数据，不在页面内保留示例用户或作业。沙箱真实 Docker 生命周期另由 [沙箱部署验收](../deploy/agent/SANDBOX.md)执行。局部测试通过不等于已部署到远程 Staging 或生产。
+该脚本拒绝非本机数据库地址，不调用付费模型。React 行为测试通过 HTTP 替身注入契约数据，不在页面内保留示例用户或作业。沙箱真实 Docker 生命周期另由 [沙箱部署验收](../../deploy/agent/SANDBOX.md)执行。局部测试通过不等于已部署到远程 Staging 或生产。

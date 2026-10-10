@@ -41,11 +41,11 @@ flowchart LR
 
 | 组件 | 职责 | 代码入口 |
 | --- | --- | --- |
-| React SPA | 选择项目、会话、模型和上下文；显示消息、进度和文件 | [`new_frontend/src`](../new_frontend/src) |
+| React SPA | 选择项目、会话、模型和上下文；显示消息、进度和文件 | [`apps/web/src`](../apps/web/src) |
 | Nginx | 提供 `dist` 和 HTTPS；把 `/api/v1/` 转发给 Python；拒绝公网 `/internal/` | [`host-nginx-agent-aliyun.conf`](../deploy/agent/host-nginx-agent-aliyun.conf) |
-| FastAPI | 校验身份与归属；创建 Run；保存事件；管理 Token、GPU、文件和 AF3 Job | [`main.py`](../new_backend/app/main.py) |
-| Pi RPC | 调用模型；按当前 Run 的许可调用工具；保存同一 Session 的上下文 | [`pi_rpc.py`](../new_backend/app/adapters/live/pi_rpc.py)、[`extension.js`](../new_backend/pi/extension.js) |
-| Supabase | 邮箱身份、令牌和 Storage 服务 | [`supabase_auth.py`](../new_backend/app/adapters/live/supabase_auth.py) |
+| FastAPI | 校验身份与归属；创建 Run；保存事件；管理 Token、GPU、文件和 AF3 Job | [`main.py`](../apps/api/app/main.py) |
+| Pi RPC | 调用模型；按当前 Run 的许可调用工具；保存同一 Session 的上下文 | [`pi_rpc.py`](../apps/api/app/adapters/live/pi_rpc.py)、[`extension.js`](../apps/api/pi/extension.js) |
+| Supabase | 邮箱身份、令牌和 Storage 服务 | [`supabase_auth.py`](../apps/api/app/adapters/live/supabase_auth.py) |
 | PostgreSQL | 保存 Supabase 数据、`pskit` 业务 schema 和 LiteLLM 逻辑数据库 | [`compose.postgres.yaml`](../deploy/agent/compose.postgres.yaml) |
 | LiteLLM | 保存模型部署与提供商密钥；向后端提供模型别名 | [`compose.shared-postgres.yaml`](../infra/litellm/compose.shared-postgres.yaml) |
 | A6000 接收器 | 主动领 AF3 Job；回报进度、产物和完成状态 | [`compose.a6000-receiver.yaml`](../deploy/agent/compose.a6000-receiver.yaml) |
@@ -61,7 +61,7 @@ Python 是业务状态的来源。Pi 决定下一步调用什么工具。模型�
 5. Python 保存文本增量、工具状态和 Run 状态。浏览器从 `/api/v1/runs/{run_id}/events` 读取 SSE。断线后，浏览器用事件游标继续读取。
 6. Python 保存最终消息。浏览器通过 REST 读取持久快照。
 
-相关接口见 [`workspace.py`](../new_backend/app/api/workspace.py)和[`runs.py`](../new_backend/app/api/runs.py)。SSE 事件名和 JSON 字段是机器协议。文档的写作风格不改变协议。
+相关接口见 [`workspace.py`](../apps/api/app/api/workspace.py)和[`runs.py`](../apps/api/app/api/runs.py)。SSE 事件名和 JSON 字段是机器协议。文档的写作风格不改变协议。
 
 ## 一次 AF3 长任务
 
@@ -71,7 +71,7 @@ Python 是业务状态的来源。Pi 决定下一步调用什么工具。模型�
 4. Python 保存产物和实际状态。只有完成回报写入后，系统才确认 Job 完成。
 5. Python 在原 Session 自动唤醒 Pi。Pi 读取服务端结果并继续回答。
 
-提交 Job 不代表计算成功。模型不能把模拟结果说成真实 AF3 结果。接收器的 journal 和 spool 保存未确认回报；只有服务端确认后，接收器才能清理对应记录。代码入口见 [`internal.py`](../new_backend/app/api/internal.py)和[`agent.py`](../new_backend/app/services/agent.py)。
+提交 Job 不代表计算成功。模型不能把模拟结果说成真实 AF3 结果。接收器的 journal 和 spool 保存未确认回报；只有服务端确认后，接收器才能清理对应记录。代码入口见 [`internal.py`](../apps/api/app/api/internal.py)和[`agent.py`](../apps/api/app/services/agent.py)。
 
 ## 数据与权限
 
@@ -89,12 +89,12 @@ Python 是业务状态的来源。Pi 决定下一步调用什么工具。模型�
 
 | 目录 | 内容 |
 | --- | --- |
-| `new_frontend/` | React、Vite、TypeScript 前端 |
-| `new_backend/app/api/` | HTTP 与 SSE 接口 |
-| `new_backend/app/services/` | Agent 执行和模型目录 |
-| `new_backend/app/domain/` | 会话、任务、配额、目录规则 |
-| `new_backend/app/adapters/` | Supabase、Pi、MCP 与替身适配器 |
-| `new_backend/pi/` | Pi 扩展、系统提示和固定依赖 |
-| `new_backend/skills/` | Skill 清单与说明 |
+| `apps/web/` | React、Vite、TypeScript 前端 |
+| `apps/api/app/api/` | HTTP 与 SSE 接口 |
+| `apps/api/app/services/` | Agent 执行和模型目录 |
+| `apps/api/app/domain/` | 会话、任务、配额、目录规则 |
+| `apps/api/app/adapters/` | Supabase、Pi、MCP 与替身适配器 |
+| `apps/api/pi/` | Pi 扩展、系统提示和固定依赖 |
+| `apps/api/skills/` | Skill 清单与说明 |
 | `infra/supabase/`、`infra/litellm/` | 认证、数据库与模型网关配置 |
 | `deploy/agent/` | Compose、Nginx 与运维脚本 |

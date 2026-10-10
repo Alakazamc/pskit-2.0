@@ -110,10 +110,10 @@ bash deploy/agent/stack.sh logs agent
 
 ```bash
 docker build --label org.opencontainers.image.revision="$COMMIT" \
-  -f deploy/agent/backend.Dockerfile -t "$IMAGE" new_backend
+  -f deploy/agent/backend.Dockerfile -t "$IMAGE" apps/api
 ```
 
-Python runtime packages are constrained by [`new_backend/requirements.lock`](../../new_backend/requirements.lock). Keep that lock aligned with the qualified production dependency set; do not let an image build silently upgrade packages from the open lower bounds in `pyproject.toml`.
+Python runtime packages are constrained by [`apps/api/requirements.lock`](../../apps/api/requirements.lock). Keep that lock aligned with the qualified production dependency set; do not let an image build silently upgrade packages from the open lower bounds in `pyproject.toml`.
 
 WSL NAT 访问 Docker Hub、PyPI 或 npm 较慢时，可以只替换下载入口，不改变依赖版本：
 
@@ -125,25 +125,25 @@ docker build --label org.opencontainers.image.revision="$COMMIT" \
   --build-arg DEBIAN_SECURITY_MIRROR=https://mirrors.aliyun.com/debian-security \
   --build-arg NODE_BASE_IMAGE="$PSKIT_NODE_BASE_IMAGE" \
   --build-arg PYTHON_BASE_IMAGE="$PSKIT_PYTHON_BASE_IMAGE" \
-  -f deploy/agent/backend.Dockerfile -t "$IMAGE" new_backend
+  -f deploy/agent/backend.Dockerfile -t "$IMAGE" apps/api
 ```
 
 两个基础镜像参数必须指向已经核对过 image ID 的固定镜像引用，不能使用 `latest`。未配置可信基础镜像缓存时省略这两个参数，继续使用 Dockerfile 中的官方 digest。PyPI、npm 与 Debian 镜像参数只接受不含账号、Token 或密码的公开 HTTPS 地址；构建参数会进入镜像历史。构建后记录 image ID、完整 revision label，并与上一生产镜像比较 `pip freeze`；镜像源变化不能作为依赖版本变化的理由。
 
 ## 3. 前端和 Nginx
 
-执行主机：阿里云。执行条件：`new_frontend` 的依赖已锁定；`agent.bioailab.net` 的 TLS 证书可用。
+执行主机：阿里云。执行条件：`apps/web` 的依赖已锁定；`agent.bioailab.net` 的 TLS 证书可用。
 
 在仓库根目录生成前端静态文件：
 
 ```bash
-cd new_frontend
+cd apps/web
 npm ci
 VITE_AUTH_MODE=supabase VITE_API_BASE_URL=/api/v1 \
 VITE_TURNSTILE_SITE_KEY='<public-site-key>' npm run build
 ```
 
-产物是 `new_frontend/dist`。由有权限的运维进程把本次**完整且已核对**的产物发布到 `/var/www/agent.bioailab.net`。生产 Nginx 使用 [`host-nginx-agent-aliyun.conf`](host-nginx-agent-aliyun.conf)：`/api/v1/` 转到本机 Python，`/internal/` 返回 404，其余路径由 SPA 处理。发布静态文件时无需启动 `web` 容器。
+产物是 `apps/web/dist`。由有权限的运维进程把本次**完整且已核对**的产物发布到 `/var/www/agent.bioailab.net`。生产 Nginx 使用 [`host-nginx-agent-aliyun.conf`](host-nginx-agent-aliyun.conf)：`/api/v1/` 转到本机 Python，`/internal/` 返回 404，其余路径由 SPA 处理。发布静态文件时无需启动 `web` 容器。
 
 生产构建必须显式使用阿里云 `cloud.env` 中现有的公共 `TURNSTILE_SITE_KEY`，不能沿用本地 `.env.local` 的测试站点 key。发布前比较 key 的 SHA256 与制品 manifest，并检查它确实存在于本次 JS assets 中。Cloudflare `1x000…`、`2x000…`、`3x000…` 测试 key 只用于本地或 Staging。校验失败时保留原生产 `index.html`，先重新构建静态制品，不重建后端或数据库。
 
@@ -166,7 +166,7 @@ systemctl reload nginx
 
 上述保护通过 canary 后，才把 Supabase 私有环境中的 `CLOUD_DISABLE_SIGNUP` 与 `DISABLE_SIGNUP` 改为 `false`。发生误拦截时，先把 Nginx 恢复为 dry-run，再把 Python 恢复为 observe；不要放宽普通 API、SSE、上传和管理入口。此阶段不启用阿里云付费 DDoS/WAF。
 
-管理员页面 `/admin` 和管理 API `/api/v1/admin` 只允许源地址为 WireGuard `10.9.8.0/24` 的连接。修改现有生产配置时，在阿里云 root 会话运行 `bash deploy/agent/scripts/install_private_admin_ingress.sh`；脚本先备份原配置，验证 Nginx 并探测公网拒绝、私网可达，失败则恢复原配置。浏览器需先连接 WireGuard，并在浏览器所在机器将 `agent.bioailab.net` 临时解析到 `10.9.8.1`，这样 HTTPS 证书与域名仍匹配。断开 WireGuard 后移除该临时解析。管理角色还需按 [管理台手册](../../new_backend/ADMIN.md)授予已验证账号；接入私网本身不会授予权限。
+管理员页面 `/admin` 和管理 API `/api/v1/admin` 只允许源地址为 WireGuard `10.9.8.0/24` 的连接。修改现有生产配置时，在阿里云 root 会话运行 `bash deploy/agent/scripts/install_private_admin_ingress.sh`；脚本先备份原配置，验证 Nginx 并探测公网拒绝、私网可达，失败则恢复原配置。浏览器需先连接 WireGuard，并在浏览器所在机器将 `agent.bioailab.net` 临时解析到 `10.9.8.1`，这样 HTTPS 证书与域名仍匹配。断开 WireGuard 后移除该临时解析。管理角色还需按 [管理台手册](../../apps/api/ADMIN.md)授予已验证账号；接入私网本身不会授予权限。
 
 ## 4. A6000 通用 MCP 与 AF3
 
@@ -219,7 +219,7 @@ Tools AF3 使用独立的 `af3-mcp` 服务密钥和 `af3-mcp-key` 凭据引用�
 
 服务绑定通过 `artifact_tool` 明确选择 `pskit.artifacts.read`。接收器按至多 512 KiB 的块读取文件，校验大小和 SHA256，将完整文件存入既有 PostgreSQL blob 表；文件提交和结果提交都收到回执后才清理 outbox。限制为每文件 64 MiB、每 Job 256 MiB、128 个文件。拥有者只能下载终态报告声明且实际存储匹配的文件。
 
-CORAL 的提供端安装器位于 `new_backend/integrations/coral/install_artifacts.py`。重启提供端时使用同目录的 `launch_artifact_server.py`，显式提供 Python 和 Foldseek 路径；保留 `.pskit-mcp.runtime.env` 中的原有模块路径，并将 workspace 规范为绝对路径。确认没有模型调用执行中，再重启本项目的 MCP PID。不要替换其他人的服务或模型实现。
+CORAL 的提供端安装器位于 `apps/api/integrations/coral/install_artifacts.py`。重启提供端时使用同目录的 `launch_artifact_server.py`，显式提供 Python 和 Foldseek 路径；保留 `.pskit-mcp.runtime.env` 中的原有模块路径，并将 workspace 规范为绝对路径。确认没有模型调用执行中，再重启本项目的 MCP PID。不要替换其他人的服务或模型实现。
 
 CORAL 一次生成会从 RCSB 读取 mmCIF。提供端不能直连 RCSB 时，在私有 `.pskit-mcp.runtime.env` 中配置已验收的 `HTTPS_PROXY`；例如当前 4090 使用本机 SOCKS 代理 `socks5h://127.0.0.1:1080`。先用 CORAL 实际 Python 环境下载一个公开 mmCIF 并核对 HTTP 200 和非空内容，再重启 MCP。不要把代理凭据写入仓库；如代理同时承载内网流量，设置 `NO_PROXY` 保留 localhost、WireGuard 和模型内网地址。代理不可达时应让任务明确失败，不得回退到未审核的公共转发服务。
 
@@ -239,7 +239,7 @@ AF3 旧计算器只有取整 GPU 分钟，映射为 `gpu_device_ms` 时标为 `e
 python deploy/agent/scripts/prepare_staging.py \
   /home/ecs-user/pskit-agent-staging-private \
   --backend-image 'pskit-agent-backend:<固定发布标签>' \
-  --frontend-dist /path/to/new_frontend/dist
+  --frontend-dist /path/to/apps/web/dist
 STAGING_CONFIG_DIR=/home/ecs-user/pskit-agent-staging-private \
   bash deploy/agent/staging.sh up
 STAGING_CONFIG_DIR=/home/ecs-user/pskit-agent-staging-private \

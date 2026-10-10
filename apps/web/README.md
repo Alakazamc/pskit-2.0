@@ -1,15 +1,15 @@
 # Research Agent 前端
 
-独立的 React + Vite + TypeScript SPA。前端始终通过 `/api/v1` 调用 HTTP 接口；开发时由 `new_backend/` 的 mock 模式提供同一份 API 契约，不在浏览器里复制任务和配额逻辑。
+独立的 React + Vite + TypeScript SPA。前端始终通过 `/api/v1` 调用 HTTP 接口；开发时由 `apps/api/` 的 mock 模式提供同一份 API 契约，不在浏览器里复制任务和配额逻辑。
 
-新版前后端的独立 Docker 联调启动与验证命令见 [`../deploy/agent/README.md`](../deploy/agent/README.md)。该入口运行 Python/Pi 与模型替身，网页地址为 <http://127.0.0.1:18085>。
+新版前后端的独立 Docker 联调启动与验证命令见 [`../../deploy/agent/README.md`](../../deploy/agent/README.md)。该入口运行 Python/Pi 与模型替身，网页地址为 <http://127.0.0.1:18085>。
 
 ## 启动
 
 先启动 mock API：
 
 ```bash
-cd new_backend
+cd apps/api
 python -m pip install -e ".[dev]"
 python -m uvicorn app.main:app --host 127.0.0.1 --port 18080
 ```
@@ -17,7 +17,7 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 18080
 再启动前端：
 
 ```bash
-cd new_frontend
+cd apps/web
 npm ci
 npm run dev
 ```
@@ -41,7 +41,7 @@ VITE_API_BASE_URL=/api/v1
 
 Python 后端切换到 Pi 模式时，前端的 `ResearchApi` 接口和页面都不需要修改。
 
-HTTP 类型从 `../contracts/openapi.json` 生成：后端改动后，先在 `new_backend/` 执行 `PYTHONPATH=. python scripts/export_openapi.py`，再在本目录执行 `npm run generate:api`。生成文件位于 `src/api/generated/`，身份、项目、会话、用量、文件与产物 DTO 已在 `src/api/types.ts` 中复用，部分路由响应由 `src/api/contract-typecheck.ts` 检查。SSE 事件仍使用独立的 `../contracts/run-event.schema.json` 与手写前端判别式类型。
+HTTP 类型从 `../../contracts/openapi.json` 生成：后端改动后，在仓库根目录下进入 `apps/api/` 执行 `PYTHONPATH=. python scripts/export_openapi.py`，再进入 `apps/web/` 执行 `npm run generate:api`。生成文件位于 `src/api/generated/`，身份、项目、会话、用量、文件与产物 DTO 已在 `src/api/types.ts` 中复用，部分路由响应由 `src/api/contract-typecheck.ts` 检查。SSE 事件仍使用独立的 `../../contracts/run-event.schema.json` 与手写前端判别式类型。
 
 真实身份模式使用：
 

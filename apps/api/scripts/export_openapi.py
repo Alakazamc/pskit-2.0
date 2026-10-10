@@ -75,7 +75,7 @@ def render_event_types(schema: dict) -> str:
 
 
 def main() -> None:
-    directory = Path(__file__).resolve().parents[2] / "contracts"
+    directory = Path(__file__).resolve().parents[3] / "contracts"
     event_schema = TypeAdapter(RunEvent).json_schema()
     compute_schema = TypeAdapter(ComputeServiceManifest | ComputeJob | ExecutionBindingSnapshot
                                  | ExecutionGrant
@@ -88,7 +88,7 @@ def main() -> None:
         (directory / name).write_text(
             json.dumps(schema, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
-    frontend_types = directory.parent / "new_frontend" / "src" / "api" / "generated-events.ts"
+    frontend_types = directory.parent / "apps/web" / "src" / "api" / "generated-events.ts"
     frontend_types.write_text(render_event_types(event_schema), encoding="utf-8")
     compute_types = ["// Generated from contracts/compute.schema.json. Do not edit by hand.", ""]
     for name, definition in compute_schema["$defs"].items():

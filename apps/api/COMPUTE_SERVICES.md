@@ -6,7 +6,7 @@
 
 保留原模型环境、权重、启动方式和用量采集。把函数或已有 HTTP/MCP 的结果适配为 `ExecutionReport`，提交服务 manifest 和实际成功/失败/Pending 样例。SDK 只负责输入 Schema、可信执行上下文、返回校验和接收器持久化，**不自动测量远程 CPU/GPU**。
 
-当前 SDK 随 Python 后端包发布：在模型环境中安装 `new_backend/` 或其 wheel，然后 `from pskit_compute import ...`。它不是独立发布到 PyPI 的轻量依赖包；独立分包可后续完成。支持 Python 3.12+，MCP 保持项目 `>=1.26,<2`。
+当前 SDK 随 Python 后端包发布：在模型环境中安装 `apps/api/` 或其 wheel，然后 `from pskit_compute import ...`。它不是独立发布到 PyPI 的轻量依赖包；独立分包可后续完成。支持 Python 3.12+，MCP 保持项目 `>=1.26,<2`。
 
 ```python
 from pskit_compute import Completed, ComputeBudget, ComputeService, UsageReport
@@ -24,7 +24,7 @@ async def predict(sequence: str):
                           source="service_reported"))
 ```
 
-模型函数需要领域输入的类型注解。可选 `ctx: ExecutionContext` 不进入工具输入 Schema；owner/run/grant 等身份由平台绑定。同步函数在线程执行，异步函数正常 await，不要求改模型框架。`new_backend/examples/compute_service.py` 展示包含已消耗用量的失败处理。
+模型函数需要领域输入的类型注解。可选 `ctx: ExecutionContext` 不进入工具输入 Schema；owner/run/grant 等身份由平台绑定。同步函数在线程执行，异步函数正常 await，不要求改模型框架。`apps/api/examples/compute_service.py` 展示包含已消耗用量的失败处理。
 
 `service.manifest()` 生成草稿。运营人员检查并通过服务器配置注册已批准版本；用户不能注册或改写服务版本。版本不可原地更改，输入/输出/策略变化要增加 version。`service.validate(capability_id, report)` 提供与后端相同的返回验收检查，后续管理台 Test 可复用；本轮没有新管理页面。
 
@@ -120,7 +120,7 @@ python scripts/compute_receiver.py \
 
 ## 7. 可复现验收
 
-使用现有 `deploy/agent/tests/compose.pg17.test.yaml` 的固定镜像 `supabase/postgres:17.6.1.136`，独立临时测试 schema 自动清理。按 `new_backend/` 工作目录运行：
+使用现有 `deploy/agent/tests/compose.pg17.test.yaml` 的固定镜像 `supabase/postgres:17.6.1.136`，独立临时测试 schema 自动清理。按 `apps/api/` 工作目录运行：
 
 ```bash
 TEST_POSTGRES_DSN='postgresql://postgres:pskit-test-only@127.0.0.1:15433/postgres' \
@@ -129,4 +129,4 @@ TEST_POSTGRES_DSN='postgresql://postgres:pskit-test-only@127.0.0.1:15433/postgre
 
 也可运行 `python deploy/agent/scripts/compute_smoke.py`（从仓库根目录；仍需 TEST_POSTGRES_DSN）。它执行实际本地 CPU 函数、HTTP 控制、中央 PostgreSQL、丢 ACK 重启、配额拒绝和 Pi 路径测试。CPU 示例只在测试 schema；不向生产导入测试数据。真实 Pi RPC 使用本地替身模型，无付费 LLM 调用；GPU 只验协议，不宣称 A6000/CUDA 计量或硬停止已验收。
 
-协议文件：`contracts/openapi.json`、`contracts/compute.schema.json`；前端类型从同一 Python schema 生成于 `new_frontend/src/api/generated-compute.ts`。
+协议文件：`contracts/openapi.json`、`contracts/compute.schema.json`；前端类型从同一 Python schema 生成于 `apps/web/src/api/generated-compute.ts`。

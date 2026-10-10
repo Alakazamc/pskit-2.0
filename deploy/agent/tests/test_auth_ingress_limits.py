@@ -24,7 +24,7 @@ def test_cloud_gotrue_has_explicit_inner_limits_and_signup_stays_closed_by_defau
 
 def test_backend_examples_require_server_only_auth_protection_values():
     cloud = (AGENT / "cloud.backend.env.example").read_text()
-    generic = (ROOT / "new_backend/.env.example").read_text()
+    generic = (ROOT / "apps/api/.env.example").read_text()
     for key in (
         "RESEARCH_AGENT_AUTH_ABUSE_MODE",
         "RESEARCH_AGENT_AUTH_RATE_LIMIT_SECRET",
@@ -36,4 +36,4 @@ def test_backend_examples_require_server_only_auth_protection_values():
         assert key in cloud
         assert key in generic
     assert "replace-with" in cloud
-    assert "TURNSTILE_SECRET_KEY=" not in (ROOT / "new_frontend/.env.example").read_text()
+    assert "TURNSTILE_SECRET_KEY=" not in (ROOT / "apps/web/.env.example").read_text()

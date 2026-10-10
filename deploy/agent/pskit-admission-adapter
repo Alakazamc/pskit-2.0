@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 agent_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_dir=$(cd -- "$agent_dir/../.." && pwd)
-adapter_python=${PSKIT_ADMISSION_PYTHON:-"$repo_dir/new_backend/.venv/bin/python"}
+adapter_python=${PSKIT_ADMISSION_PYTHON:-"$repo_dir/apps/api/.venv/bin/python"}
 if [[ "$adapter_python" != /* || ! -x "$adapter_python" ]]; then
   echo 'An absolute approved Python interpreter is required' >&2
   exit 1

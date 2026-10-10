@@ -125,13 +125,14 @@
 
 ## Phase 6 — 独立纯目录迁移（R-01）
 
-- [ ] 检查Phase1–5门禁、全部引用/Compose等价和现行回滚路径；形成迁移前source-bind/import清单。
-- [x] 风险仍高则保留new_backend/new_frontend（规格明确允许），只补归档索引与未来映射，标迁移Gate pending，不能把准备当已搬迁。
-- [ ] 条件满足才在独立纯迁移提交将新栈搬apps/api、apps/web；同时只改路径/import/workdir/COPY/tests/contracts/export引用，不改业务函数。
-- [ ] 旧栈需先证明引用方迁好，再归档legacy；不物理删除历史/运维恢复工具。
-- [ ] 全套本地CI/Compose/build/import/smoke验证，diff以rename/path变动为主。
+- [x] 检查Phase1–5门禁、活动源码/Compose/CI引用及本地回滚路径，形成路径清单；云端真实 source-bind 未读取，单独保留外部 Gate。
+- [x] 在独立纯迁移中将新版源码 `new_backend/`、`new_frontend/` 移到 `apps/api/`、`apps/web/`；只改路径、测试辅助根路径、工作目录、COPY、契约导出及文档入口，没有改业务函数或公开 API。
+- [x] 更新新栈 CI、Compose、Docker 构建 context、Pi/Python 相对路径和本地数据忽略规则；本地 `.env`、`.venv`、SQLite/Pi 会话、`node_modules`、`dist` 均留在新目录且未进入 Git。
+- [ ] 旧栈 `backend/`、`frontend/` 归档；旧 workflow/恢复工具仍有有效用途，保持原位直到引用迁完。
+- [x] 本地 backend/frontend/Pi CI、9 种 Compose layout、路径/导入测试及 `apps/api` 构建和隔离镜像 smoke 通过；详细结果见 [Phase 6 验证](phases/phase-6/VERIFICATION.md)。
+- [ ] 阿里云 source-bind、真实 Staging 同制品和云端 rollback 验收；未部署、未 push。
 
-**Rollback:** revert纯路径提交或旧完整checkout构建制品；现行云端source-binds不在本轮改动，生产路径切换需另授权。
+**Rollback:** revert纯路径迁移提交；忽略的本地环境和数据不会自动随 Git 移回，需按 [Phase 6 回退手册](phases/phase-6/MIGRATION_AND_ROLLBACK.md) 先安全搬回。现行云端 source-binds 未修改，生产路径切换需单独授权。
 
 ## Phase 7 — 运维入口与受控发布准备（D/R/X）
 
@@ -157,4 +158,8 @@ Phase1前端与部署可并行、文件不交叉；完成后Phase2由CI负责人
 
 ## 授权继续后的本地适配器
 
-用户随后授权继续，按[补充计划](phases/phase-7/ADAPTER_IMPLEMENTATION_PLAN.md)完成真实持久准入、接收器观察、MCP/PDF及管理资格执行保护与首持久增量修复；最新验证见[续作证据](phases/phase-7/ADAPTER_VERIFICATION.md)。上一节的“适配器未执行”是第一轮交接状态；现在本地实现完成，独立宿主资格、真实Staging/Pending/回退/RPO/RTO仍未执行。纯目录迁移继续独立且 pending。
+用户随后授权继续，按[补充计划](phases/phase-7/ADAPTER_IMPLEMENTATION_PLAN.md)完成真实持久准入、接收器观察、MCP/PDF及管理资格执行保护与首持久增量修复；最新验证见[续作证据](phases/phase-7/ADAPTER_VERIFICATION.md)。上一节的“适配器未执行”是第一轮交接状态；现在本地实现完成，独立宿主资格、真实Staging/Pending/回退/RPO/RTO仍未执行。
+
+## Phase 6 续作（2026-10-10）
+
+用户授权继续后，本地新版目录迁移现已完成。backend `1204 passed / 1 external Supabase integration skipped`（PG232 零跳过）；frontend 387 测试及 typecheck/lint/build 通过；Pi 通过；部署契约在 Snap 兼容的仓库临时路径运行 446 passed/1 skipped，原要求 `/tmp` 的 staging Nginx 文件另跑 4 passed；`apps/api` context 镜像构建及隔离 runtime smoke 通过。详见[迁移摘要](phases/phase-6/CHANGE_SUMMARY.md)和[验证记录](phases/phase-6/VERIFICATION.md)。旧栈归档、云端 source-bind、Staging/生产 rollback 仍待验收；本轮未 push 或部署。

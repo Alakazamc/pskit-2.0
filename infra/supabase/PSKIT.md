@@ -11,7 +11,7 @@
 | Postgres 会话池 | `127.0.0.1:15432` | 仅本机管理用途 |
 | Postgres 事务池 | `127.0.0.1:16543` | 仅本机管理用途 |
 
-运行中的本地密钥在本目录被 Git 忽略的 `.env`；Python 使用 `new_backend/.env` 中的 publishable key，前端只使用 `new_frontend/.env.local` 中的公开模式配置。不要把 Supabase secret key、service role key 或数据库密码放进前端环境文件。PSKit 目前只把 Supabase 当身份服务；应用数据仍由 Python 管理。当前 mock Agent 模式使用进程内存，切换到 Pi 运行时才使用 SQLite 持久会话。
+运行中的本地密钥在本目录被 Git 忽略的 `.env`；Python 使用 `apps/api/.env` 中的 publishable key，前端只使用 `apps/web/.env.local` 中的公开模式配置。不要把 Supabase secret key、service role key 或数据库密码放进前端环境文件。PSKit 目前只把 Supabase 当身份服务；应用数据仍由 Python 管理。当前 mock Agent 模式使用进程内存，切换到 Pi 运行时才使用 SQLite 持久会话。
 
 首次在另一台机器配置时，先从 `.env.example` 创建权限为 `0600` 的 `.env`，运行官方 `utils/generate-keys.sh --update-env` 和 `utils/add-new-auth-keys.sh --update-env`，再设置 `COMPOSE_FILE=docker-compose.yml:compose.pskit.yaml`、本页端口对应的 `SUPABASE_PUBLIC_URL` / `API_EXTERNAL_URL`、前端 `SITE_URL`，以及 `SMTP_HOST=mailpit`、`SMTP_PORT=1025`。当前机器已生成独立密钥。不要把另一套 `szutk-supabase` 的数据库或凭据复制到这里。
 
@@ -22,7 +22,7 @@ docker compose up -d --wait
 docker compose ps
 ```
 
-`docker compose down` 会停止服务但保留数据库；不要使用 `down -v` 或 `reset.sh`，除非确定要删除这套实例的数据。前端在 `new_frontend/` 执行 `npm run dev -- --strictPort`；Python 在 `new_backend/` 执行 `python -m uvicorn app.main:app --env-file .env --host 127.0.0.1 --port 18080`。当前 `RESEARCH_AGENT_RUNTIME=mock`，因此切换的是**真实 Supabase 认证**，Agent 仍是 mock，且本地未连接模型网关、远程 MCP 或 AF3 计算服务。
+`docker compose down` 会停止服务但保留数据库；不要使用 `down -v` 或 `reset.sh`，除非确定要删除这套实例的数据。前端在 `apps/web/` 执行 `npm run dev -- --strictPort`；Python 在 `apps/api/` 执行 `python -m uvicorn app.main:app --env-file .env --host 127.0.0.1 --port 18080`。当前 `RESEARCH_AGENT_RUNTIME=mock`，因此切换的是**真实 Supabase 认证**，Agent 仍是 mock，且本地未连接模型网关、远程 MCP 或 AF3 计算服务。
 
 邮箱注册、验证码确认、密码登录及 Python JWT 校验已通过本地接口联调。Mailpit 只供开发使用，不会把邮件送到真实邮箱。Google 登录需要另行设置 Google OAuth 凭据及回调地址；游客登录在 Python live 模式下仍关闭，因为上线前必须配置 CAPTCHA/Turnstile 和共享限流密钥。生产部署也需要 HTTPS、真实 SMTP、备份与可信反向代理。GoTrue 使用显式邮件、OTP、确认和刷新限额，并只从 Nginx 覆盖写入的 `X-PSKit-Client-IP` 读取来源。不要开启 GoTrue 全局 CAPTCHA；注册、找回密码和游客升级由 Python 定向校验 Turnstile action 与 hostname。
 

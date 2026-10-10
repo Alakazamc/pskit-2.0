@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[3]
-FRONTEND = ROOT / "new_frontend"
+FRONTEND = ROOT / "apps/web"
 DEPLOY = ROOT / "deploy/agent"
 
 

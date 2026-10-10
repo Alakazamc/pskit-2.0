@@ -8,21 +8,21 @@ backend Dockerfile 门禁。旧 `.github/workflows/ci.yml` 保留用于旧栈维
 首次依赖安装使用生产依赖约束与 npm 锁：
 
 ```bash
-new_backend/.venv/bin/python -m pip install -c new_backend/requirements.lock -e 'new_backend[dev]'
-npm ci --prefix new_frontend
-npm ci --prefix new_backend/pi
+apps/api/.venv/bin/python -m pip install -c apps/api/requirements.lock -e 'apps/api[dev]'
+npm ci --prefix apps/web
+npm ci --prefix apps/api/pi
 ```
 
 准备独立的 loopback PostgreSQL 17，在进程环境中设置 `TEST_POSTGRES_DSN`，
 避免在命令参数中传入 DSN。运行器要求主版本 17，并拒绝非 loopback 地址：
 
 ```bash
-new_backend/.venv/bin/python scripts/ci_new_stack.py backend --report-dir /tmp/pskit-backend-ci-results
-new_backend/.venv/bin/python scripts/ci_new_stack.py frontend
-new_backend/.venv/bin/python scripts/ci_new_stack.py pi
-new_backend/.venv/bin/python scripts/check_new_stack_contracts.py
-new_backend/.venv/bin/python scripts/ci_render_compose.py
-new_backend/.venv/bin/python scripts/ci_new_stack.py deployment
+apps/api/.venv/bin/python scripts/ci_new_stack.py backend --report-dir /tmp/pskit-backend-ci-results
+apps/api/.venv/bin/python scripts/ci_new_stack.py frontend
+apps/api/.venv/bin/python scripts/ci_new_stack.py pi
+apps/api/.venv/bin/python scripts/check_new_stack_contracts.py
+apps/api/.venv/bin/python scripts/ci_render_compose.py
+apps/api/.venv/bin/python scripts/ci_new_stack.py deployment
 ```
 
 运行器只复制 Git 已跟踪或未忽略的源码路径，过滤私有 env、数据目录与依赖。
@@ -35,7 +35,7 @@ Python cache、Pi sessions 写入临时目录。前端 build
 `--report-dir` 必须位于仓库外，保留完整输出和后端 JUnit XML。诊断停滞可用：
 
 ```bash
-new_backend/.venv/bin/python scripts/ci_new_stack.py backend --per-file \
+apps/api/.venv/bin/python scripts/ci_new_stack.py backend --per-file \
   --file-timeout 120 --timeout 1800 --report-dir /tmp/pskit-backend-file-results
 ```
 
@@ -46,8 +46,8 @@ new_backend/.venv/bin/python scripts/ci_new_stack.py backend --per-file \
 镜像门禁必须构建当前源码，不能拿旧缓存应用镜像冒充本次构建：
 
 ```bash
-docker build -f deploy/agent/backend.Dockerfile -t pskit-agent-backend:ci new_backend
-PSKIT_BACKEND_IMAGE=pskit-agent-backend:ci new_backend/.venv/bin/python -m pytest -q deploy/agent/tests/test_backend_image.py
+docker build -f deploy/agent/backend.Dockerfile -t pskit-agent-backend:ci apps/api
+PSKIT_BACKEND_IMAGE=pskit-agent-backend:ci apps/api/.venv/bin/python -m pytest -q deploy/agent/tests/test_backend_image.py
 ```
 
 固定 LiteLLM 的完全离线协议命令和退役探针见

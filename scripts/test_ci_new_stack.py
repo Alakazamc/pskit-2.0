@@ -30,36 +30,36 @@ def test_snapshot_omits_private_files_datasets_and_dependencies(tmp_path):
     repository = tmp_path / "repository"
     repository.mkdir()
     subprocess.run(["git", "init", "-q", str(repository)], check=True)
-    for name in ("new_backend/app/main.py", "new_backend/.env", "new_backend/.env.production",
-                 "new_backend/local.env", "new_backend/.env.example", "new_backend/data/big.dat",
-                 "new_backend/pi/node_modules/pkg/index.js", "deploy_to_cloud.sh"):
+    for name in ("apps/api/app/main.py", "apps/api/.env", "apps/api/.env.production",
+                 "apps/api/local.env", "apps/api/.env.example", "apps/api/data/big.dat",
+                 "apps/api/pi/node_modules/pkg/index.js", "deploy_to_cloud.sh"):
         path = repository / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("example")
     target = tmp_path / "copy"
     snapshot(target, repository)
     copied = {str(path.relative_to(target)) for path in target.rglob("*") if path.is_file()}
-    assert copied == {"new_backend/app/main.py", "new_backend/.env.example", "deploy_to_cloud.sh"}
+    assert copied == {"apps/api/app/main.py", "apps/api/.env.example", "deploy_to_cloud.sh"}
 
 
 def test_snapshot_rejects_source_symlinks(tmp_path):
     repository = tmp_path / "repository"
-    (repository / "new_backend").mkdir(parents=True)
+    (repository / "apps/api").mkdir(parents=True)
     subprocess.run(["git", "init", "-q", str(repository)], check=True)
-    (repository / "new_backend/external.py").symlink_to(ROOT / "new_backend/app/main.py")
+    (repository / "apps/api/external.py").symlink_to(ROOT / "apps/api/app/main.py")
     with pytest.raises(RuntimeError, match="unexpected source"):
         snapshot(tmp_path / "copy", repository)
 
 
 def test_dependency_links_keep_generated_caches_in_disposable_tree(tmp_path, monkeypatch):
     root = tmp_path / "repository"
-    installed = root / "new_frontend/node_modules"
+    installed = root / "apps/web/node_modules"
     for name in ("vite", ".bin", ".vite", ".vite-temp"):
         (installed / name).mkdir(parents=True)
     monkeypatch.setattr(ci_new_stack, "ROOT", root)
     source = tmp_path / "source"
-    ci_new_stack.link_dependencies(source, "new_frontend")
-    linked = source / "new_frontend/node_modules"
+    ci_new_stack.link_dependencies(source, "apps/web")
+    linked = source / "apps/web/node_modules"
     assert linked.is_dir() and not linked.is_symlink()
     assert (linked / "vite").resolve() == installed / "vite"
     assert (linked / ".bin").resolve() == installed / ".bin"

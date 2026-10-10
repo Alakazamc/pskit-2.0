@@ -73,7 +73,7 @@ def test_smoke_refuses_production_project_before_docker_access():
     import sys
     from pathlib import Path
 
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[3]
     result = subprocess.run(
         [
             sys.executable,

@@ -17,7 +17,7 @@ def test_admin_acceptance_runs_real_http_and_postgres_behavior_suites():
             "TEST_POSTGRES_DSN": "postgresql://test:test@127.0.0.1:15433/test",
         }
     )
-    assert directory.name == "new_backend"
+    assert directory.parts[-2:] == ("apps", "api")
     assert command[1:3] == ["-m", "pytest"]
     assert "tests/test_management_wiring.py" in command
     assert "tests/test_admin_identity.py" in command

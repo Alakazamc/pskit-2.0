@@ -22,7 +22,7 @@ git log -3 --oneline
 
 | 位置 | 职责 | 常用入口 |
 | --- | --- | --- |
-| 本地 WSL | `new_frontend/` React/Vite；`new_backend/` FastAPI/Pi；开发、测试、构建 | 前端 `127.0.0.1:5174`；API `127.0.0.1:18080` |
+| 本地 WSL | `apps/web/` React/Vite；`apps/api/` FastAPI/Pi；开发、测试、构建 | 前端 `127.0.0.1:5174`；API `127.0.0.1:18080` |
 | 阿里云宿主机 | Nginx、TLS、生产与 Staging 的 React `dist` | 生产 `https://agent.bioailab.net`；Staging `10.9.8.1:18132` |
 | 阿里云 Docker | Python/Pi、Supabase、PostgreSQL 17、LiteLLM、计算回调入口 | 生产 API `127.0.0.1:18088`；Staging API `127.0.0.1:18090` |
 | A6000 | 一个统一 MCP/AF3 接收器，以及独立 AF3 模型计算容器 | 主动领取任务；WireGuard 地址 `10.9.8.2` |
@@ -30,7 +30,7 @@ git log -3 --oneline
 
 生产前端由宿主机 Nginx 提供静态文件。Python/Pi 与业务数据在阿里云；Supabase、LiteLLM、Agent 三个 Compose 项目共享一台 PostgreSQL 17，使用不同逻辑库或 schema 与账号。A6000 接收器保留持久 journal/outbox，计算容器读取持久 spool。详见 [部署手册](../deploy/agent/DEPLOYMENT.md)与 [Compose/端口说明](../deploy/agent/COMPOSE_PORTS.md)。
 
-旧 `frontend/`、`backend/` 和 `pskit.bioailab.net` 属于旧系统。新版常规开发使用 `new_*`，操作云端时保持两套系统各自的配置、数据与服务边界。
+旧 `frontend/`、`backend/` 和 `pskit.bioailab.net` 属于旧系统。新版常规开发使用 `apps/*`，操作云端时保持两套系统各自的配置、数据与服务边界。
 
 ## 3. 本地前后端一起运行
 
@@ -41,7 +41,7 @@ git log -3 --oneline
 首次准备依赖，在后端目录使用独立虚拟环境；已有环境可直接激活：
 
 ```bash
-cd /home/jhli/pskit-2.0/new_backend
+cd /home/jhli/pskit-2.0/apps/api
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[dev]'
@@ -50,7 +50,7 @@ python -m pip install -e '.[dev]'
 终端 A：启动本地 API。显式使用 mock，且不加载现有 live `.env`：
 
 ```bash
-cd /home/jhli/pskit-2.0/new_backend
+cd /home/jhli/pskit-2.0/apps/api
 source .venv/bin/activate
 RESEARCH_AGENT_MODE=mock RESEARCH_AGENT_RUNTIME=mock \
 RESEARCH_AGENT_MCP_EXECUTOR=mock RESEARCH_AGENT_AF3_EXECUTOR=mock \
@@ -60,7 +60,7 @@ RESEARCH_AGENT_MCP_EXECUTOR=mock RESEARCH_AGENT_AF3_EXECUTOR=mock \
 终端 B：首次运行 `npm ci`，随后启动前端。命令覆盖现有 `.env.local` 的认证模式，并固定代理目标：
 
 ```bash
-cd /home/jhli/pskit-2.0/new_frontend
+cd /home/jhli/pskit-2.0/apps/web
 npm ci
 VITE_AUTH_MODE=demo VITE_API_BASE_URL=/api/v1 \
 DEV_API_PROXY_TARGET=http://127.0.0.1:18080 \
@@ -75,13 +75,13 @@ DEV_API_PROXY_TARGET=http://127.0.0.1:18080 \
 
 - 本地 Supabase 与开发邮件服务的配置入口见 [本地 Supabase 手册](../infra/supabase/PSKIT.md)。
 - `RESEARCH_AGENT_MODE=live` 要求设置 `RESEARCH_AGENT_DATABASE_URL`，指向独立开发 PostgreSQL，提前准备当前代码要求的 schema；Web 进程只检查版本。旧说明中的 SQLite 不能替代当前 live 数据库。
-- Pi 依赖与模式见 [后端 README](../new_backend/README.md)。真实模型使用独立开发虚拟 key；真实 GPU 联调使用独立任务入口、接收器身份和 journal，明确输入及预算。
+- Pi 依赖与模式见 [后端 README](../apps/api/README.md)。真实模型使用独立开发虚拟 key；真实 GPU 联调使用独立任务入口、接收器身份和 journal，明确输入及预算。
 - AF3 的 callback 模式需要接收器能访问本地回调服务。本地 SSH 能登录 A6000，并不意味着 A6000 已能访问 WSL 的本地 API；先验证开发回调链路。
 
 确认本地 `.env` 的数据库、认证及外部服务均属于开发环境后，在终端 A 启动：
 
 ```bash
-cd /home/jhli/pskit-2.0/new_backend
+cd /home/jhli/pskit-2.0/apps/api
 source .venv/bin/activate
 python -m uvicorn app.main:app --env-file .env \
   --host 127.0.0.1 --port 18080 --reload
@@ -172,7 +172,7 @@ python -m uvicorn app.main:app --env-file .env \
 | Staging 私有配置 | `/home/ecs-user/pskit-agent-staging-private` |
 | A6000 接收器目录 | `/data/jhli/pskit-mcp-receiver-20261007`；具体 runtime 子目录按本次制品选择 |
 
-本地配置位置为 `new_backend/.env`、`new_frontend/.env.local`、`infra/supabase/.env`；生产配置位置见部署手册中的 `cloud.env`、`cloud.backend.env`、`cloud.proxy.env`、`.env.stack` 和基础设施私有文件。文档记录文件用途与位置，密钥、DSN 密码和 Cookie 留在私有配置中；查看运行状态时只输出必要的非秘密字段。
+本地配置位置为 `apps/api/.env`、`apps/web/.env.local`、`infra/supabase/.env`；生产配置位置见部署手册中的 `cloud.env`、`cloud.backend.env`、`cloud.proxy.env`、`.env.stack` 和基础设施私有文件。文档记录文件用途与位置，密钥、DSN 密码和 Cookie 留在私有配置中；查看运行状态时只输出必要的非秘密字段。
 
 识别历史说明时按以下事实判断：
 
@@ -210,5 +210,7 @@ A6000 升级或恢复前核对唯一接收器、活动任务、journal/outbox/sp
 - **2026-10-10 真实工具协议诊断：** 截图对应 Run `6fe613f8-7f07-49cb-a003-1daf8bf5ff4b` 没有工具/产物事件；生产 Pi 能发送完整工具定义，OpenSandbox 能力正常。真实请求对照确认：LiteLLM `v1.100.3` 为 Anthropic 自定义工具增加 `type=custom`，当前 `v2.pincc.ai` 的 `claude-sonnet-4-5-20250929` 路线收到该字段后返回普通文本；同一请求只删除这个字段便返回真实 `tool_use`。此次仅诊断，未修改线上路由；请求、对照与修复验收要求见 [诊断记录](diagnostics/2026-10-10-model-tool-protocol.md)。
 - **2026-10-10 真实工具修复上线：** 移除仅 PinCC 原生 Anthropic 自定义工具的不兼容 `type=custom` 后，候选和正式网关均通过真实 `claude-sonnet-4-5-20250929` 验收：Pi `write_file` → `read_file` → `artifact.created` → `run.completed`。经生产网关的 Run `756363ce-32ec-424c-a96a-c8c29684b2a3` 还验证了持久化聊天 `artifact` part、会话产物列表、鉴权下载与预览逐字节一致；临时 key/路由已撤销，测试额度恢复，候选容器移除。测试账号和文件留在 Staging，计费走限额 $0.25 的独立测试 key；生产后端 ready，login 200、usage 401、internal 404。详细证据见 [发布记录](releases/2026-10-10-pincc-tool-compatibility.md)。
 - **下一步：** 用户可重新发送 Markdown 文件生成请求，确认自己的会话中聊天文件卡片与右上角产物入口均可用；本次已验收真实接口及富 UI 元数据，未重新做浏览器截图验收。旧的 `<write_file>` 伪文本没有创建文件，不会自动补成历史产物。更换模型上游或升级 LiteLLM 时复用真实工具 smoke，不能只检查工具清单或 API 200。
+
+**2026-10-10 Phase 6 本地迁移交接：** 新版前端与后端源码已纯路径迁移到 `apps/web/`、`apps/api/`；旧 `backend/`、`frontend/` 与旧恢复工具保留。Backend 1204 passed / 1 external Supabase integration skipped（PostgreSQL 232 passed、0 skipped）；Frontend 387 测试、typecheck、lint、build 通过；Pi 测试、9 种合成 Compose、契约导出、本地 `apps/api` context 镜像构建及隔离 runtime smoke 通过。Deployment 测试 446 passed/1 skipped；其要求临时 host-root 位于 `/tmp` 的 staging Nginx 测试 4 项单独重跑通过。忽略的本地 `.env`、`.venv`、SQLite/Pi 会话、`node_modules` 与 `dist` 仍在新目录，未进入 Git。详细命令与限制见 [Phase 6 验证](architecture/phases/phase-6/VERIFICATION.md) 与[回退说明](architecture/phases/phase-6/MIGRATION_AND_ROLLBACK.md)。本轮没有 push、SSH、云端部署、真实数据库变更或历史数据清理；阿里云 source-bind、Staging 同制品及回退验收仍 pending。
 
 每次交接更新此节的日期、分支/提交、未完成项、实际验证结果、生产/Staging 状态及下一步。镜像 ID、制品哈希和回滚证据写入对应发布记录并链接到此处；连接别名、端口或职责变化则同时修改前面的环境章节。

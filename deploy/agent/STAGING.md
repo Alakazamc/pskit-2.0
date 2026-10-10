@@ -4,7 +4,7 @@ Staging 是阿里云上按需启动的预发布环境。它有单独的 Supabase
 
 ## 首次准备
 
-1. 在同一次发布构建中生成固定后端镜像和 `new_frontend/dist`。记录 `docker image inspect --format '{{.Id}}' <镜像>`。当前生成器会把镜像 ID 和前端 `dist` 内容哈希锁定到 Staging manifest；正式发布必须使用相同制品。
+1. 在同一次发布构建中生成固定后端镜像和 `apps/web/dist`。记录 `docker image inspect --format '{{.Id}}' <镜像>`。当前生成器会把镜像 ID 和前端 `dist` 内容哈希锁定到 Staging manifest；正式发布必须使用相同制品。
 2. 在阿里云选择仓库外的私有目录，例如 `/home/ecs-user/pskit-agent-staging-private`。运行：
 
    ```bash
@@ -116,7 +116,7 @@ bash deploy/agent/staging.sh up
 
 更新器拒绝仍在运行的 Staging 项目，备份原 `cloud.env` 和 manifest，仅改变镜像与前端路径/哈希，不生成或修改密钥。现有 Nginx root 可写且路由不变时，先复制新 assets、再原子替换 index，保留旧 assets，即可继续使用私网入口；不需重新安装 Nginx。默认模型 smoke 使用替身，真实供应商联调应单独记录受限测试 key、预算和结果，不能把替身结果当成真实调用证据。
 
-通用 Tool Product 的 Staging 验收使用 `new_backend/fixtures/tool_products/coral.staging.acceptance.yaml`，只重跑成本较低的 `coral-one-shot-6fxb-a`。它必须完成管理员 probe、discover、qualification、publish，再由普通用户启动任务，核对事件恢复、Artifact 与服务上报用量，最后 suspend 测试 Release。四个 CORAL 能力的真实验收事实仍以 `coral.acceptance.yaml` 为准；单个 Staging case 不能替代该套证据。生产 receiver 在 Staging 验收后仍保持 profile 关闭，需独立检查 journal 和 provider 地址后才可启用。
+通用 Tool Product 的 Staging 验收使用 `apps/api/fixtures/tool_products/coral.staging.acceptance.yaml`，只重跑成本较低的 `coral-one-shot-6fxb-a`。它必须完成管理员 probe、discover、qualification、publish，再由普通用户启动任务，核对事件恢复、Artifact 与服务上报用量，最后 suspend 测试 Release。四个 CORAL 能力的真实验收事实仍以 `coral.acceptance.yaml` 为准；单个 Staging case 不能替代该套证据。生产 receiver 在 Staging 验收后仍保持 profile 关闭，需独立检查 journal 和 provider 地址后才可启用。
 
 ```bash
 bash deploy/agent/staging.sh status

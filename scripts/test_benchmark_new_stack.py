@@ -2,12 +2,31 @@
 
 import asyncio
 import functools
+import subprocess
 import sys
 import time
 from types import SimpleNamespace
 
 import benchmark_new_stack as benchmark
 import pytest
+
+
+def test_freeze_source_accepts_nested_apps_api_git_archive_paths(tmp_path, monkeypatch):
+    repository = tmp_path / "repository"
+    app = repository / "apps/api/app"
+    app.mkdir(parents=True)
+    (app / "main.py").write_text("app = True\n")
+    subprocess.run(["git", "init", "-q", str(repository)], check=True)
+    subprocess.run(["git", "-C", str(repository), "add", "apps/api/app/main.py"], check=True)
+    subprocess.run(["git", "-C", str(repository), "-c", "user.name=Test", "-c",
+                    "user.email=test@example.invalid", "commit", "-qm", "fixture"], check=True)
+    revision = subprocess.run(["git", "-C", str(repository), "rev-parse", "HEAD"],
+                              check=True, capture_output=True, text=True).stdout.strip()
+    monkeypatch.setattr(benchmark, "ROOT", repository)
+
+    destination = tmp_path / "snapshot"
+    assert benchmark.freeze_source(destination, revision) == revision
+    assert (destination / "app/main.py").read_text() == "app = True\n"
 
 
 def test_raw_samples_preserve_all_commit_order_and_exact_intervals():

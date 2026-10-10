@@ -103,7 +103,7 @@ assets、工作卷和已写入的数据。回退程序之前检查 schema/transc
 不以旧数据库备份覆盖新写入。将实际结果及仍待验证的防护写入发布记录。
 
 本地认证回归入口：`deploy/agent/tests/test_auth_security_regression.py` 验证真实
-AuthProtection 到 429/Retry-After 的 HTTP 边界；`new_backend/tests/test_csrf.py`、
+AuthProtection 到 429/Retry-After 的 HTTP 边界；`apps/api/tests/test_csrf.py`、
 `test_anonymous_auth.py`、`test_auth_usage.py`、`test_catalog_files.py` 和
 `test_file_lifecycle.py` 保留 CSRF、匿名身份和 owner 边界。依赖 `live_database`
 的测试只在独立测试 PostgreSQL 上执行；跳过结果不能计为 live 通过。

@@ -2,7 +2,7 @@
 
 ## 执行摘要
 
-基于对 `new_backend` 代码库的系统性分析（2394个Python文件），以下是主要改进建议的优先级排序：
+基于对 `apps/api` 代码库的系统性分析（2394个Python文件），以下是主要改进建议的优先级排序：
 
 ## 🔴 高优先级改进
 
@@ -386,5 +386,5 @@ async def test_coral_failure_with_partial_usage():
 ---
 
 **生成时间：** 2026-10-07
-**分析范围：** new_backend/
+**分析范围：** apps/api/
 **分析工具：** Manual code review + grep/rg analysis

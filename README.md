@@ -8,9 +8,8 @@
 
 | 位置 | 职责 |
 | --- | --- |
-| `new_frontend/` | React/Vite、会话与文件富 UI、管理页面；见 [前端约定](new_frontend/AGENTS.md) |
-| `new_backend/app/` | FastAPI API、权限、账本、模型策略、Agent 及工作区领域模块 |
-| `new_backend/pi/` | 固定 Pi 扩展与 JSON RPC 工具边界 |
+| `apps/web/` | React/Vite、会话与文件富 UI、管理页面；见 [前端约定](apps/web/AGENTS.md) |
+| `apps/api/` | FastAPI API、权限、账本、模型策略、Agent、工作区领域模块与 Pi 扩展 |
 | `contracts/` | OpenAPI、事件与计算契约、Release Manifest schema |
 | `infra/` | Supabase/PostgreSQL、LiteLLM、OpenSandbox 配置与独立生命周期 |
 | `deploy/agent/` | 应用 Compose、接收器与受控发布工具 |
@@ -35,4 +34,4 @@
 
 ## 历史栈与路径
 
-Vue/LangGraph/Qdrant 旧栈仍位于 `frontend/`、`backend/`，保留用于历史维护和恢复，不是新版默认入口。原 README 逐字节保存于 [历史索引](docs/archive/README.md)。由于 Compose source bind、旧 CI 与回退版本仍引用现有路径，本轮保留 `new_backend/`、`new_frontend/`；未来纯路径迁移的前置清单见 [目录迁移计划](docs/architecture/phases/phase-6/CHANGE_SUMMARY.md)。
+Vue/LangGraph/Qdrant 旧栈仍位于 `frontend/`、`backend/`，保留用于历史维护和恢复，不是新版默认入口。新版源码现位于 `apps/api/` 与 `apps/web/`；Compose、CI、契约生成和本地运维入口已同步到新路径。原 README 逐字节保存于 [历史索引](docs/archive/README.md)。目录迁移的本地验证、旧栈归档边界和仍待完成的云端 source-bind 验收见 [Phase 6 记录](docs/architecture/phases/phase-6/CHANGE_SUMMARY.md)。
