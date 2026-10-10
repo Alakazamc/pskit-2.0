@@ -39,6 +39,9 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 ROOT = Path(__file__).resolve().parents[1]
 OBSERVER = contextvars.ContextVar("benchmark_observer", default=False)
 STAGE_DEADLINE = contextvars.ContextVar("benchmark_stage_deadline", default=None)
+PROFILE_SAMPLE = contextvars.ContextVar("benchmark_profile_sample", default=None)
+PROFILE_FIRST_DELTA = False
+ADMISSION_ENABLED = False
 COUNTERS: SqlCounters | None = None
 SOURCE_FILES = (
     "app/services/agent.py",
@@ -54,6 +57,12 @@ SOURCE_FILES = (
     "app/services/agent_executor.py",
     "app/services/agent_resume.py",
     "app/services/agent_workspace.py",
+    "app/domain/release_admission.py",
+    "app/db/release_admission_migrations.py",
+    "app/db/release_admission_v1.sql",
+    "app/db/postgres_migrations/__init__.py",
+    "app/domain/compute/jobs.py",
+    "app/domain/compute/leases.py",
 )
 
 
@@ -93,6 +102,22 @@ class SqlCounters:
         self.started: dict[str, float] = {}
         self.first_delta: dict[str, float] = {}
         self.first_emit: dict[str, float] = {}
+        self.profile_started: dict[int, float] = {}
+        self.profile_runs: dict[str, int] = {}
+        self.profile_spans: dict[int, list[dict]] = {}
+
+    def span(self, name: str, started: float, finished: float | None = None) -> None:
+        sample = PROFILE_SAMPLE.get()
+        if not PROFILE_FIRST_DELTA or sample is None:
+            return
+        finished = time.perf_counter() if finished is None else finished
+        with self.lock:
+            spans = self.profile_spans.setdefault(sample, [])
+            if len(spans) >= 4000:
+                raise RuntimeError("Synthetic profile exceeded its bounded trace")
+            spans.append({"name": name,
+                          "start_ms": (started - self.profile_started[sample]) * 1000,
+                          "duration_ms": (finished - started) * 1000})
 
     @staticmethod
     def key(statement: str) -> str:
@@ -147,6 +172,7 @@ class SqlCounters:
                 "sql_execute_seconds_including_observer": round(self.sql_seconds, 6),
                 "sql_failures": self.failures,
                 "store_method_calls": dict(self.method_calls),
+                **({"first_delta_profile_spans": self.profile_spans} if PROFILE_FIRST_DELTA else {}),
             }
 
 
@@ -170,6 +196,7 @@ class CountingCursor(psycopg.Cursor):
                 self._benchmark_key = COUNTERS.statement(
                     statement, params, time.perf_counter() - started, self.rowcount, failed=failed,
                 )
+                COUNTERS.span(f"sql.{self._benchmark_key}", started)
 
     def fetchone(self):
         row = super().fetchone()
@@ -247,8 +274,17 @@ def isolated_store(dsn: str):
     database = None
     try:
         migrate_postgres(dsn, schema=schema)
+        if ADMISSION_ENABLED:
+            from app.db.release_admission_migrations import migrate_admission_postgres
+
+            # Explicit DDL only in this harness's disposable schema. Runtime
+            # configure binds the component and never performs migrations.
+            migrate_admission_postgres(dsn, schema=schema)
         database = PostgresDatabase(dsn, schema=schema)
-        yield database, PersistentConversationStore(database), schema
+        gate = configure_admission_gate(database)
+        yield database, PersistentConversationStore(
+            database, **({"admission_gate": gate} if ADMISSION_ENABLED else {}),
+        ), schema
     finally:
         if COUNTERS is not None:
             COUNTERS.enabled = False
@@ -256,6 +292,18 @@ def isolated_store(dsn: str):
             database.close()
         with psycopg.connect(dsn, autocommit=True) as connection:
             connection.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema)))
+
+
+def configure_admission_gate(database):
+    """Use the actual open durable gate with an explicit synthetic deployment binding."""
+    if not ADMISSION_ENABLED:
+        return None
+    from app.domain.release_admission import DurableAdmissionGate
+
+    gate = DurableAdmissionGate(database, environment="staging", project="pskit-agent-staging",
+                                qualification_sha256="0" * 64)
+    gate.configure()
+    return gate
 
 
 def instrument_store(store, counters: SqlCounters) -> None:
@@ -329,9 +377,66 @@ def make_service(database, store, counters, *, deltas: int = 1, delay_ms: float 
     runner = SyntheticPi(counters, deltas=deltas, delay_ms=delay_ms)
     service = AgentService(store, runner, "http://127.0.0.1/benchmark-not-called", 1, 0.1,
                            af3_executor="callback", max_active_runs=4, max_active_runs_per_user=2)
-    service.compute_jobs = ComputeJobs(database, ComputeLedger(database))
-    service.compute_leases = ComputeLeases(database, service.compute_jobs.ledger)
+    gate = {"admission_gate": store.admission_gate} if ADMISSION_ENABLED else {}
+    service.compute_jobs = ComputeJobs(database, ComputeLedger(database), **gate)
+    service.compute_leases = ComputeLeases(database, service.compute_jobs.ledger, **gate)
+    if PROFILE_FIRST_DELTA:
+        instrument_pipeline(service, store, counters)
     return service, runner
+
+
+def instrument_pipeline(service, store, counters: SqlCounters) -> None:
+    """Opt-in spans around unchanged real calls; no SQL/argument/result recording."""
+    for name in ("project_for", "create_session", "accept_message", "owns_lease", "start_pi_turn",
+                 "run_context", "session_file_for", "append_event", "append_events"):
+        original = getattr(store, name, None)
+        if original is None:
+            continue
+
+        @functools.wraps(original)
+        def traced(*args, _original=original, _name=name, **kwargs):
+            started = time.perf_counter()
+            try:
+                return _original(*args, **kwargs)
+            finally:
+                counters.span(f"store.{_name}", started)
+
+        setattr(store, name, traced)
+    execute = service._execute
+
+    async def traced_execute(user_id, session_id, run_id, content):
+        token = PROFILE_SAMPLE.set(counters.profile_runs.get(run_id))
+        started = time.perf_counter()
+        try:
+            counters.span("execute.enter", started, started)
+            return await execute(user_id, session_id, run_id, content)
+        finally:
+            counters.span("execute.total", started)
+            PROFILE_SAMPLE.reset(token)
+
+    service._execute = traced_execute
+    db_call = getattr(service, "_db_call", None)
+    if db_call is None:
+        return
+
+    async def traced_db_call(method, *args, **kwargs):
+        name = getattr(method, "__name__", type(method).__name__)
+        started = time.perf_counter()
+
+        @functools.wraps(method)
+        def worker(*worker_args, **worker_kwargs):
+            worker_started = time.perf_counter()
+            try:
+                return method(*worker_args, **worker_kwargs)
+            finally:
+                counters.span(f"worker.{name}", worker_started)
+
+        try:
+            return await db_call(worker, *args, **kwargs)
+        finally:
+            counters.span(f"db_call.{name}", started)
+
+    service._db_call = traced_db_call
 
 
 def admit(store, user_id: str):
@@ -388,6 +493,16 @@ async def idle_benchmark(dsn: str, seconds: float) -> dict:
         }
 
 
+def first_delta_samples(counters: SqlCounters) -> list[dict]:
+    """Keep every raw committed sample in completion order without Run IDs."""
+    return [
+        {"sample": index,
+         "admission_to_first_durable_delta": (at - counters.started[run_id]) * 1000,
+         "emission_to_first_durable_delta": (at - counters.first_emit[run_id]) * 1000}
+        for index, (run_id, at) in enumerate(counters.first_delta.items())
+    ]
+
+
 async def latency_benchmark(dsn: str, *, samples: int, deltas: int, name: str) -> dict:
     global COUNTERS
     with isolated_store(dsn) as (database, store, schema):
@@ -400,9 +515,17 @@ async def latency_benchmark(dsn: str, *, samples: int, deltas: int, name: str) -
         try:
             for index in range(samples):
                 ingress = time.perf_counter()
+                counters.profile_started[index] = ingress
+                token = PROFILE_SAMPLE.set(index) if PROFILE_FIRST_DELTA else None
                 run_id, session_id = admit(store, f"latency-{index}")
+                counters.span("admit", ingress)
+                counters.profile_runs[run_id] = index
                 counters.started[run_id] = ingress
+                schedule_started = time.perf_counter()
                 service.schedule(f"latency-{index}", session_id, run_id, "Synthetic benchmark")
+                counters.span("schedule", schedule_started)
+                if token is not None:
+                    PROFILE_SAMPLE.reset(token)
                 task = service._run_tasks.get(run_id)
                 # schedule is a nonblocking admission hint. A repository worker
                 # may finish its lease claim after this call; never require
@@ -439,6 +562,7 @@ async def latency_benchmark(dsn: str, *, samples: int, deltas: int, name: str) -
             "emission_to_first_durable_delta": latency_summary([
                 (at - counters.first_emit[run_id]) * 1000 for run_id, at in counters.first_delta.items()
             ]),
+            "latency_samples_ms": first_delta_samples(counters),
             "retained_session_locks_after_turns": len(service._locks),
             "measurement": counters.snapshot(),
         }
@@ -619,10 +743,17 @@ def main() -> None:
     parser.add_argument("--queue-sizes", type=int, nargs="+", default=[100, 1000])
     parser.add_argument("--samples", type=int, default=50)
     parser.add_argument("--stage-timeout", type=float, default=180)
+    parser.add_argument("--profile-first-delta", action="store_true",
+                        help="Opt-in method/worker/SQL spans; profile overhead is not an uninstrumented baseline")
+    parser.add_argument("--admission-enabled", action="store_true",
+                        help="Explicitly install/configure the real durable gate in this disposable schema")
     parser.add_argument("--stages", nargs="+", choices=("idle", "fairness", "queue", "first_delta", "delta_writes"),
                         default=["idle", "fairness", "queue", "first_delta", "delta_writes"],
                         help="Repeat selected stages without fabricating or re-running completed evidence")
     args = parser.parse_args()
+    global PROFILE_FIRST_DELTA, ADMISSION_ENABLED
+    PROFILE_FIRST_DELTA = args.profile_first_delta
+    ADMISSION_ENABLED = args.admission_enabled
     if not 0 <= args.idle_seconds <= 600 or any(not 1 <= size <= 1000 for size in args.queue_sizes):
         parser.error("Idle must be 0..600 seconds and queue sizes 1..1000")
     if not 1 <= args.samples <= 100 or not 15 <= args.stage_timeout <= 600:
@@ -643,6 +774,10 @@ def main() -> None:
             name: hashlib.sha256((source / name).read_bytes()).hexdigest()
             for name in SOURCE_FILES if (source / name).is_file()
         }
+        tree_hashes = {
+            str(path.relative_to(source)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(source.rglob("*")) if path.is_file()
+        }
         sys.path.insert(0, str(source))
         os.chdir(isolated)
         import app.db.postgres as pg_module
@@ -650,7 +785,9 @@ def main() -> None:
         pg_module.ConnectionPool = functools.partial(pg_module.ConnectionPool, connection_class=CountingConnection)
         report = {
             "format": "pskit.new-stack-benchmark.v1", "status": "running", "started_at": utc_now(),
+            "harness_source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "source_revision": revision, "runtime_source_sha256": source_hashes,
+            "app_tree_sha256": hashlib.sha256(json.dumps(tree_hashes, sort_keys=True).encode()).hexdigest(),
             "source_kind": "local-git-commit" if args.source_ref else "working-tree-snapshot",
             "source_snapshot": "only new_backend/app, frozen before measurements; no .env/data/credentials",
             "machine": {"platform": platform.platform(), "python": platform.python_version(),
@@ -658,6 +795,8 @@ def main() -> None:
             "postgres": pg_info, "parameters": {"idle_seconds": args.idle_seconds,
                 "queue_sizes": args.queue_sizes, "first_delta_samples": args.samples,
                 "stages": args.stages,
+                "profile_first_delta": args.profile_first_delta,
+                "admission_enabled": args.admission_enabled,
                 "stage_timeout_seconds": args.stage_timeout, "global_active": 4,
                 "per_user_active": 2, "pool_max_size": 10, "statement_timeout_ms": 5000,
                 "lock_timeout_ms": 3000},

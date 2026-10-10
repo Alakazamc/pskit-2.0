@@ -251,6 +251,17 @@ class AgentProgressWriter:
 
     async def on_event(self, event):
         service = self.service
+        if (
+            event.get("type") == "message_update"
+            and (event.get("assistantMessageEvent") or {}).get("type") == "text_delta"
+        ):
+            # append_events checks owner, status and the live lease under its
+            # transaction row lock. Text has no usage/tool side effect, so a
+            # separate lease SELECT cannot strengthen that atomic fence. Any
+            # buffered text is checked again by the same transaction on flush.
+            for projected in project_pi_event(self.run_id, event):
+                await self.writer.write(projected)
+            return
         if not await service._db_call(service.store.owns_lease, self.run_id, service._instance_id):
             return
         if event.get("type") != "message_update":

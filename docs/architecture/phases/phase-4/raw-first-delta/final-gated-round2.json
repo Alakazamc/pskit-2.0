@@ -1,0 +1,454 @@
+{
+  "format": "pskit.new-stack-benchmark.v1",
+  "status": "passed",
+  "started_at": "2026-10-10T12:38:43.380982+00:00",
+  "harness_source_sha256": "e03c0253a1d7363355d77bd85640e3752731767609383d02065256bd0683f010",
+  "source_revision": "eb2b37b5098b9122480b4dc0ccdea7e7f4417049",
+  "runtime_source_sha256": {
+    "app/services/agent.py": "768be0b1b6713d02906b983f6dc5579bec4df4473b267ab05284632fba63c14f",
+    "app/db/postgres.py": "20bdae87c36ce3c1a05136521f175f4f8d1b736ea98839311ff036424708f6ea",
+    "app/domain/persistent_conversation/store.py": "f60d00831d02a066f603f91c7469a9a27ffdcaf212ef2b0858a0dec5f91d7b01",
+    "app/domain/persistent_conversation/runs.py": "30e1df851049ca135d469ec1399237185ef2706ea61ca326fbd117382df4d0b0",
+    "app/domain/persistent_conversation/recovery.py": "6b37aa29473736119bb85a67b1e22af6f876651f06eaccfa15d5469992efa7a8",
+    "app/domain/persistent_conversation/admission.py": "e5a7b78eb4cc04780f4ef566b4ebf4d953357b5d496de66ed5eb66870a44f6e7",
+    "app/services/session_locks.py": "a3078a3a575160d34597cbf7b90e843eac288fe4351b4768d8bc448a4676bd96",
+    "app/services/agent_scheduler.py": "93ab45c224856f2b5f13818a0b8a13e22e1fe87839e6cbbc3bb9dc8bd429428f",
+    "app/services/agent_events.py": "36547655fe1a929897e5eda90a05f1f3177eb18a153625490999387cbc1261d6",
+    "app/services/agent_context.py": "4c5e83f6f5afe474226ab6cd92ad6e2f1a2c83ae603ea3d85f8d65283afd35c4",
+    "app/services/agent_executor.py": "95d9395b71270ab6fb385dd8c67387bf2a7c1f51d41a074719899935c28a5eae",
+    "app/services/agent_resume.py": "bc17af4cc6be5ce42cd270f8badb0888bfe8e72ba7d2ef59f105114a8c3c08a3",
+    "app/services/agent_workspace.py": "0ec2ec5e2b58f637048e373ebd1fb06588c065a756ec167c2f2c8aeb31d944a1",
+    "app/domain/release_admission.py": "0bc6c3bb84919f8e2108a1d7e42332b026f49afd15288997f4c82abb828fda2b",
+    "app/db/release_admission_migrations.py": "3cffdc606b0ec6391cdf12cdcf5977069467e2b571f6e620aaf285177ebcf046",
+    "app/db/release_admission_v1.sql": "3fedd92fb4cf492b05b53f3b025ed203c021f60c2a72ec934ab600474f1350a6",
+    "app/db/postgres_migrations/__init__.py": "d2f796f241c8107fafdd178e82228459922b3cdace1bb4646dcfae0d484c68e3",
+    "app/domain/compute/jobs.py": "b3ac630af1e069aeda6786b89c7a30dab7faa932a80004f0575c3d34aaac9ddc",
+    "app/domain/compute/leases.py": "3bd8d687cb87e266e5504db7fda720732b0a811b1d30fc253a8c453730d9cb76"
+  },
+  "app_tree_sha256": "287c59ee5a5c923cc4d0ffe3a3b69f713dc3fb1ad3a4f9132f88679264c3c8a8",
+  "source_kind": "working-tree-snapshot",
+  "source_snapshot": "only new_backend/app, frozen before measurements; no .env/data/credentials",
+  "machine": {
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+    "python": "3.12.9",
+    "cpu_count": 12,
+    "psycopg": "3.3.6"
+  },
+  "postgres": {
+    "server_version_num": 170006,
+    "server_version": "17.6 (Debian 17.6-2.pgdg13+1)",
+    "database": "pskit_remediation",
+    "address": "127.0.0.1",
+    "port": 32769
+  },
+  "parameters": {
+    "idle_seconds": 300,
+    "queue_sizes": [
+      100,
+      1000
+    ],
+    "first_delta_samples": 50,
+    "stages": [
+      "first_delta"
+    ],
+    "profile_first_delta": false,
+    "admission_enabled": true,
+    "stage_timeout_seconds": 60.0,
+    "global_active": 4,
+    "per_user_active": 2,
+    "pool_max_size": 10,
+    "statement_timeout_ms": 5000,
+    "lock_timeout_ms": 3000
+  },
+  "counter_definition": "real driver Cursor.execute calls; explicit SQL only, not implicit BEGIN/COMMIT; SELECT includes admission advisory locks; write statements may affect zero rows; observer queries separately counted; no SQL parameters/results retained",
+  "latency_definition": "local synthetic Pi delay 5ms + actual admission/scheduler/event commits; not provider latency, HTTP TTFB, network SSE, browser paint, or transcript write throughput",
+  "concurrent_activity": "shared local PG17 may run other synthetic test schemas; host CPU/network noise uncontrolled",
+  "cleanup": "each stage closes its pool and drops only its generated pskit_benchmark_<uuid> schema",
+  "stages": {
+    "first_delta": {
+      "status": "passed",
+      "name": "first_delta",
+      "schema": "pskit_benchmark_40cba4f1c25f42da83d002b5582c3da4",
+      "elapsed_seconds": 3.714,
+      "samples": 50,
+      "synthetic_deltas_per_turn": 8,
+      "synthetic_pi_delay_ms": 5,
+      "admission_to_first_durable_delta": {
+        "samples": 50,
+        "p50_ms": 37.103,
+        "p95_ms": 50.13,
+        "max_ms": 69.899
+      },
+      "emission_to_first_durable_delta": {
+        "samples": 50,
+        "p50_ms": 2.859,
+        "p95_ms": 4.595,
+        "max_ms": 4.934
+      },
+      "latency_samples_ms": [
+        {
+          "sample": 0,
+          "admission_to_first_durable_delta": 69.89867700031027,
+          "emission_to_first_durable_delta": 4.541639005765319
+        },
+        {
+          "sample": 1,
+          "admission_to_first_durable_delta": 49.39089098479599,
+          "emission_to_first_durable_delta": 4.934282973408699
+        },
+        {
+          "sample": 2,
+          "admission_to_first_durable_delta": 49.48742699343711,
+          "emission_to_first_durable_delta": 4.062717984197661
+        },
+        {
+          "sample": 3,
+          "admission_to_first_durable_delta": 41.824655985692516,
+          "emission_to_first_durable_delta": 3.4093119902536273
+        },
+        {
+          "sample": 4,
+          "admission_to_first_durable_delta": 46.95446399273351,
+          "emission_to_first_durable_delta": 4.14896200527437
+        },
+        {
+          "sample": 5,
+          "admission_to_first_durable_delta": 39.97361200163141,
+          "emission_to_first_durable_delta": 4.276816005585715
+        },
+        {
+          "sample": 6,
+          "admission_to_first_durable_delta": 42.73830499732867,
+          "emission_to_first_durable_delta": 1.589927007444203
+        },
+        {
+          "sample": 7,
+          "admission_to_first_durable_delta": 38.589813018916175,
+          "emission_to_first_durable_delta": 2.4234190059360117
+        },
+        {
+          "sample": 8,
+          "admission_to_first_durable_delta": 43.254363001324236,
+          "emission_to_first_durable_delta": 2.3562730057165027
+        },
+        {
+          "sample": 9,
+          "admission_to_first_durable_delta": 49.85919900354929,
+          "emission_to_first_durable_delta": 1.6285660094581544
+        },
+        {
+          "sample": 10,
+          "admission_to_first_durable_delta": 34.27613899111748,
+          "emission_to_first_durable_delta": 1.9361609884072095
+        },
+        {
+          "sample": 11,
+          "admission_to_first_durable_delta": 29.354274010984227,
+          "emission_to_first_durable_delta": 1.9265610026195645
+        },
+        {
+          "sample": 12,
+          "admission_to_first_durable_delta": 41.89091798616573,
+          "emission_to_first_durable_delta": 1.6915749874897301
+        },
+        {
+          "sample": 13,
+          "admission_to_first_durable_delta": 40.969925990793854,
+          "emission_to_first_durable_delta": 3.880414995364845
+        },
+        {
+          "sample": 14,
+          "admission_to_first_durable_delta": 28.629699983866885,
+          "emission_to_first_durable_delta": 1.8927979981526732
+        },
+        {
+          "sample": 15,
+          "admission_to_first_durable_delta": 37.55848799482919,
+          "emission_to_first_durable_delta": 1.8759189988486469
+        },
+        {
+          "sample": 16,
+          "admission_to_first_durable_delta": 32.524049980565906,
+          "emission_to_first_durable_delta": 1.9487319805193692
+        },
+        {
+          "sample": 17,
+          "admission_to_first_durable_delta": 26.905687001999468,
+          "emission_to_first_durable_delta": 2.1581499895546585
+        },
+        {
+          "sample": 18,
+          "admission_to_first_durable_delta": 38.41777899651788,
+          "emission_to_first_durable_delta": 2.475418004905805
+        },
+        {
+          "sample": 19,
+          "admission_to_first_durable_delta": 39.63310600374825,
+          "emission_to_first_durable_delta": 2.1616219892166555
+        },
+        {
+          "sample": 20,
+          "admission_to_first_durable_delta": 31.37419099221006,
+          "emission_to_first_durable_delta": 2.6076269859913737
+        },
+        {
+          "sample": 21,
+          "admission_to_first_durable_delta": 31.863402982708067,
+          "emission_to_first_durable_delta": 3.6629069945774972
+        },
+        {
+          "sample": 22,
+          "admission_to_first_durable_delta": 31.023960997117683,
+          "emission_to_first_durable_delta": 3.8407329993788153
+        },
+        {
+          "sample": 23,
+          "admission_to_first_durable_delta": 30.756793974433094,
+          "emission_to_first_durable_delta": 2.295304002473131
+        },
+        {
+          "sample": 24,
+          "admission_to_first_durable_delta": 32.33976897899993,
+          "emission_to_first_durable_delta": 3.560106997611001
+        },
+        {
+          "sample": 25,
+          "admission_to_first_durable_delta": 33.006104989908636,
+          "emission_to_first_durable_delta": 3.617785987444222
+        },
+        {
+          "sample": 26,
+          "admission_to_first_durable_delta": 26.731514022685587,
+          "emission_to_first_durable_delta": 1.6441790212411433
+        },
+        {
+          "sample": 27,
+          "admission_to_first_durable_delta": 28.197773004649207,
+          "emission_to_first_durable_delta": 1.7578169936314225
+        },
+        {
+          "sample": 28,
+          "admission_to_first_durable_delta": 30.161876988131553,
+          "emission_to_first_durable_delta": 1.828626001952216
+        },
+        {
+          "sample": 29,
+          "admission_to_first_durable_delta": 31.49212701828219,
+          "emission_to_first_durable_delta": 4.6386150061152875
+        },
+        {
+          "sample": 30,
+          "admission_to_first_durable_delta": 37.816897995071486,
+          "emission_to_first_durable_delta": 3.2978010131046176
+        },
+        {
+          "sample": 31,
+          "admission_to_first_durable_delta": 36.31711797788739,
+          "emission_to_first_durable_delta": 3.029689978575334
+        },
+        {
+          "sample": 32,
+          "admission_to_first_durable_delta": 36.6478510259185,
+          "emission_to_first_durable_delta": 2.1268150012474507
+        },
+        {
+          "sample": 33,
+          "admission_to_first_durable_delta": 31.146020017331466,
+          "emission_to_first_durable_delta": 3.3946940093301237
+        },
+        {
+          "sample": 34,
+          "admission_to_first_durable_delta": 34.09794199978933,
+          "emission_to_first_durable_delta": 2.9173159855417907
+        },
+        {
+          "sample": 35,
+          "admission_to_first_durable_delta": 31.994135992135853,
+          "emission_to_first_durable_delta": 1.8970849923789501
+        },
+        {
+          "sample": 36,
+          "admission_to_first_durable_delta": 32.90112499962561,
+          "emission_to_first_durable_delta": 2.5539930211380124
+        },
+        {
+          "sample": 37,
+          "admission_to_first_durable_delta": 33.399359992472455,
+          "emission_to_first_durable_delta": 2.5128190172836185
+        },
+        {
+          "sample": 38,
+          "admission_to_first_durable_delta": 35.28698702575639,
+          "emission_to_first_durable_delta": 3.622192016337067
+        },
+        {
+          "sample": 39,
+          "admission_to_first_durable_delta": 41.236605000449345,
+          "emission_to_first_durable_delta": 4.149512009462342
+        },
+        {
+          "sample": 40,
+          "admission_to_first_durable_delta": 34.671590983634815,
+          "emission_to_first_durable_delta": 4.228145000524819
+        },
+        {
+          "sample": 41,
+          "admission_to_first_durable_delta": 39.71637898939662,
+          "emission_to_first_durable_delta": 3.715616010595113
+        },
+        {
+          "sample": 42,
+          "admission_to_first_durable_delta": 48.95793698960915,
+          "emission_to_first_durable_delta": 3.2693399989511818
+        },
+        {
+          "sample": 43,
+          "admission_to_first_durable_delta": 50.66295599681325,
+          "emission_to_first_durable_delta": 2.80063200625591
+        },
+        {
+          "sample": 44,
+          "admission_to_first_durable_delta": 42.304920993046835,
+          "emission_to_first_durable_delta": 2.412381989415735
+        },
+        {
+          "sample": 45,
+          "admission_to_first_durable_delta": 45.161288988310844,
+          "emission_to_first_durable_delta": 3.550316992914304
+        },
+        {
+          "sample": 46,
+          "admission_to_first_durable_delta": 45.28047499479726,
+          "emission_to_first_durable_delta": 2.0054939959663898
+        },
+        {
+          "sample": 47,
+          "admission_to_first_durable_delta": 35.61713598901406,
+          "emission_to_first_durable_delta": 4.081035003764555
+        },
+        {
+          "sample": 48,
+          "admission_to_first_durable_delta": 47.09777201060206,
+          "emission_to_first_durable_delta": 4.823323019081727
+        },
+        {
+          "sample": 49,
+          "admission_to_first_durable_delta": 50.35068100551143,
+          "emission_to_first_durable_delta": 3.629270999226719
+        }
+      ],
+      "retained_session_locks_after_turns": 0,
+      "measurement": {
+        "sql_statements": 4459,
+        "select_statements": 3601,
+        "write_statements": 857,
+        "observer_statements": 50,
+        "affected_write_rows": {
+          "INSERT f1a9db7e9769": 50,
+          "INSERT c2ad233312de": 50,
+          "INSERT d0433d5f0167": 100,
+          "INSERT 4b58693227ed": 50,
+          "INSERT 29cf1e549bcc": 100,
+          "UPDATE e360ddf80b92": 50,
+          "UPDATE c07703eecedb": 50,
+          "INSERT agent_events": 250,
+          "INSERT 1c92855a9fa9": 50,
+          "UPDATE 725685af3527": 50,
+          "UPDATE c5a0fb97afbe": 2
+        },
+        "fetched_rows": 2838,
+        "fetched_by_query": {
+          "SELECT 169eb95272e4": 412,
+          "SELECT 3cfdb680a3b0": 50,
+          "SELECT 0f508de0ad3c": 204,
+          "SELECT 251ef14f92cb": 204,
+          "SELECT 65d6c07f51ca": 204,
+          "SELECT 47583e95dacf": 50,
+          "SELECT 489016622ba3": 200,
+          "SELECT edefb5f0880a": 100,
+          "SELECT 65d21f2b27a0": 200,
+          "SELECT 3f67a0d7c2c2": 250,
+          "SELECT 1e1b2211298d": 150,
+          "SELECT b9799ed19a5f": 100,
+          "SELECT ce3f2c95973a": 100,
+          "SELECT f9945f0686bd": 100,
+          "SELECT 054a72fc847c": 14,
+          "SELECT 23e825e5ee15": 50,
+          "SELECT 4d1b32b59512": 400,
+          "SELECT b05e677eb1c5": 50,
+          "observer SELECT 89534a623bbc": 50
+        },
+        "statements_by_query": {
+          "SELECT cdbc855e1fb2": 5,
+          "SELECT 86f67e3420c7": 100,
+          "SELECT b600b7f026a9": 100,
+          "SELECT 4d8eb9873277": 100,
+          "INSERT f1a9db7e9769": 50,
+          "SELECT 169eb95272e4": 412,
+          "SELECT 3cfdb680a3b0": 50,
+          "SELECT 0f508de0ad3c": 208,
+          "SELECT 251ef14f92cb": 204,
+          "SELECT 65d6c07f51ca": 204,
+          "SELECT 8c74bb85e2c4": 50,
+          "SELECT 94456c448e1a": 50,
+          "INSERT c2ad233312de": 50,
+          "INSERT d0433d5f0167": 100,
+          "INSERT 4b58693227ed": 50,
+          "INSERT 29cf1e549bcc": 100,
+          "UPDATE 536592323c8d": 4,
+          "SELECT 473370567aec": 4,
+          "SELECT b58a30708eea": 4,
+          "SELECT d476662d5a72": 4,
+          "SELECT 054a72fc847c": 153,
+          "SELECT c61911d7a96b": 77,
+          "SELECT 47583e95dacf": 76,
+          "UPDATE e360ddf80b92": 50,
+          "SELECT 489016622ba3": 200,
+          "UPDATE c07703eecedb": 50,
+          "SELECT edefb5f0880a": 100,
+          "SELECT bdfeac34da37": 50,
+          "SELECT fae2212804eb": 50,
+          "SELECT 65d21f2b27a0": 200,
+          "SELECT 3f67a0d7c2c2": 250,
+          "INSERT agent_events": 250,
+          "SELECT 1e1b2211298d": 150,
+          "SELECT b9799ed19a5f": 100,
+          "SELECT ce3f2c95973a": 100,
+          "SELECT 3b84c2508228": 50,
+          "SELECT f9945f0686bd": 100,
+          "SET 0a177f22abd5": 1,
+          "SELECT 2c1dee434727": 50,
+          "SELECT 07688eae770a": 50,
+          "SELECT 23e825e5ee15": 50,
+          "INSERT 1c92855a9fa9": 50,
+          "UPDATE 514991eb1480": 50,
+          "SELECT 4d1b32b59512": 100,
+          "SELECT 0f896edfdc31": 50,
+          "SELECT 4c0d4534cb1d": 50,
+          "SELECT 99c84deab261": 50,
+          "SELECT b05e677eb1c5": 50,
+          "UPDATE 725685af3527": 50,
+          "observer SELECT 89534a623bbc": 50,
+          "UPDATE c5a0fb97afbe": 3
+        },
+        "event_inserts_by_type": {
+          "message.start": 50,
+          "message.delta": 100,
+          "message.end": 50,
+          "run.completed": 50
+        },
+        "sql_execute_seconds_including_observer": 2.346383,
+        "sql_failures": 0,
+        "store_method_calls": {
+          "recover_wakeups": 5,
+          "renew_leases": 4,
+          "expire_queued_compute_jobs": 4,
+          "expire_running_compute_jobs": 4,
+          "claim_wakeups": 77,
+          "claim_queued_runs": 77
+        }
+      }
+    }
+  },
+  "finished_at": "2026-10-10T12:38:47.729919+00:00"
+}

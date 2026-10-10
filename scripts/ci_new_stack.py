@@ -214,6 +214,7 @@ def main() -> None:
             check([sys.executable, "-m", "pytest", "-q", "-p", "pytest_asyncio.plugin",
                    "-p", "ci_pg_guard",
                    str(source / "deploy/agent/tests"), str(source / "scripts/test_ci_new_stack.py"),
+                   str(source / "scripts/test_benchmark_new_stack.py"),
                    "--ignore=" + str(source / "deploy/agent/tests/test_backend_image.py"),
                    "--ignore=" + str(source / "deploy/agent/tests/test_web_routes.py"),
                    "--ignore=" + str(source / "deploy/agent/tests/test_split_web_routes.py"),
