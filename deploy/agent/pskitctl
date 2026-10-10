@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Daily application operations only; bootstrap/migrate/executor have separate procedures.
+set -Eeuo pipefail
+agent_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+repo_dir=$(cd -- "$agent_dir/../.." && pwd)
+cd -- "$repo_dir"
+exec "${PSKITCTL_PYTHON:-python3}" -m deploy.agent.scripts.release_control "$@"
