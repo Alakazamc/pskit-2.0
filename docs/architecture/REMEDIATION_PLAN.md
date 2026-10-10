@@ -83,15 +83,18 @@
 
 **Files:** `app/contracts/admin.py`、`domain/admin/model_policy.py`（现有权威）；新 `app/services/model_gateway.py`、`app/domain/admin/model_qualification.py`、`app/adapters/live/pi_model_config.py`；修改model_catalog、main lifespan、internal proxy、session_titles、pi_rpc及对应tests。保持PinCC compat隔离。
 
-- [ ] 先修mixed alias vision最低能力；增加未知部署/missingmetadata回归，人工声明不能掩盖已知不兼容部署。
-- [ ] 提取PiModelConfigBuilder，默认Chat Completions与旧行为一致；Profile revision/协议/能力/qualification证据复用已有ModelDraft修订审计。
-- [ ] lifespan共享httpx连接池，保留测试注入；proxy/标题共享transport但用途授权/Token预占独立；shutdown/流取消关闭response。
-- [ ] 结构化上游错误status/code归一化，脱敏稳定错误码；保留原公开错误合同映射。未识别保持unknown，不虚构usage=0。
-- [ ] qualification离线矩阵：text/stream/tool_calls碎片/tool result继续/429/usage缺失/图片/reasoning各声明；记录alias/deployment/网关版本/URL指纹/证据，无密钥或私密输入。
-- [ ] 新profile未passed不Agent Ready；旧已发布路由显式兼容，不悄然隐藏用户现有模型。公开新增信息为可选、契约生成与旧客户端兼容单独验证。
+- [x] 先修mixed alias vision最低能力；增加未知部署/missingmetadata回归，人工声明不能掩盖已知不兼容部署。
+- [x] 提取PiModelConfigBuilder，默认Chat Completions与旧行为一致；Profile revision/协议/能力/qualification证据复用已有ModelDraft修订审计。
+- [x] lifespan共享httpx连接池，保留测试注入；proxy/标题共享transport但用途授权/Token预占独立；shutdown/流取消关闭response。
+- [x] 结构化上游错误status/code归一化，脱敏稳定错误码；保留原公开错误合同映射。未识别保持unknown，不虚构usage=0。
+- [x] qualification离线矩阵：text/stream/tool_calls碎片/tool result继续/429/usage缺失/图片/reasoning各声明；记录alias/deployment/网关版本/URL指纹/证据，无密钥或私密输入。
+- [x] 新profile未passed不Agent Ready；旧已发布路由显式兼容，不悄然隐藏用户现有模型。公开新增信息为可选、契约生成与旧客户端兼容单独验证。
+- [ ] 接入受控真实host driver：逐部署/每次调用独立账本/Pi写读和产物所有权验证；默认关闭，离线证据不得签发Agent Ready。
 - [ ] PinCC限定patch不扩展；通用OpenAI-route不修改工具body。生成真实新供应商Staging验收手册，未授权时not tested。
 
 **Gate:** 本地协议/账本/旧模型回归通过；新provider真实Pi文件/Artifact资格需另授权，在此之前不宣称生产支持已验收。**Rollback:** revert各模型小提交；Profile新revision停用旧revision仍可用，无自动真实DB迁移或credential变更。
+
+**当前：** 核心边界冻结版本 `bba1ee6` 全量969通过/PG170零跳过；实际资格driver仍在实现，完整阶段门禁pending。详见[阶段记录](phases/phase-3/VERIFICATION.md)。
 
 ## Phase 4 — Backend运行时与模块边界（A-01/02/DB-01/C-01/A-03/X-01）
 
