@@ -125,6 +125,26 @@ def test_preflight_accepts_isolated_config(stage, rendered):
     staging.validate_staging(stage / "manifest.json", rendered, _production())
 
 
+@pytest.mark.parametrize("source,read_only,accepted", [
+    ("provider_compat.py", True, True),
+    ("provider_compat.py", False, False),
+    ("unreviewed_compat.py", True, False),
+    ("unreviewed_compat.py", False, False),
+])
+def test_preflight_only_accepts_reviewed_readonly_compat_bind(
+    stage, rendered, source, read_only, accepted,
+):
+    rendered["litellm"]["services"]["gateway"]["volumes"] = [{
+        "type": "bind", "source": str(staging.LITELLM / source),
+        "target": "/app/provider_compat.py", "read_only": read_only,
+    }]
+    if accepted:
+        staging.validate_staging(stage / "manifest.json", rendered, _production())
+    else:
+        with pytest.raises(ValueError, match="Unexpected staging bind mount"):
+            staging.validate_staging(stage / "manifest.json", rendered, _production())
+
+
 def test_preflight_requires_production_fingerprints(stage, rendered):
     with pytest.raises(ValueError):
         staging.validate_staging(stage / "manifest.json", rendered, {})

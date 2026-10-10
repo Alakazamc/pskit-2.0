@@ -122,7 +122,8 @@ def validate_staging(
                     path = Path(source).resolve()
                     allowed = (part == "supabase" and path.is_relative_to(SUPABASE / "volumes")
                                or part == "litellm" and path in {
-                                   LITELLM / "config.staging.yaml", AGENT / "tests/mock_model_gateway.py"}
+                                   LITELLM / "config.staging.yaml", LITELLM / "provider_compat.py",
+                                   AGENT / "tests/mock_model_gateway.py"}
                                or part == "agent" and has_opensandbox and path in {
                                    root / "opensandbox.private.toml",
                                    root / "opensandbox-rollout",

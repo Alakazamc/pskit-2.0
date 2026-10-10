@@ -11,14 +11,15 @@ DOCKERFILE = Path(__file__).parents[1] / "backend.Dockerfile"
 
 
 def docker(*arguments: str) -> str:
-    result = subprocess.run(["docker", *arguments], capture_output=True, text=True, check=True)
+    result = subprocess.run(["docker", *arguments], capture_output=True, text=True,
+                            check=True, timeout=120)
     return result.stdout.strip()
 
 
 def test_backend_dockerfile_includes_generic_mcp_receiver():
     source = DOCKERFILE.read_text(encoding="utf-8")
     assert "COPY scripts/mcp_compute_receiver.py ./scripts/mcp_compute_receiver.py" in source
-    assert source.index("RUN python -c \"import subprocess,sys,tomllib") < source.index(
+    assert source.index('python -c "import subprocess,sys,tomllib') < source.index(
         "COPY app ./app"
     )
 
@@ -27,10 +28,15 @@ def test_backend_image_runtime_and_storage():
     metadata = json.loads(docker("image", "inspect", IMAGE))[0]
     assert metadata["Config"]["User"] not in {"", "0", "root"}
     output = docker(
-        "run", "--rm", "--entrypoint", "sh", IMAGE, "-c",
-        "id -u; python -c 'import sys; print(sys.version_info.major, sys.version_info.minor)'; "
+        "run", "--rm", "--network", "none", "--cap-drop", "ALL",
+        "--security-opt", "no-new-privileges:true",
+        "-e", "RESEARCH_AGENT_MODE=mock",
+        "-e", "RESEARCH_AGENT_DB_PATH=/data/image-contract.sqlite3",
+        "--entrypoint", "sh", IMAGE, "-c",
+        "set -eu; id -u; python -c 'import sys; print(sys.version_info.major, sys.version_info.minor)'; "
         "node --version; pi --version; touch /data/image-contract-check; "
-        "touch /var/lib/pskit-mcp/image-contract-check",
+        "touch /var/lib/pskit-mcp/image-contract-check; "
+        "python -c 'import app.main, mcp, psycopg, pskit_compute'",
     )
     lines = output.splitlines()
     assert int(lines[0]) > 0
@@ -41,7 +47,7 @@ def test_backend_image_runtime_and_storage():
 
 def test_backend_image_excludes_secrets():
     docker("image", "inspect", IMAGE)
-    files = docker("run", "--rm", "--entrypoint", "sh", IMAGE, "-c",
+    files = docker("run", "--rm", "--network", "none", "--entrypoint", "sh", IMAGE, "-c",
                    "find /app -name '.env*' -o -name 'agent.sqlite3'")
     assert files == ""
     history = docker("history", "--no-trunc", "--format", "{{.CreatedBy}}", IMAGE)

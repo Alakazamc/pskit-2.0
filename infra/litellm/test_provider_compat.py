@@ -4,15 +4,29 @@ import asyncio
 import copy
 import json
 import unittest
+from unittest.mock import patch
 
 import httpx
 import litellm
 from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler, HTTPHandler
 
-from provider_compat import normalize_pincc_tools, pincc_tool_compatibility
+from provider_compat import PinccToolCompatibility, normalize_pincc_tools, pincc_tool_compatibility
 
 
 class CompatibilityTests(unittest.TestCase):
+    def setUp(self):
+        self.callbacks = litellm.callbacks
+        self.drop_params = litellm.drop_params
+
+    def tearDown(self):
+        litellm.callbacks = self.callbacks
+        litellm.drop_params = self.drop_params
+
+    def test_version_mismatch_requires_requalification(self):
+        with patch("provider_compat.version", return_value="1.100.4"):
+            with self.assertRaisesRegex(RuntimeError, "Requalify"):
+                PinccToolCompatibility()
+
     def test_only_matching_native_custom_tools_change(self):
         tools = [
             {"type": "custom", "name": "write_file", "input_schema": {"type": "object"},
@@ -28,6 +42,79 @@ class CompatibilityTests(unittest.TestCase):
         self.assertEqual(body["tools"][1:], original[1:])
         self.assertEqual(body["tool_choice"], {"type": "auto"})
         self.assertFalse(normalize_pincc_tools("https://v2.pincc.ai/v1/messages", body))
+
+    def test_actual_openai_callback_preserves_wire_all_modes(self):
+        """Exercise the SDK transport and real callback, without provider access."""
+        litellm.callbacks = [pincc_tool_compatibility]
+        tool = {"type": "function", "function": {
+            "name": "diagnostic_echo", "description": "Echo a harmless value",
+            "parameters": {"type": "object", "properties": {"value": {"type": "string"}},
+                           "required": ["value"]},
+        }}
+        for stream in (False, True):
+            for asynchronous in (False, True):
+                with self.subTest(stream=stream, asynchronous=asynchronous):
+                    seen = []
+
+                    def respond(request):
+                        self.assertEqual(request.url.host, "api.openai.com")
+                        self.assertEqual(request.url.path, "/v1/chat/completions")
+                        body = json.loads(request.content)
+                        seen.append(body)
+                        self.assertEqual(body["tools"], [tool])
+                        self.assertEqual(body["tool_choice"], {
+                            "type": "function", "function": {"name": "diagnostic_echo"},
+                        })
+                        call = {"id": "call_wire", "type": "function", "function": {
+                            "name": "diagnostic_echo", "arguments": '{"value":"pong"}',
+                        }}
+                        envelope = {"id": "chatcmpl-wire", "created": 1, "model": "gpt-4o-mini"}
+                        if not stream:
+                            return httpx.Response(200, json={**envelope, "object": "chat.completion",
+                                "choices": [{"index": 0, "message": {"role": "assistant",
+                                             "content": None, "tool_calls": [call]},
+                                             "finish_reason": "tool_calls"}],
+                                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}})
+                        packets = [{**envelope, "object": "chat.completion.chunk", "choices": [
+                            {"index": 0, "delta": {"role": "assistant", "tool_calls": [
+                                {"index": 0, **call}]}, "finish_reason": None}]},
+                            {**envelope, "object": "chat.completion.chunk", "choices": [
+                                {"index": 0, "delta": {}, "finish_reason": "tool_calls"}]}]
+                        data = "".join(f"data: {json.dumps(packet)}\n\n" for packet in packets)
+                        return httpx.Response(200, text=data + "data: [DONE]\n\n",
+                                              headers={"content-type": "text/event-stream"})
+
+                    params = dict(model="openai/gpt-4o-mini", api_key="offline-only",
+                                  api_base="https://api.openai.com/v1",
+                                  messages=[{"role": "user", "content": "Echo pong"}],
+                                  tools=[copy.deepcopy(tool)], stream=stream, max_tokens=64,
+                                  tool_choice={"type": "function", "function": {"name": "diagnostic_echo"}})
+                    with patch.object(pincc_tool_compatibility, "log_pre_api_call",
+                                      wraps=pincc_tool_compatibility.log_pre_api_call) as callback:
+                        if asynchronous:
+                            async def invoke():
+                                async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+                                    result = await litellm.acompletion(**params, client=client)
+                                    if stream:
+                                        chunks = [chunk async for chunk in result]
+                                        self.assertTrue(any(c.choices[0].delta.tool_calls for c in chunks if c.choices))
+                                    else:
+                                        self.assertEqual(result.choices[0].message.tool_calls[0].function.name,
+                                                         "diagnostic_echo")
+                            asyncio.run(invoke())
+                        else:
+                            with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+                                result = litellm.completion(**params, client=client)
+                                if stream:
+                                    self.assertTrue(any(c.choices[0].delta.tool_calls for c in result if c.choices))
+                                else:
+                                    self.assertEqual(result.choices[0].message.tool_calls[0].function.name,
+                                                     "diagnostic_echo")
+                        self.assertGreater(callback.call_count, 0)
+                        callback_kwargs = (callback.call_args.kwargs.get("kwargs")
+                                           or callback.call_args.args[2])
+                        self.assertEqual(callback_kwargs["litellm_params"]["custom_llm_provider"], "openai")
+                    self.assertEqual(len(seen), 1)
 
     def test_unrelated_endpoints_and_invalid_bodies_unchanged(self):
         for url in ["https://api.anthropic.com/v1/messages", "https://v2.pincc.ai.evil.test/v1/messages",

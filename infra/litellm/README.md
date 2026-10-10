@@ -75,6 +75,9 @@ docker run --rm --network none --read-only --tmpfs /tmp \
   /compat/test_provider_compat.py
 ```
 
+新栈 CI 对 PinCC、官方 Anthropic 和官方 OpenAI 执行上述真实回调离线对照。
+升级复验与关闭回调后的真实退役探针见 [兼容层维护手册](COMPATIBILITY.md)。
+
 真实联调使用 `deploy/agent/tests/smoke_workspace_tools_live.py`：只登录既有
 Staging 合成账号，签发单模型、20 分钟、最多 $0.25 的临时虚拟 key，验证
 `write_file`、`read_file`、`artifact.created`、鉴权下载及预览字节一致，最后

@@ -70,3 +70,12 @@
 ## Gate 与下一步
 
 Phase 0 源码审计已完成，基线并非全绿。先实施 Phase 1：F-01/F-02 基础修复、退出不安全根部署入口，补 fail-closed 生产配置校验与回归。随后 Phase 2 建新栈 CI，并定位/修复既有失败。具体文件、验证、提交与回滚见 [分阶段实施计划](REMEDIATION_PLAN.md)；部署配置见 [矩阵](DEPLOY_MATRIX.md)，未解决风险见 [风险登记](RISK_REGISTER.md)。生产有效防护、新供应商和沙箱验收需要单独授权，本轮只能生成验证入口和手册。
+
+
+## 后续扩大基线检查（2026-10-10，本地隔离）
+
+初次审计后，实际 PostgreSQL17.6 临时 tmpfs 容器下全量后端为 **785 passed / 71 failed / 1 skipped / 3 setup errors**（191.20s）。许多旧 live 测试直接构造 Settings 时未填写现在要求的 CSRF secret；另有 schema 版本与技能目录断言漂移、历史沙箱 doubles 不符合当前 workspace provider 接口。逐项归因进入 Phase2；不能因此放宽运行时安全校验。Docker snap 看不到测试的 /tmp env 文件也导致 3 个 Compose 渲染 setup 错误。
+
+扩大前端检查发现 11 个旧测试失败及 1 个不完整 SkillDetail fixture 引起的未捕获异常。Phase1 定向修复范围之外，归 Phase2 测试基线处理。
+
+契约生成物滞后源码：已有 Skill API/可选 Catalog 字段与 ToolUpdatedData.summary 未同步。Phase2 单独更新这些生成物；不把生成物更新算新增服务行为。

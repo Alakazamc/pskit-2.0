@@ -9,6 +9,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
+from psycopg import sql
 
 from deploy.agent.scripts.provision_shared_postgres import provision_shared_postgres
 from infra.litellm import bootstrap_pskit
@@ -51,20 +52,44 @@ def test_provision_creates_separate_database_and_roles(provisioned_pg):
         gateway.execute("DROP TABLE public.pskit_permission_probe")
 
 
-def test_app_role_cannot_read_auth(provisioned_pg):
-    with psycopg.connect(provisioned_pg, autocommit=True) as admin:
-        assert admin.execute(
-            "SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
-            "WHERE n.nspname='auth' AND c.relname='users'"
-        ).fetchone()
+@pytest.fixture
+def isolated_auth_pg():
+    """Test the exact Supabase namespace without touching an existing auth schema."""
+    dsn = os.environ.get("TEST_POSTGRES_DSN")
+    if not dsn:
+        pytest.skip("Set TEST_POSTGRES_DSN to run PostgreSQL integration tests")
+    database = f"pskit_ci_auth_{uuid.uuid4().hex}"
+    auth_dsn = psycopg.conninfo.make_conninfo(dsn, dbname=database)
+    with psycopg.connect(dsn, autocommit=True) as admin:
+        admin.execute(sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(sql.Identifier(database)))
+    try:
+        with psycopg.connect(auth_dsn, autocommit=True) as admin:
+            admin.execute("CREATE SCHEMA auth")
+            admin.execute("CREATE TABLE auth.users (id uuid)")
+            admin.execute("INSERT INTO auth.users VALUES (%s)", (uuid.uuid4(),))
+        provision_shared_postgres(
+            auth_dsn, litellm_password="local-litellm-test-password",
+            pskit_password="local-pskit-test-password",
+        )
+        yield auth_dsn
+    finally:
+        with psycopg.connect(dsn, autocommit=True) as admin:
+            admin.execute(sql.SQL("DROP DATABASE {}").format(sql.Identifier(database)))
+
+
+def test_app_role_cannot_read_supabase_auth_users(isolated_auth_pg):
+    with psycopg.connect(isolated_auth_pg) as admin:
+        assert admin.execute("SELECT count(*) FROM auth.users").fetchone() == (1,)
+        for role in ("pskit_app", "litellm"):
+            assert admin.execute("SELECT has_schema_privilege(%s, 'auth', 'USAGE')", (role,)).fetchone() == (False,)
+            assert admin.execute("SELECT has_table_privilege(%s, 'auth.users', 'SELECT')", (role,)).fetchone() == (False,)
     app_dsn = psycopg.conninfo.make_conninfo(
-        provisioned_pg, dbname="postgres", user="pskit_app",
-        password="local-pskit-test-password",
+        isolated_auth_pg, user="pskit_app", password="local-pskit-test-password",
     )
     with psycopg.connect(app_dsn) as app:
         assert app.execute("SELECT current_user").fetchone() == ("pskit_app",)
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
-            app.execute("SELECT * FROM auth.users").fetchall()
+            app.execute("SELECT * FROM auth.users")
 
 
 def test_shared_compose_has_no_db_service():
