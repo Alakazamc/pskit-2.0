@@ -881,6 +881,22 @@ export type CatalogItem = {
      * Version
      */
     version?: number;
+    /**
+     * Visibility
+     */
+    visibility?: 'private' | 'review_pending' | 'public' | 'rejected' | 'disabled';
+    /**
+     * Owned By Me
+     */
+    owned_by_me?: boolean;
+    /**
+     * Source
+     */
+    source?: 'builtin' | 'upstream' | 'user';
+    /**
+     * Available
+     */
+    available?: boolean;
 };
 
 /**
@@ -2950,6 +2966,96 @@ export type SignupResponse = {
      */
     status: 'check_email' | 'signed_in';
     session?: AuthSessionResponse | null;
+};
+
+/**
+ * SkillDetail
+ */
+export type SkillDetail = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Description
+     */
+    description?: string;
+    /**
+     * Version
+     */
+    version?: number;
+    /**
+     * Visibility
+     */
+    visibility?: 'private' | 'review_pending' | 'public' | 'rejected' | 'disabled';
+    /**
+     * Owned By Me
+     */
+    owned_by_me?: boolean;
+    /**
+     * Source
+     */
+    source?: 'builtin' | 'upstream' | 'user';
+    /**
+     * Available
+     */
+    available?: boolean;
+    /**
+     * Files
+     */
+    files?: Array<SkillFile>;
+    /**
+     * License Name
+     */
+    license_name?: string | null;
+    /**
+     * Source Url
+     */
+    source_url?: string | null;
+    /**
+     * Source Commit
+     */
+    source_commit?: string | null;
+    /**
+     * Review Reason
+     */
+    review_reason?: string | null;
+};
+
+/**
+ * SkillFile
+ */
+export type SkillFile = {
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Size
+     */
+    size: number;
+    /**
+     * Content
+     */
+    content?: string | null;
+};
+
+/**
+ * SkillReviewRequest
+ */
+export type SkillReviewRequest = {
+    /**
+     * Decision
+     */
+    decision: 'approve' | 'reject';
+    /**
+     * Reason
+     */
+    reason: string;
 };
 
 /**
@@ -5115,6 +5221,66 @@ export type ListSkillsApiV1SkillsGetResponses = {
 
 export type ListSkillsApiV1SkillsGetResponse = ListSkillsApiV1SkillsGetResponses[keyof ListSkillsApiV1SkillsGetResponses];
 
+export type GetSkillApiV1SkillsSkillIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Skill Id
+         */
+        skill_id: string;
+    };
+    query?: never;
+    url: '/api/v1/skills/{skill_id}';
+};
+
+export type GetSkillApiV1SkillsSkillIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetSkillApiV1SkillsSkillIdGetError = GetSkillApiV1SkillsSkillIdGetErrors[keyof GetSkillApiV1SkillsSkillIdGetErrors];
+
+export type GetSkillApiV1SkillsSkillIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SkillDetail;
+};
+
+export type GetSkillApiV1SkillsSkillIdGetResponse = GetSkillApiV1SkillsSkillIdGetResponses[keyof GetSkillApiV1SkillsSkillIdGetResponses];
+
+export type UploadSkillPackageApiV1SkillsPackagesPostData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Visibility
+         */
+        visibility?: 'private' | 'public';
+    };
+    url: '/api/v1/skills/packages';
+};
+
+export type UploadSkillPackageApiV1SkillsPackagesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadSkillPackageApiV1SkillsPackagesPostError = UploadSkillPackageApiV1SkillsPackagesPostErrors[keyof UploadSkillPackageApiV1SkillsPackagesPostErrors];
+
+export type UploadSkillPackageApiV1SkillsPackagesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: CatalogItem;
+};
+
+export type UploadSkillPackageApiV1SkillsPackagesPostResponse = UploadSkillPackageApiV1SkillsPackagesPostResponses[keyof UploadSkillPackageApiV1SkillsPackagesPostResponses];
+
 export type ListResourcesApiV1ResourcesGetData = {
     body?: never;
     path?: never;
@@ -6514,6 +6680,79 @@ export type RegisterSkillVersionApiV1AdminSkillsSkillIdVersionsVersionPutRespons
 
 export type RegisterSkillVersionApiV1AdminSkillsSkillIdVersionsVersionPutResponse = RegisterSkillVersionApiV1AdminSkillsSkillIdVersionsVersionPutResponses[keyof RegisterSkillVersionApiV1AdminSkillsSkillIdVersionsVersionPutResponses];
 
+export type ListSkillReviewsApiV1AdminSkillsReviewsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * X-Admin-Key
+         */
+        'x-admin-key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/skills/reviews';
+};
+
+export type ListSkillReviewsApiV1AdminSkillsReviewsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSkillReviewsApiV1AdminSkillsReviewsGetError = ListSkillReviewsApiV1AdminSkillsReviewsGetErrors[keyof ListSkillReviewsApiV1AdminSkillsReviewsGetErrors];
+
+export type ListSkillReviewsApiV1AdminSkillsReviewsGetResponses = {
+    /**
+     * Response List Skill Reviews Api V1 Admin Skills Reviews Get
+     *
+     * Successful Response
+     */
+    200: Array<SkillDetail>;
+};
+
+export type ListSkillReviewsApiV1AdminSkillsReviewsGetResponse = ListSkillReviewsApiV1AdminSkillsReviewsGetResponses[keyof ListSkillReviewsApiV1AdminSkillsReviewsGetResponses];
+
+export type ReviewSkillVersionApiV1AdminSkillsSkillIdVersionsVersionReviewPostData = {
+    body: SkillReviewRequest;
+    headers?: {
+        /**
+         * X-Admin-Key
+         */
+        'x-admin-key'?: string | null;
+    };
+    path: {
+        /**
+         * Skill Id
+         */
+        skill_id: string;
+        /**
+         * Version
+         */
+        version: number;
+    };
+    query?: never;
+    url: '/api/v1/admin/skills/{skill_id}/versions/{version}/review';
+};
+
+export type ReviewSkillVersionApiV1AdminSkillsSkillIdVersionsVersionReviewPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReviewSkillVersionApiV1AdminSkillsSkillIdVersionsVersionReviewPostError = ReviewSkillVersionApiV1AdminSkillsSkillIdVersionsVersionReviewPostErrors[keyof ReviewSkillVersionApiV1AdminSkillsSkillIdVersionsVersionReviewPostErrors];
+
+export type ReviewSkillVersionApiV1AdminSkillsSkillIdVersionsVersionReviewPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CatalogItem;
+};
+
+export type ReviewSkillVersionApiV1AdminSkillsSkillIdVersionsVersionReviewPostResponse = ReviewSkillVersionApiV1AdminSkillsSkillIdVersionsVersionReviewPostResponses[keyof ReviewSkillVersionApiV1AdminSkillsSkillIdVersionsVersionReviewPostResponses];
+
 export type UserLimitsApiV1AdminUsersUserIdLimitsGetData = {
     body?: never;
     path: {
@@ -7225,6 +7464,36 @@ export type DrainSandboxApiV1AdminSandboxesOwnerIdDrainPostResponses = {
 };
 
 export type DrainSandboxApiV1AdminSandboxesOwnerIdDrainPostResponse = DrainSandboxApiV1AdminSandboxesOwnerIdDrainPostResponses[keyof DrainSandboxApiV1AdminSandboxesOwnerIdDrainPostResponses];
+
+export type ReplaceSandboxApiV1AdminSandboxesOwnerIdReplacePostData = {
+    body: RevisionRequest;
+    path: {
+        /**
+         * Owner Id
+         */
+        owner_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/sandboxes/{owner_id}/replace';
+};
+
+export type ReplaceSandboxApiV1AdminSandboxesOwnerIdReplacePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReplaceSandboxApiV1AdminSandboxesOwnerIdReplacePostError = ReplaceSandboxApiV1AdminSandboxesOwnerIdReplacePostErrors[keyof ReplaceSandboxApiV1AdminSandboxesOwnerIdReplacePostErrors];
+
+export type ReplaceSandboxApiV1AdminSandboxesOwnerIdReplacePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AdminOperation;
+};
+
+export type ReplaceSandboxApiV1AdminSandboxesOwnerIdReplacePostResponse = ReplaceSandboxApiV1AdminSandboxesOwnerIdReplacePostResponses[keyof ReplaceSandboxApiV1AdminSandboxesOwnerIdReplacePostResponses];
 
 export type AuditEventsApiV1AdminAuditEventsGetData = {
     body?: never;

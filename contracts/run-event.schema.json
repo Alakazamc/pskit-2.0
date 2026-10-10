@@ -820,6 +820,37 @@
       "title": "ToolStartedEvent",
       "type": "object"
     },
+    "ToolUpdatedData": {
+      "properties": {
+        "tool_call_id": {
+          "title": "Tool Call Id",
+          "type": "string"
+        },
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summary"
+        }
+      },
+      "required": [
+        "tool_call_id",
+        "tool"
+      ],
+      "title": "ToolUpdatedData",
+      "type": "object"
+    },
     "ToolUpdatedEvent": {
       "properties": {
         "id": {
@@ -843,7 +874,7 @@
           "type": "string"
         },
         "data": {
-          "$ref": "#/$defs/ToolStartedData"
+          "$ref": "#/$defs/ToolUpdatedData"
         }
       },
       "required": [

@@ -1776,6 +1776,107 @@
         ]
       }
     },
+    "/api/v1/skills/{skill_id}": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Get Skill",
+        "description": "Return an authorized Skill's metadata and inert text file tree.",
+        "operationId": "get_skill_api_v1_skills__skill_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "skill_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Skill Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/skills/packages": {
+      "post": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Upload Skill Package",
+        "description": "Save a private Skill ZIP or submit it for public review.",
+        "operationId": "upload_skill_package_api_v1_skills_packages_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "visibility",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "private",
+                "public"
+              ],
+              "type": "string",
+              "default": "private",
+              "title": "Visibility"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/resources": {
       "get": {
         "tags": [
@@ -4240,6 +4341,138 @@
         }
       }
     },
+    "/api/v1/admin/skills/reviews": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Skill Reviews",
+        "description": "List user Skill versions awaiting public catalog review.",
+        "operationId": "list_skill_reviews_api_v1_admin_skills_reviews_get",
+        "parameters": [
+          {
+            "name": "x-admin-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SkillDetail"
+                  },
+                  "title": "Response List Skill Reviews Api V1 Admin Skills Reviews Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/skills/{skill_id}/versions/{version}/review": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Review Skill Version",
+        "description": "Approve a pending Skill for everyone or return it privately with a reason.",
+        "operationId": "review_skill_version_api_v1_admin_skills__skill_id__versions__version__review_post",
+        "parameters": [
+          {
+            "name": "skill_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Skill Id"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version"
+            }
+          },
+          {
+            "name": "x-admin-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/users/{user_id}/limits": {
       "put": {
         "tags": [
@@ -5542,6 +5775,64 @@
         ],
         "summary": "Drain Sandbox",
         "operationId": "drain_sandbox_api_v1_admin_sandboxes__owner_id__drain_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "owner_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminOperation"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/sandboxes/{owner_id}/replace": {
+      "post": {
+        "tags": [
+          "admin-operations"
+        ],
+        "summary": "Replace Sandbox",
+        "description": "Replace one stopped OpenSandbox instance while preserving its volume.",
+        "operationId": "replace_sandbox_api_v1_admin_sandboxes__owner_id__replace_post",
         "security": [
           {
             "HTTPBearer": []
@@ -8371,6 +8662,38 @@
             "type": "integer",
             "title": "Version",
             "default": 1
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "private",
+              "review_pending",
+              "public",
+              "rejected",
+              "disabled"
+            ],
+            "title": "Visibility",
+            "default": "public"
+          },
+          "owned_by_me": {
+            "type": "boolean",
+            "title": "Owned By Me",
+            "default": false
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "builtin",
+              "upstream",
+              "user"
+            ],
+            "title": "Source",
+            "default": "builtin"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": true
           }
         },
         "type": "object",
@@ -11966,6 +12289,171 @@
           "status"
         ],
         "title": "SignupResponse"
+      },
+      "SkillDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "default": 1
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "private",
+              "review_pending",
+              "public",
+              "rejected",
+              "disabled"
+            ],
+            "title": "Visibility",
+            "default": "public"
+          },
+          "owned_by_me": {
+            "type": "boolean",
+            "title": "Owned By Me",
+            "default": false
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "builtin",
+              "upstream",
+              "user"
+            ],
+            "title": "Source",
+            "default": "builtin"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": true
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/SkillFile"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "license_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License Name"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "source_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Commit"
+          },
+          "review_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "SkillDetail"
+      },
+      "SkillFile": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Size"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "size"
+        ],
+        "title": "SkillFile"
+      },
+      "SkillReviewRequest": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 5,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision",
+          "reason"
+        ],
+        "title": "SkillReviewRequest"
       },
       "StateActionSelection": {
         "properties": {
