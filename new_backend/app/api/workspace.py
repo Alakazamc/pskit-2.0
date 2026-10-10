@@ -1,7 +1,8 @@
+import asyncio
 import hashlib
 from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 
 from app.api.auth import CurrentUserDep
 from app.api.capabilities import Af3Dep
@@ -12,6 +13,7 @@ from app.contracts.capabilities import Af3JobRequest
 from app.contracts.conversation import (
     ContextRef,
     Message,
+    MessagePage,
     MessageRequest,
     Project,
     ProjectCreate,
@@ -28,6 +30,7 @@ from app.domain.catalog import ContextNotFound
 from app.domain.conversation import IdempotencyConflict
 from app.domain.project_routes import project_id_from_key
 from app.domain.quota import GpuQuotaExceeded, TokenQuotaExceeded
+from app.services.message_pages import MessageCursorUnavailable, message_page
 
 router = APIRouter(prefix="/api/v1", tags=["workspace"])
 
@@ -246,6 +249,28 @@ async def list_messages(
     if messages is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return messages
+
+
+@router.get("/c/{session_id}/messages/page")
+@router.get("/g/{project_key}/c/{session_id}/messages/page")
+async def list_message_page(
+    session_id: str, user: CurrentUserDep, conversations: ConversationStoreDep, request: Request,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    before: Annotated[str | None, Query(min_length=1, max_length=200)] = None,
+) -> MessagePage:
+    """Read a bounded owned history slice; the original list route is unchanged."""
+    def read():
+        _require_chat_scope(request, user.id, session_id, conversations)
+        return message_page(conversations, user.id, session_id, limit=limit, before=before)
+
+    try:
+        page = (await asyncio.to_thread(read)
+                if getattr(conversations, "database", None) is not None else read())
+    except MessageCursorUnavailable as error:
+        raise HTTPException(status_code=404, detail="Message cursor unavailable") from error
+    if page is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return page
 
 
 @router.post("/c/{session_id}/messages")

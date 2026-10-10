@@ -125,6 +125,13 @@ class Message(BaseModel):
     created_at: datetime
 
 
+class MessagePage(BaseModel):
+    """Chronological bounded slice; cursor is an owned message's opaque ID."""
+
+    items: list[Message]
+    next_before: str | None = None
+
+
 class ContextRef(BaseModel):
     id: str
     name: str
