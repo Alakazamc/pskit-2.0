@@ -159,7 +159,7 @@ async def test_nonpreserving_optional_choices_are_not_tested_without_dispatch(ca
         deployment_fingerprint=fingerprint("route"))
     cases = {case.case_id: case for case in evidence.cases}
     assert cases[case_id].status == "not_tested"
-    assert cases[case_id].not_tested_reason == "strict_parameter_forwarding_unverified"
+    assert "not_tested_reason" not in cases[case_id].model_dump(mode="json")
     assert cases[case_id].response_fingerprint is None
     assert case_id not in captured
     assert cases["tool_choice:auto"].status == "passed"
@@ -167,6 +167,12 @@ async def test_nonpreserving_optional_choices_are_not_tested_without_dispatch(ca
     assert "drop_params" not in captured["tool_choice:auto"]
     assert evidence.status == "passed"
     assert with_evidence(candidate, evidence).agent_ready
+
+
+def test_internal_reasoning_probe_marker_still_records_not_tested():
+    assert ModelQualification._status("reasoning:high", {
+        "not_tested_reason": "strict_parameter_forwarding_unverified",
+    }, fingerprint("route"), None) == "not_tested"
 
 
 @pytest.mark.asyncio

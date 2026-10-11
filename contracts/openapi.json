@@ -11176,18 +11176,6 @@
               }
             ],
             "title": "Usage Known"
-          },
-          "not_tested_reason": {
-            "anyOf": [
-              {
-                "type": "string",
-                "const": "strict_parameter_forwarding_unverified"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Not Tested Reason"
           }
         },
         "additionalProperties": false,

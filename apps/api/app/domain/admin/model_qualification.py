@@ -230,13 +230,11 @@ class ModelQualification:
                     request["reasoning_effort"] = reasoning_wire_value(case_id.split(":", 1)[1])
                     if not profile.wire_policy.preserve_openai_parameters:
                         cases.append(ModelQualificationCase(case_id=case_id, status="not_tested",
-                            request_fingerprint=fingerprint(request),
-                            not_tested_reason="strict_parameter_forwarding_unverified"))
+                            request_fingerprint=fingerprint(request)))
                         continue
                 if case_id in _OPTIONAL_CASES and not profile.wire_policy.preserve_openai_parameters:
                     cases.append(ModelQualificationCase(case_id=case_id, status="not_tested",
-                        request_fingerprint=fingerprint(request),
-                        not_tested_reason="strict_parameter_forwarding_unverified"))
+                        request_fingerprint=fingerprint(request)))
                     continue
                 request = prepare_model_parameters(request, profile)
                 if case_id == "workspace_artifact" and self.verification_scope != "staging":
@@ -261,7 +259,6 @@ class ModelQualification:
                         request_fingerprint=fingerprint(request),
                         response_fingerprint=fingerprint(result),
                         usage_known=_usage_known(result) if case_id.startswith("usage") else None,
-                        not_tested_reason=(result.get("not_tested_reason") if status == "not_tested" else None),
                     ))
                 except (TimeoutError, ValueError, TypeError, KeyError, IndexError,
                         AttributeError, OSError, httpx.HTTPError):

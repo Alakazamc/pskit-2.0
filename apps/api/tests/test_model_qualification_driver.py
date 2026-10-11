@@ -265,7 +265,7 @@ async def test_native_reasoning_is_not_tested_when_strict_mapped_wire_is_unverif
     for case in evidence.cases:
         if case.case_id.startswith("reasoning:"):
             assert case.status == "not_tested"
-            assert case.not_tested_reason == "strict_parameter_forwarding_unverified"
+            assert "not_tested_reason" not in case.model_dump(mode="json")
     assert evidence.status == "degraded"
     assert all("reasoning_effort" not in body and "allowed_openai_params" not in body
                for body in system.provider.requests)
@@ -289,7 +289,7 @@ async def test_nonpreserving_optional_choices_never_claim_pass_or_call_provider(
     evidence = await evaluate(system)
     cases = {case.case_id: case for case in evidence.cases}
     assert cases[case_id].status == "not_tested"
-    assert cases[case_id].not_tested_reason == "strict_parameter_forwarding_unverified"
+    assert "not_tested_reason" not in cases[case_id].model_dump(mode="json")
     assert cases[case_id].response_fingerprint is None
     assert cases["tools"].status == cases["tool_choice:auto"].status == "passed"
     assert all(body.get("tool_choice", "auto") == "auto" for body in system.provider.requests)
@@ -302,7 +302,7 @@ async def test_nonpreserving_reasoning_is_not_tested_even_for_openai_routes(qual
     evidence = await evaluate(system)
     reasoning = [case for case in evidence.cases if case.case_id.startswith("reasoning:")]
     assert reasoning and all(case.status == "not_tested" for case in reasoning)
-    assert all(case.not_tested_reason == "strict_parameter_forwarding_unverified" for case in reasoning)
+    assert all("not_tested_reason" not in case.model_dump(mode="json") for case in reasoning)
     assert all("reasoning_effort" not in body for body in system.provider.requests)
 
 

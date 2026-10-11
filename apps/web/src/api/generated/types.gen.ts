@@ -2161,10 +2161,6 @@ export type ModelQualificationCase = {
      * Usage Known
      */
     usage_known?: boolean | null;
-    /**
-     * Not Tested Reason
-     */
-    not_tested_reason?: 'strict_parameter_forwarding_unverified' | null;
 };
 
 /**

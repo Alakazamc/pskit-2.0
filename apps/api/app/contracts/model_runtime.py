@@ -49,9 +49,6 @@ class ModelQualificationCase(RuntimeContract):
     request_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
     response_fingerprint: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     usage_known: bool | None = None
-    not_tested_reason: Literal["strict_parameter_forwarding_unverified"] | None = Field(
-        default=None, exclude_if=lambda value: value is None,
-    )
 
 
 class ModelQualificationEvidence(RuntimeContract):
