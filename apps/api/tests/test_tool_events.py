@@ -79,7 +79,7 @@ async def test_pi_tool_lifecycle_is_typed_and_projected_to_message_without_raw_p
     assert "private final" not in events
     updates = [json.loads(line[6:]) for line in events.splitlines()
                if line.startswith("data: ") and '"type":"tool.updated"' in line]
-    assert updates[0]["data"]["summary"] == "x" * 500
+    assert updates[0]["data"]["summary"] == "Tool running"
     assert messages[-1]["parts"] == [
         {"type": "text", "text": "Found a structure"},
         {"type": "tool_call", "tool_call_id": "call-1", "tool": "search_pdb",

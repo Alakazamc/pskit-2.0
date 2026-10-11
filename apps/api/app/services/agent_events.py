@@ -1,7 +1,6 @@
 """Typed Pi projection and bounded text-delta persistence."""
 
 import asyncio
-import re
 
 from app.contracts.conversation import (
     MessageDeltaData,
@@ -19,64 +18,52 @@ from app.contracts.conversation import (
     ToolUpdatedEvent,
 )
 
-_TOOL_ERROR_MAX_CHARS = 500
-_TOOL_ERROR_INPUT_MAX_CHARS = 4096
-_TOOL_ERROR_SECRET_PATTERNS = (
-    (re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/-]+=*"), "Bearer [REDACTED]"),
-    (
-        re.compile(
-            r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|"
-            r"authorization)"
-            r"\b(\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^\s,;]+)"
-        ),
-        r"\1\2[REDACTED]",
-    ),
-    (
-        re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\."
-                   r"[A-Za-z0-9_-]{8,}\b"),
-        "[REDACTED]",
-    ),
-    (
-        re.compile(r"\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9]{20,}|"
-                   r"AKIA[A-Z0-9]{16})\b"),
-        "[REDACTED]",
-    ),
-    (re.compile(r"(?i)(https?://[^:/\s]+:)[^@/\s]+@"), r"\1[REDACTED]@"),
-)
+_TOOL_STATUS_SUMMARIES = {
+    "running": "Tool running",
+    "failed": "Tool failed",
+    "pending": "Background task submitted",
+    "approval_required": "Waiting for approval",
+    "completed": "Tool completed",
+}
+_TOOL_ERROR_SUMMARIES = {
+    "WORKSPACE_UNAVAILABLE": "Workspace is unavailable",
+    "WORKSPACE_TOKEN_INVALID": "Workspace authorization failed",
+    "WORKSPACE_ACCESS_DISABLED": "Workspace access is disabled",
+    "WORKSPACE_SCOPE_MISMATCH": "Workspace access was denied",
+    "WORKSPACE_RUN_NOT_FOUND": "Workspace run was not found",
+    "WORKSPACE_RUN_NOT_ACTIVE": "Workspace run is no longer active",
+    "WORKSPACE_ATTEMPT_NOT_ACTIVE": "Workspace attempt is no longer active",
+    "WORKSPACE_FILE_ACCESS_UNAVAILABLE": "Workspace file access is unavailable",
+    "WORKSPACE_COMMANDS_DISABLED": "Workspace commands are disabled",
+    "WORKSPACE_TEXT_DECODE_FAILED": "Workspace file is not valid UTF-8 text",
+    "WORKSPACE_CONTENT_INVALID": "Workspace content is invalid",
+    "WORKSPACE_CANCEL_UNCONFIRMED": "Workspace cancellation could not be confirmed",
+    "WORKSPACE_UNSAFE_RUNTIME": "Workspace isolation could not be verified",
+    "WORKSPACE_CONFLICT": "Workspace state changed; retry the operation",
+    "WORKSPACE_TIMEOUT": "Workspace operation timed out",
+    "WORKSPACE_CAPACITY": "Workspace capacity is unavailable",
+    "WORKSPACE_NOT_FOUND": "Workspace resource was not found",
+    "WORKSPACE_INVALID_PATH": "Workspace path is not allowed",
+    "CPU_QUOTA_EXCEEDED": "Daily CPU quota is exhausted",
+}
 
 
-def _tool_failure_summary(result: object) -> str | None:
-    """Return a short, redacted diagnostic without persisting raw tool payloads."""
-    if not isinstance(result, dict):
-        return None
+def _tool_summary(result: object, status: str) -> str:
+    """Project fixed public categories; never copy tool text, errors or logs.
 
-    candidates = []
-    details = result.get("details")
-    if isinstance(details, dict):
-        for key in ("error", "message"):
-            value = details.get(key)
-            if isinstance(value, str):
-                candidates.append(value)
-    content = result.get("content")
-    if isinstance(content, list):
-        candidates.extend(
-            block["text"] for block in content
-            if isinstance(block, dict)
-            and block.get("type") == "text"
-            and isinstance(block.get("text"), str)
-        )
-
-    for candidate in candidates:
-        text = re.sub(
-            r"\x1b\[[0-?]*[ -/]*[@-~]", "", candidate[:_TOOL_ERROR_INPUT_MAX_CHARS]
-        )
-        text = " ".join("".join(char for char in text if char.isprintable()).split())
-        for pattern, replacement in _TOOL_ERROR_SECRET_PATTERNS:
-            text = pattern.sub(replacement, text)
-        text = text[:_TOOL_ERROR_MAX_CHARS].strip()
-        if text and text.casefold() not in {"tool failed", "failed", "error"}:
-            return text
-    return None
+    Structured codes select exact allowlisted constants, not user/provider
+    descriptions. Neither arbitrary strings nor paths are interpolated into
+    SSE or persisted summaries. The original result is left untouched.
+    """
+    details = result.get("details") if isinstance(result, dict) else None
+    if status == "failed" and isinstance(details, dict):
+        code = details.get("code")
+        if isinstance(code, str) and code in _TOOL_ERROR_SUMMARIES:
+            return _TOOL_ERROR_SUMMARIES[code]
+        exit_code = details.get("exit_code")
+        if type(exit_code) is int and exit_code != 0:
+            return "Command exited with an error"
+    return _TOOL_STATUS_SUMMARIES[status]
 
 
 def project_pi_event(run_id: str, event: dict) -> list[RunEvent]:
@@ -126,20 +113,12 @@ def project_pi_event(run_id: str, event: dict) -> list[RunEvent]:
         if event["type"] == "tool_execution_start":
             projected = ToolStartedEvent(run_id=run_id, data=common)
         elif event["type"] == "tool_execution_update":
-            partial = event.get("partialResult") or {}
-            blocks = partial.get("content") if isinstance(partial, dict) else None
-            text = "\n".join(
-                block.get("text", "")
-                for block in blocks or []
-                if isinstance(block, dict) and block.get("type") == "text"
-            ).strip()
-            summary = text.splitlines()[-1][-500:] if text else None
             projected = ToolUpdatedEvent(
                 run_id=run_id,
                 data=ToolUpdatedData(
                     tool_call_id=tool_call_id,
                     tool=tool,
-                    summary=summary,
+                    summary=_tool_summary(event.get("partialResult"), "running"),
                 ),
             )
         else:
@@ -151,24 +130,16 @@ def project_pi_event(run_id: str, event: dict) -> list[RunEvent]:
                 "failed"
                 if event.get("isError") or state == "failed"
                 else state
-                if state in {"pending", "approval_required"}
+                if isinstance(state, str) and state in {"pending", "approval_required"}
                 else "completed"
             )
-            summary = {
-                "failed": "Tool failed",
-                "pending": "Background task submitted",
-                "approval_required": "Waiting for approval",
-                "completed": "Tool completed",
-            }[status]
-            if status == "failed":
-                summary = _tool_failure_summary(result) or summary
             projected = ToolFinishedEvent(
                 run_id=run_id,
                 data=ToolFinishedData(
                     tool_call_id=tool_call_id,
                     tool=tool,
                     status=status,
-                    summary=summary,
+                    summary=_tool_summary(result, status),
                 ),
             )
         events.append(projected)
