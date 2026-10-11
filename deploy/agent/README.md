@@ -1,4 +1,23 @@
-# 新版 Agent 本地 Docker 联调
+# PSKit 当前部署入口
+
+新版源码在 `apps/api/`、`apps/web/`；`new_backend/`、`new_frontend/` 已完成纯路径迁移，不再是入口。旧 `backend/`、`frontend/` 保留历史栈与回退用途。
+
+| 操作 | 当前入口 | 边界 |
+| --- | --- | --- |
+| 日常状态、应用发布及恢复 | [`pskitctl`](pskitctl) 与 [发布控制手册](../../docs/runbooks/RELEASE_CONTROL.md) | 选择单一环境和组件；固定 Manifest、Compose 顺序与制品；API 必须有本宿主有效准入资格 |
+| 当前拓扑、17 份 Compose 的分类 | [部署矩阵](../../docs/architecture/DEPLOY_MATRIX.md) | 文件用途不等于在线状态；先核对宿主引用，不随意删除历史配置 |
+| 生产部署前置与固定制品 | [部署手册](DEPLOYMENT.md) | 首次安装、schema 迁移和日常 release 分开；保留旧镜像、Web assets 和工作区 |
+| 独立 Staging | [Staging 手册](STAGING.md) | 独立数据、凭据、卷、模型替身；真实模型或宿主演练需另行授权 |
+| OpenSandbox | [OpenSandbox 手册](OPENSANDBOX.md) | 现行沙箱控制面；宿主 runtime、卷插件属于 bootstrap |
+| 本地开发 | [开发背景](../../docs/DEV_CLOUD_CONTEXT.md) | 默认本地 API 与 Web；真实联调使用独立开发配置和 PostgreSQL |
+
+`stack.sh up/down` 涉及 Supabase、LiteLLM 与 Agent 三个项目及 bootstrap/migration，**不能作为普通应用发布命令**。根 `deploy_to_cloud.sh` 保持 fail closed。当前生产前端由宿主 Nginx 提供 dist；A6000 运行唯一通用 MCP/AF3 接收器，API 位于阿里云。
+
+本次 2026-10-12 整改只验证本地合成环境与 GitHub CI；没有执行新的宿主 adoption、Staging 回滚演练或生产更新。具体命令及未通过门禁以发布手册和对应阶段证据为准。
+
+## 历史本地 Docker 联调（2026-10-02）
+
+以下保留当时的验证与恢复资料；SQLite、旧 Pi 路径、AF3-only 或旧 sandbox-manager 的描述不覆盖上方当前入口。沿用本地 Compose 前先核对当前 PostgreSQL 前置与合成 render；不要照此启动生产栈。
 
 可选的用户专属 Pi 容器部署方式见 [SANDBOX.md](SANDBOX.md)。
 

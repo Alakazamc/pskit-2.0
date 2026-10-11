@@ -1,0 +1,159 @@
+{
+  "methods": {
+    "__init__": {
+      "module": "release_control.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_admission_config": {
+      "module": "release_api.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_admission_identity": {
+      "module": "release_api.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_qualified_admission": {
+      "module": "release_api.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_admission_command": {
+      "module": "release_api.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_admission_gate": {
+      "module": "release_api.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_admission_phase": {
+      "module": "release_api.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_finish_api": {
+      "module": "release_api.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_env": {
+      "module": "release_config.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_compose": {
+      "module": "release_config.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "render": {
+      "module": "release_config.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "current": {
+      "module": "release_config.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "artifact": {
+      "module": "release_config.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_current_manifest": {
+      "module": "release_config.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_check_config": {
+      "module": "release_config.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_live_backend": {
+      "module": "release_config.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_activity": {
+      "module": "release_control.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_receiver_activity": {
+      "module": "release_control.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_health": {
+      "module": "release_control.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_postflight": {
+      "module": "release_control.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "doctor": {
+      "module": "release_control.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "status": {
+      "module": "release_control.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "logs": {
+      "module": "release_control.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_write_json": {
+      "module": "release_control.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_remove_pending": {
+      "module": "release_control.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_up": {
+      "module": "release_api.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_pin_cloud": {
+      "module": "release_api.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_compatible": {
+      "module": "release_config.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "release": {
+      "module": "release_control.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_release_locked": {
+      "module": "release_control.py",
+      "ast_equal_after_expanding_delegation": true
+    },
+    "_recover": {
+      "module": "release_control.py",
+      "ast_equal_after_expanding_delegation": true
+    }
+  },
+  "top_level_functions": {
+    "fingerprint": true,
+    "run_command": true,
+    "get_http": true,
+    "_receiver_url": true,
+    "_receiver_token": true,
+    "_receiver_object": true,
+    "get_receiver_http": true,
+    "normalized": true,
+    "main": true
+  },
+  "constants": {
+    "CONTROL_VERSION": true,
+    "ADMISSION_SCOPES": true,
+    "ADMISSION_PHASES": true
+  },
+  "activity_exact_bytes": true,
+  "activity_sha256": "cc7d238a74a124d1b8c9c4ac81fa651e738122df0ee9dae7799c2ccab86743a7",
+  "probe_assignments_exact_bytes": {
+    "ACTIVITY_QUERIES": true,
+    "ACTIVITY_KEYS": true,
+    "DATABASE_PROBE": true
+  },
+  "missing_original_module_names": [],
+  "original_line_count": 1262,
+  "current_line_counts": {
+    "release_control.py": 711,
+    "release_config.py": 275,
+    "release_api.py": 328,
+    "release_web.py": 76
+  }
+}

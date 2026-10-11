@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import argparse
-import copy
+import copy as copy
 import fcntl
-import hashlib
+import hashlib as hashlib
 import ipaddress
 import json
-import math
+import math as math
 import os
-import re
-import secrets
+import re as re
+import secrets as secrets
 import stat
 import subprocess
 import sys
@@ -21,36 +21,58 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
-from deploy.agent.scripts.production_config import read_env, validate_production_auth
+from deploy.agent.scripts.production_config import (
+    read_env,
+)
+from deploy.agent.scripts.production_config import (
+    validate_production_auth as validate_production_auth,
+)
+from deploy.agent.scripts.release_api import (
+    ADMISSION_PHASES as ADMISSION_PHASES,
+)
+from deploy.agent.scripts.release_api import (
+    ADMISSION_SCOPES as ADMISSION_SCOPES,
+)
+from deploy.agent.scripts.release_api import (
+    _ApiOperations,
+)
+from deploy.agent.scripts.release_config import (
+    CONTROL_VERSION as CONTROL_VERSION,
+)
+from deploy.agent.scripts.release_config import (
+    _ConfigOperations,
+)
+from deploy.agent.scripts.release_config import (
+    fingerprint as fingerprint,
+)
+from deploy.agent.scripts.release_config import (
+    normalized as normalized,
+)
 from deploy.agent.scripts.release_files import (
     ReleaseError,
-    atomic_at,
     atomic_write,
     directory_fd,
-    publish_assets,
-    read_at,
-    relative_parent,
     safe_read,
-    snapshot_dist,
 )
-from deploy.agent.scripts.release_manifest import load_manifest
+from deploy.agent.scripts.release_files import (
+    atomic_at as atomic_at,
+)
+from deploy.agent.scripts.release_files import (
+    publish_assets as publish_assets,
+)
+from deploy.agent.scripts.release_files import (
+    read_at as read_at,
+)
+from deploy.agent.scripts.release_files import (
+    relative_parent as relative_parent,
+)
+from deploy.agent.scripts.release_files import (
+    snapshot_dist as snapshot_dist,
+)
+from deploy.agent.scripts.release_manifest import load_manifest as load_manifest
+from deploy.agent.scripts.release_web import _WebOperations
 
 ROOT = Path(__file__).resolve().parents[3]
-CONTROL_VERSION = "pskit.control.v1"
-ADMISSION_SCOPES = [
-    "agent_runs",
-    "compute_jobs",
-    "workspace_attempts",
-    "scheduler_claims",
-]
-ADMISSION_PHASES = {
-    "prepared",
-    "closed",
-    "switching",
-    "committed",
-    "releasing",
-    "released",
-}
 # The same literal SQL dictionary is embedded in DATABASE_PROBE and tested on local PostgreSQL.
 # Historical charged reservation entries are not unfinished holds. Use authoritative guard/accounting states.
 ACTIVITY_QUERIES = {
@@ -121,15 +143,6 @@ with psycopg.connect(os.environ["RESEARCH_AGENT_DATABASE_URL"], connect_timeout=
                       "auth_grants_safe": grants == 0 and auth_tables == 1}))
 '''
 )
-
-
-def fingerprint(value: dict) -> str:
-    """Hash complete resolved JSON with canonical keys; never print the unredacted model."""
-    return hashlib.sha256(
-        json.dumps(
-            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-        ).encode()
-    ).hexdigest()
 
 
 def run_command(command: list[str], *, env: dict, input_text: str | None = None) -> str:
@@ -229,25 +242,7 @@ def get_receiver_http(url: str, token: str) -> tuple[int, bytes]:
         raise ReleaseError("Receiver activity probe is unavailable") from None
 
 
-def normalized(model: dict, image: str) -> dict:
-    result = copy.deepcopy(model)
-    backend_consumers = {
-        "backend",
-        "af3-callback-proxy",
-        "mcp-receiver",
-        "model-gateway-mock",
-    }
-    for name, service in result.get("services", {}).items():
-        if service.get("image") == image:
-            if name not in backend_consumers:
-                raise ReleaseError(
-                    "Unexpected infrastructure service uses the backend artifact pin"
-                )
-            service["image"] = "<unchanged-backend-artifact>"
-    return result
-
-
-class Controller:
+class Controller(_ConfigOperations, _ApiOperations, _WebOperations):
     def __init__(
         self, path: Path, environment: str, *, runner=run_command, http=get_http,
         receiver_http=get_receiver_http,
@@ -350,370 +345,6 @@ class Controller:
             self.receiver_unverified = False
         if self.config.get("admission_barrier") is not None:
             self._admission_config()
-
-    def _admission_config(self) -> dict:
-        adapter = self.config.get("admission_barrier")
-        required = {
-            "adapter_id",
-            "qualification_sha256",
-            "enter_command",
-            "verify_command",
-            "release_command",
-        }
-        if not isinstance(adapter, dict) or set(adapter) != required:
-            raise ReleaseError(
-                "A qualified admission adapter is required for API changes"
-            )
-        if (
-            not isinstance(adapter["adapter_id"], str)
-            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,119}", adapter["adapter_id"])
-            is None
-            or not isinstance(adapter["qualification_sha256"], str)
-            or re.fullmatch(r"[0-9a-f]{64}", adapter["qualification_sha256"]) is None
-        ):
-            raise ReleaseError("The admission adapter identity is invalid")
-        for operation in ("enter", "verify", "release"):
-            command = adapter[operation + "_command"]
-            if (
-                not isinstance(command, list)
-                or not command
-                or any(
-                    not isinstance(item, str) or not item or "\0" in item
-                    for item in command
-                )
-                or not Path(command[0]).is_absolute()
-            ):
-                raise ReleaseError(
-                    "Admission adapter commands must be explicit absolute argv arrays"
-                )
-        return adapter
-
-    def _admission_identity(
-        self, pending: dict, manifest: dict, *, new: bool = False
-    ) -> dict:
-        adapter = self._admission_config()
-        expected = {
-            "adapter_id": adapter["adapter_id"],
-            "qualification_sha256": adapter["qualification_sha256"],
-            "environment": self.environment,
-            "project": manifest["compose"]["project"],
-            "previous_manifest_sha256": pending["previous"]["manifest_sha256"],
-            "target_manifest_sha256": pending["target_reference"]["manifest_sha256"],
-        }
-        if new:
-            return {**expected, "owner_nonce": secrets.token_hex(32)}
-        identity = pending.get("admission")
-        if (
-            not isinstance(identity, dict)
-            or set(identity) != set(expected) | {"owner_nonce"}
-            or any(identity.get(key) != value for key, value in expected.items())
-            or not isinstance(identity["owner_nonce"], str)
-            or re.fullmatch(r"[0-9a-f]{64}", identity["owner_nonce"]) is None
-            or pending.get("admission_phase") not in ADMISSION_PHASES
-        ):
-            raise ReleaseError(
-                "Pending admission owner differs from the configured adapter or artifacts"
-            )
-        return identity
-
-    def _qualified_admission(self, manifest: dict) -> None:
-        """Never restart or roll back into an image without the same proven guard."""
-        adapter = self._admission_config()
-        expected = {"component_version": 1, "enforcement_version": "pskit.db-admission.v1",
-                    "qualification_sha256": adapter["qualification_sha256"]}
-        if manifest.get("admission") != expected:
-            raise ReleaseError("The backend Manifest lacks qualified admission enforcement")
-        backend = read_env(self.backend_path)
-        expected_environment = {
-            "RESEARCH_AGENT_RUNTIME": "pi",
-            "RESEARCH_AGENT_RELEASE_ADMISSION_ENABLED": "true",
-            "RESEARCH_AGENT_RELEASE_ADMISSION_ENVIRONMENT": self.environment,
-            "RESEARCH_AGENT_RELEASE_ADMISSION_PROJECT": manifest["compose"]["project"],
-            "RESEARCH_AGENT_RELEASE_ADMISSION_QUALIFICATION_SHA256": adapter["qualification_sha256"],
-        }
-        if any(backend.get(key) != value for key, value in expected_environment.items()) or not (
-            32 <= len(backend.get("RESEARCH_AGENT_RELEASE_ADMISSION_KEY", "")) <= 256
-        ):
-            raise ReleaseError("The backend configuration lacks qualified admission enforcement")
-        resolved = self.render(manifest)["services"]["backend"].get("environment", {})
-        if any(str(resolved.get(key, "")) != value for key, value in expected_environment.items()) or (
-            resolved.get("RESEARCH_AGENT_RELEASE_ADMISSION_KEY")
-            != backend["RESEARCH_AGENT_RELEASE_ADMISSION_KEY"]
-        ):
-            raise ReleaseError("The resolved backend lacks qualified admission enforcement")
-
-    def _admission_command(self, operation: str, pending: dict, manifest: dict) -> None:
-        self._qualified_admission(manifest)
-        adapter = self._admission_config()
-        identity = self._admission_identity(pending, manifest)
-        request = {
-            **identity,
-            "schema_version": "pskit.admission-command.v1",
-            "operation": operation,
-            "scopes": ADMISSION_SCOPES,
-        }
-        output = self.runner(
-            adapter[operation + "_command"],
-            env={
-                key: value
-                for key, value in os.environ.items()
-                if key in {"PATH", "HOME"}
-            },
-            input_text=json.dumps(request, sort_keys=True) + "\n",
-        )
-        try:
-            if len(output.encode()) > 64 * 1024:
-                raise ValueError
-            receipt = json.loads(output)
-        except (ValueError, UnicodeError, AttributeError):
-            raise ReleaseError(
-                "The admission adapter receipt is unavailable or invalid"
-            ) from None
-        expected = {
-            **identity,
-            "schema_version": "pskit.admission-receipt.v1",
-            "scopes": ADMISSION_SCOPES,
-            "state": "released" if operation == "release" else "closed",
-            # Observation expiry NEVER reopens the durable hold. Only this owner's explicit release does.
-            "hold_mode": "until_explicit_release",
-        }
-        now = time.time()
-        if (
-            not isinstance(receipt, dict)
-            or set(receipt) != set(expected) | {"observed_at", "valid_until"}
-            or any(receipt.get(key) != value for key, value in expected.items())
-            or any(
-                type(receipt[key]) not in {int, float}
-                or not math.isfinite(receipt[key])
-                for key in ("observed_at", "valid_until")
-            )
-            or not 0 <= now - receipt["observed_at"] <= 30
-            or not now < receipt["valid_until"] <= receipt["observed_at"] + 30
-        ):
-            raise ReleaseError(
-                "Fresh admission ownership and closed execution scope are unverified"
-            )
-
-    def _admission_gate(self, pending: dict, manifest: dict) -> None:
-        self._admission_command("verify", pending, manifest)
-        self._receiver_activity(
-            required=self.environment == "prod"
-            or self.config["receiver_activity_required"]
-        )
-        self._activity(manifest)
-        # Activity/receiver probes may block. Re-observe the server-enforced hold immediately before mutation.
-        self._admission_command("verify", pending, manifest)
-
-    def _admission_phase(self, pending: dict, phase: str) -> None:
-        pending["admission_phase"] = phase
-        self._write_json("pending.json", pending)
-
-    def _finish_api(
-        self, pending: dict, manifest: dict, state: dict, reference: dict
-    ) -> None:
-        self._admission_command("verify", pending, manifest)
-        self._postflight()
-        self._admission_gate(pending, manifest)
-        state["api"] = reference
-        self._write_json("current.json", state)
-        self._admission_phase(pending, "committed")
-        self._admission_gate(pending, manifest)
-        # Persist uncertainty before a command which can reopen admission. Never auto-rollback after this point.
-        self._admission_phase(pending, "releasing")
-        self._admission_command("release", pending, manifest)
-        self._admission_phase(pending, "released")
-        self._remove_pending()
-
-    def _env(self, image: str) -> dict[str, str]:
-        safe_read(self.cloud_path, private=True)
-        env = {
-            key: value
-            for key, value in os.environ.items()
-            if key
-            in {
-                "PATH",
-                "HOME",
-                "DOCKER_HOST",
-                "DOCKER_CONTEXT",
-                "DOCKER_CONFIG",
-                "XDG_RUNTIME_DIR",
-            }
-        }
-        # Literal parser shared with production preflight; no shell sourcing or expansion.
-        env.update(read_env(self.cloud_path))
-        env["AGENT_BACKEND_IMAGE"] = image
-        return env
-
-    def _compose(self, manifest: dict) -> list[str]:
-        files = manifest["compose"]["files"]
-        return [
-            "docker",
-            "compose",
-            "--env-file",
-            str(self.cloud_path),
-            *(item for path in files for item in ("-f", str(self.repository / path))),
-            "-p",
-            manifest["compose"]["project"],
-        ]
-
-    def render(self, manifest: dict) -> dict:
-        return json.loads(
-            self.runner(
-                self._compose(manifest) + ["config", "--format", "json"],
-                env=self._env(manifest["backend"]["reference"]),
-            )
-        )
-
-    def current(self) -> dict:
-        result = json.loads(
-            safe_read(self.state / "current.json", private=True, limit=64 * 1024)
-        )
-        if (
-            set(result) != {"schema_version", "api", "web"}
-            or result["schema_version"] != CONTROL_VERSION
-        ):
-            raise ReleaseError("Current artifact registration is missing or invalid")
-        for component in ("api", "web"):
-            reference = result[component]
-            if (
-                set(reference) != {"release_id", "manifest_sha256"}
-                or re.fullmatch(
-                    r"[A-Za-z0-9][A-Za-z0-9._-]{0,119}", reference["release_id"]
-                )
-                is None
-                or re.fullmatch(r"[0-9a-f]{64}", reference["manifest_sha256"]) is None
-            ):
-                raise ReleaseError("Current artifact registration is invalid")
-        return result
-
-    def artifact(
-        self, version: str, *, expected_hash: str | None = None
-    ) -> tuple[dict, str]:
-        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,119}", version) is None:
-            raise ReleaseError("Release version is invalid")
-        path = self.releases / version / "manifest.json"
-        content = safe_read(path, limit=64 * 1024)
-        digest = hashlib.sha256(content).hexdigest()
-        if expected_hash and digest != expected_hash:
-            raise ReleaseError("Registered Manifest has changed")
-        manifest = load_manifest(path, require_qualified=True)
-        if safe_read(path, limit=64 * 1024) != content:
-            raise ReleaseError("Manifest changed during validation")
-        project = (
-            "pskit-agent-cloud" if self.environment == "prod" else "pskit-agent-staging"
-        )
-        if (
-            manifest["release_id"] != version
-            or manifest["compose"]["project"] != project
-        ):
-            raise ReleaseError("Manifest version or target environment differs")
-        return manifest, digest
-
-    def _current_manifest(self, component: str) -> dict:
-        ref = self.current()[component]
-        return self.artifact(ref["release_id"], expected_hash=ref["manifest_sha256"])[0]
-
-    def _check_config(self) -> None:
-        safe_read(self.backend_path, private=True)
-        safe_read(self.cloud_path, private=True)
-        backend, cloud = read_env(self.backend_path), read_env(self.cloud_path)
-        if self.environment == "prod":
-            validate_production_auth(backend, cloud)
-        for key in ("RESEARCH_AGENT_DATABASE_URL", "MODEL_GATEWAY_API_KEY"):
-            if not backend.get(key) or "replace-with" in backend[key]:
-                raise ReleaseError("Required backend configuration is unset: " + key)
-        if cloud.get("AGENT_BACKEND_ENV_FILE") != str(self.backend_path):
-            raise ReleaseError(
-                "Backend source environment path differs from controller configuration"
-            )
-
-    def _live_backend(
-        self, manifest: dict, *, allowed_reference: str | None = None
-    ) -> None:
-        env = self._env(manifest["backend"]["reference"])
-        ids = self.runner(
-            self._compose(manifest) + ["ps", "-q", "backend"], env=env
-        ).split()
-        if len(ids) != 1:
-            raise ReleaseError("Exactly one current backend is required")
-        info = json.loads(self.runner(["docker", "inspect", ids[0]], env=env))
-        image = json.loads(
-            self.runner(
-                [
-                    "docker",
-                    "image",
-                    "inspect",
-                    allowed_reference or manifest["backend"]["reference"],
-                ],
-                env=env,
-            )
-        )
-        labels = info[0]["Config"].get("Labels", {})
-        if (
-            info[0]["Image"] != image[0]["Id"]
-            or labels.get("com.docker.compose.project")
-            != manifest["compose"]["project"]
-            or labels.get("com.docker.compose.service") != "backend"
-        ):
-            raise ReleaseError(
-                "Running backend differs from registered immutable artifact"
-            )
-        expected_files = [
-            str(self.repository / name) for name in manifest["compose"]["files"]
-        ]
-        if (
-            labels.get("com.docker.compose.project.config_files", "").split(",")
-            != expected_files
-        ):
-            raise ReleaseError(
-                "Running backend lost or reordered required Compose overlays"
-            )
-        rendered = self.render(manifest)
-        service = rendered["services"]["backend"]
-        actual_env = dict(
-            item.split("=", 1)
-            for item in info[0]["Config"].get("Env", [])
-            if "=" in item
-        )
-        if any(
-            actual_env.get(key) != str(value)
-            for key, value in service.get("environment", {}).items()
-        ):
-            raise ReleaseError(
-                "Running backend environment differs from resolved configuration"
-            )
-        actual_mounts = {
-            item["Destination"]: item for item in info[0].get("Mounts", [])
-        }
-        mounts = service.get("volumes", [])
-        if set(actual_mounts) != {item["target"] for item in mounts}:
-            raise ReleaseError("Running backend required mounts differ")
-        for mount in mounts:
-            actual = actual_mounts[mount["target"]]
-            source_key = "Source" if mount["type"] == "bind" else "Name"
-            expected_source = (
-                mount["source"]
-                if mount["type"] == "bind"
-                else rendered["volumes"][mount["source"]]["name"]
-            )
-            if (
-                actual.get("Type") != mount["type"]
-                or actual.get(source_key) != expected_source
-                or actual.get("RW") != (not mount.get("read_only", False))
-            ):
-                raise ReleaseError(
-                    "Running backend source mount differs from registered configuration"
-                )
-        networks = {
-            rendered["networks"][name].get(
-                "name", manifest["compose"]["project"] + "_" + name
-            )
-            for name in service.get("networks", {})
-        }
-        if networks != set(info[0].get("NetworkSettings", {}).get("Networks", {})):
-            raise ReleaseError(
-                "Running backend networks differ from registered configuration"
-            )
 
     def _activity(self, manifest: dict) -> dict:
         report = json.loads(
@@ -883,64 +514,6 @@ class Controller:
             os.unlink("pending.json", dir_fd=fd)
             os.fsync(fd)
 
-    def _up(self, manifest: dict) -> None:
-        self.runner(
-            self._compose(manifest)
-            + ["up", "-d", "--no-deps", "--wait", "--wait-timeout", "60", "backend"],
-            env=self._env(manifest["backend"]["reference"]),
-        )
-        self._live_backend(manifest)
-
-    def _pin_cloud(self, before: bytes, image: str) -> bytes:
-        text = before.decode()
-        pattern = re.compile(r"(?m)^(?:export\s+)?AGENT_BACKEND_IMAGE\s*=.*$")
-        if len(pattern.findall(text)) != 1:
-            raise ReleaseError("Backend image pin is missing or duplicated")
-        result = pattern.sub("AGENT_BACKEND_IMAGE=" + image, text).encode()
-        # Admission/database probes can block after preflight. Recheck immediately before replacement.
-        if safe_read(self.cloud_path, private=True) != before:
-            raise ReleaseError("Operational configuration changed before the pin update")
-        atomic_write(self.cloud_path, result)
-        return result
-
-    def _compatible(self, current_api: dict, candidate: dict) -> None:
-        if (
-            candidate["database_schema_version"]
-            != current_api["database_schema_version"]
-        ):
-            raise ReleaseError(
-                "Incompatible schema; application rollback never downgrades the database"
-            )
-        for key in (
-            "pi_version",
-            "litellm_version",
-            "compatibility_sha256",
-            "opensandbox",
-        ):
-            if candidate[key] != current_api[key] and key != "pi_version":
-                raise ReleaseError(
-                    "Infrastructure or provider compatibility changed; use separate qualification"
-                )
-        if candidate["compose"]["files"] != current_api["compose"]["files"]:
-            raise ReleaseError(
-                "Application overlays changed; executor/configuration procedure is separate"
-            )
-        rendered_old, rendered_new = self.render(current_api), self.render(candidate)
-        for manifest, rendered in (
-            (current_api, rendered_old),
-            (candidate, rendered_new),
-        ):
-            if fingerprint(rendered) != manifest["compose"]["resolved_sha256"]:
-                raise ReleaseError(
-                    "Resolved Compose fingerprint differs from immutable Manifest"
-                )
-        if normalized(rendered_old, current_api["backend"]["reference"]) != normalized(
-            rendered_new, candidate["backend"]["reference"]
-        ):
-            raise ReleaseError(
-                "Required source binds, environments, networks, or volumes changed"
-            )
-
     def release(self, version: str, component: str, *, rollback: bool = False) -> None:
         if component not in {"api", "web"}:
             raise ReleaseError(
@@ -1018,146 +591,22 @@ class Controller:
             "created_at": time.time(),
         }
         if component == "web":
-            files = snapshot_dist(
-                self.releases / version / "dist", candidate["frontend"]["sha256"]
+            self._release_web(
+                pending, candidate, old, state,
+                version=version, digest=digest, component=component,
             )
-            old_files = snapshot_dist(
-                self.releases / old["release_id"] / "dist", old["frontend"]["sha256"]
-            )
-            with directory_fd(self.static) as fd:
-                for relative, content in old_files.items():
-                    with relative_parent(fd, relative) as (parent, name):
-                        if read_at(parent, name) != content:
-                            raise ReleaseError(
-                                "Live web asset differs from registered rollback artifact"
-                            )
-                publish_assets(fd, files)
-                self._write_json("pending.json", pending)
-                try:
-                    atomic_at(fd, "index.html", files["index.html"])
-                    self._postflight()
-                    state[component] = {
-                        "release_id": version,
-                        "manifest_sha256": digest,
-                    }
-                    self._write_json("current.json", state)
-                    self._remove_pending()
-                except BaseException:
-                    publish_assets(fd, old_files)
-                    atomic_at(fd, "index.html", old_files["index.html"])
-                    state[component] = pending["previous"]
-                    self._write_json("current.json", state)
-                    self._remove_pending()
-                    raise
         else:
-            if (
-                read_env(self.cloud_path).get("AGENT_BACKEND_IMAGE")
-                != current_api["backend"]["reference"]
-            ):
-                raise ReleaseError(
-                    "Operational backend pin differs from current Manifest"
-                )
-            pending["admission"] = self._admission_identity(
-                pending, current_api, new=True
+            self._release_api(
+                pending, current_api, candidate, state, cloud_before, image
             )
-            pending["admission_phase"] = "prepared"
-            # Write BEFORE enter: a killed/failed command might have closed admission without returning a receipt.
-            self._write_json("pending.json", pending)
-            up_attempted = False
-            try:
-                self._admission_command("enter", pending, current_api)
-                self._admission_phase(pending, "closed")
-                # Recheck exact source bytes before mutation; other secret lines are preserved.
-                if safe_read(self.cloud_path, private=True) != cloud_before:
-                    raise ReleaseError(
-                        "Operational configuration changed during preflight"
-                    )
-                self._admission_gate(pending, current_api)
-                self._pin_cloud(cloud_before, image)
-                self._admission_gate(pending, current_api)
-                self._admission_phase(pending, "switching")
-                up_attempted = True
-                self._up(candidate)
-                self._finish_api(pending, candidate, state, pending["target_reference"])
-            except BaseException as error:
-                if not up_attempted or pending["admission_phase"] in {
-                    "releasing",
-                    "released",
-                }:
-                    raise ReleaseError(
-                        "API admission or release state is uncertain; pending recovery marker retained"
-                    ) from None
-                try:
-                    self._admission_gate(pending, current_api)
-                    expected = re.sub(
-                        r"(?m)^(?:export\s+)?AGENT_BACKEND_IMAGE\s*=.*$",
-                        "AGENT_BACKEND_IMAGE=" + image,
-                        cloud_before.decode(),
-                    ).encode()
-                    if safe_read(self.cloud_path, private=True) not in (
-                        cloud_before,
-                        expected,
-                    ):
-                        raise ReleaseError(
-                            "Operational configuration changed; review privately"
-                        )
-                    atomic_write(self.cloud_path, cloud_before)
-                    self._admission_gate(pending, current_api)
-                    self._up(current_api)
-                    self._finish_api(pending, current_api, state, pending["previous"])
-                except BaseException:  # noqa: BLE001 - retain recovery marker even on a second interrupt
-                    raise ReleaseError(
-                        "Release and rollback failed; pending recovery marker retained"
-                    ) from None
-                if isinstance(error, (KeyboardInterrupt, SystemExit)):
-                    raise
-                raise ReleaseError(
-                    "Application release failed and was rolled back"
-                ) from None
 
     def _recover(self, pending: dict, old: dict, component: str) -> None:
         # SIGKILL/power-loss recovery is explicit; never claim an interrupted transaction succeeded.
         self._compatible(self._current_manifest("api"), old)
         if component == "api":
-            self._admission_identity(pending, old)
-            # Same-owner enter is idempotent and never steals another owner's hold.
-            # It also closes admission again if a release acknowledgement was lost.
-            self._admission_command("enter", pending, old)
-            self._admission_phase(pending, "closed")
-            self._admission_gate(pending, old)
-            target, _ = self.artifact(
-                pending["target"],
-                expected_hash=pending["target_reference"]["manifest_sha256"],
-            )
-            before = pending["cloud_before"].encode()
-            expected = re.sub(
-                r"(?m)^(?:export\s+)?AGENT_BACKEND_IMAGE\s*=.*$",
-                "AGENT_BACKEND_IMAGE=" + target["backend"]["reference"],
-                pending["cloud_before"],
-            ).encode()
-            if safe_read(self.cloud_path, private=True) not in (before, expected):
-                raise ReleaseError(
-                    "Operational configuration changed after interruption; review privately"
-                )
-            atomic_write(self.cloud_path, before)
-            self._admission_gate(pending, old)
-            self._up(old)
-            self._finish_api(pending, old, self.current(), pending["previous"])
+            self._recover_api(pending, old)
         else:
-            self._activity(self._current_manifest("api"))
-            files = snapshot_dist(
-                self.releases / old["release_id"] / "dist", old["frontend"]["sha256"]
-            )
-            with directory_fd(self.static) as fd:
-                # Recovery must restore every verified immutable asset before switching the index.
-                # Same-name mismatches remain fail closed; never overwrite a collision.
-                publish_assets(fd, files)
-                atomic_at(fd, "index.html", files["index.html"])
-            self._postflight()
-            state = self.current()
-            state[component] = pending["previous"]
-            self._write_json("current.json", state)
-            self._remove_pending()
+            self._recover_web(pending, old, component)
 
 
 def main(argv: list[str] | None = None) -> int:
