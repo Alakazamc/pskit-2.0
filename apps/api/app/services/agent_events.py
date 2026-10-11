@@ -19,7 +19,6 @@ from app.contracts.conversation import (
     ToolUpdatedEvent,
 )
 
-
 _TOOL_ERROR_MAX_CHARS = 500
 _TOOL_ERROR_INPUT_MAX_CHARS = 4096
 _TOOL_ERROR_SECRET_PATTERNS = (
