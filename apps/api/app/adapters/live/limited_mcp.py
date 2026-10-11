@@ -1,4 +1,6 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from threading import Event
 
 from app.contracts.capabilities import McpInvokeResult, McpTool
@@ -77,12 +79,24 @@ class LimitedMcp:
             stop_heartbeat.set()
             if call is not None:
                 call.cancel()
-            await asyncio.gather(
+            finished = asyncio.gather(
                 *(task for task in (call, heartbeat) if task is not None), return_exceptions=True
             )
-            if token is not None and self.shared is not None:
-                self.shared.release(token)
-            self._slots.release()
+            cancelled: asyncio.CancelledError | None = None
+            # Hold ownership until the provider and renewal worker have exited,
+            # even if the caller cancels again while cleanup is already running.
+            while not finished.done():
+                try:
+                    await asyncio.shield(finished)
+                except asyncio.CancelledError as exc:
+                    cancelled = exc
+            try:
+                if token is not None and self.shared is not None:
+                    self.shared.release(token)
+            finally:
+                self._slots.release()
+            if cancelled is not None:
+                raise cancelled
 
     async def _renew(self, token: str, stop: Event) -> None:
         """Renew independently of event-loop latency and finish before releasing capacity."""
@@ -93,4 +107,23 @@ class LimitedMcp:
                 if not self.shared.renew(token, self.lease_seconds):
                     raise ProviderUnavailable("MCP capacity lease lost")
 
-        await asyncio.to_thread(maintain)
+        # A long-lived heartbeat must not queue behind ordinary DB/parser work
+        # in the default executor while its provider is already executing.
+        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mcp-heartbeat")
+        try:
+            work = asyncio.get_running_loop().run_in_executor(executor, copy_context().run, maintain)
+            try:
+                await asyncio.shield(work)
+            finally:
+                stop.set()
+                # Drain the worker asynchronously before releasing its lease.
+                # Repeated caller cancellation cannot turn executor teardown
+                # into a blocking join on the event loop.
+                finished = asyncio.gather(work, return_exceptions=True)
+                while not finished.done():
+                    try:
+                        await asyncio.shield(finished)
+                    except asyncio.CancelledError:
+                        continue
+        finally:
+            executor.shutdown(wait=False)
