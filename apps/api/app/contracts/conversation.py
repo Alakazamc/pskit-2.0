@@ -148,6 +148,7 @@ class MessageRequest(BaseModel):
 
 class RunRef(BaseModel):
     run_id: str
+    user_message_id: str | None = None
 
 
 class RunStatus(BaseModel):

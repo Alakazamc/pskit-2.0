@@ -5,7 +5,8 @@ import { App } from "../../app/App";
 import { emptyComposerDraft, readComposerDraft, writeComposerDraft } from "../chat/composerDrafts";
 
 const scope = { userId: "alice", conversationId: "session:first" };
-const image = new Blob(["image fixture"], { type: "image/png" });
+// Node 22 Response needs a byte body: jsdom's Blob has no stream() method.
+const imageResponse = () => new Response("image fixture", { headers: { "Content-Type": "image/png" } });
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 const nativeURL = URL;
 const createUrl = vi.fn(() => `blob:preview-${createUrl.mock.calls.length}`);
@@ -27,7 +28,7 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
 });
 
-function api(download: () => Promise<Response> = async () => new Response(image)) {
+function api(download: () => Promise<Response> = async () => imageResponse()) {
   let uploads = 0;
   const requests: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -75,6 +76,7 @@ it("rebuilds a persisted image thumbnail from the owned file API after a refresh
   const requests = api();
   const view = render(<App />);
   await waitFor(() => expect(thumbnails()).toHaveLength(1));
+  expect(createUrl).toHaveBeenCalledWith(expect.objectContaining({ type: "image/png" }));
   expect(requests.filter((path) => path.endsWith("/download"))).toEqual(["/api/v1/files/image-1/download"]);
   const url = thumbnails()[0].src;
   view.unmount();
@@ -90,7 +92,7 @@ it("does not bring an attachment back when its thumbnail arrives after removal",
   render(<App />);
   await waitFor(() => expect(requests).toContain("/api/v1/files/image-1/download"));
   await userEvent.setup().click(await screen.findByRole("button", { name: "Remove image.png" }));
-  await act(async () => { finish(new Response(image)); });
+  await act(async () => { finish(imageResponse()); });
   expect(thumbnails()).toHaveLength(0);
   expect(screen.queryByRole("group", { name: "Uploaded image.png" })).not.toBeInTheDocument();
   expect(readComposerDraft(scope).attachments).toEqual([]);

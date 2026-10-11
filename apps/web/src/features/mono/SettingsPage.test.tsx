@@ -13,7 +13,8 @@ function setup(failSave = false) {
     if (path.endsWith("/me/avatar")) {
       if (init?.method === "PUT") { user = { ...user, avatar_revision: "a".repeat(32) }; return json(user); }
       if (init?.method === "DELETE") { user = { ...user, avatar_revision: null }; return json(user); }
-      return new Response(new Blob(["avatar"], { type: "image/webp" }));
+      // Keep Response's body in Node's byte stream implementation, not jsdom Blob.
+      return new Response("avatar", { headers: { "Content-Type": "image/webp" } });
     }
     if (path.endsWith("/me")) {
       if (init?.method === "PATCH") {
@@ -66,6 +67,7 @@ it("uploads avatars without exposing credentials and removes them through the sa
   await actor.upload(await screen.findByLabelText("上传头像"), file);
   expect(await screen.findByRole("button", { name: "移除头像" })).toBeInTheDocument();
   await waitFor(() => expect(document.querySelector(".mono-sidebar-footer img")).toHaveAttribute("src", "blob:avatar"));
+  expect(URL.createObjectURL).toHaveBeenCalledWith(expect.objectContaining({ type: "image/webp" }));
   const upload = fetcher.mock.calls.find(([path, init]) => String(path).endsWith("/me/avatar") && init?.method === "PUT");
   expect(upload?.[1]?.body).toBe(file);
   expect(upload?.[1]?.headers).toEqual(expect.objectContaining({ Authorization: "Bearer demo-token", "Content-Type": "image/png" }));

@@ -337,7 +337,7 @@ class RunsMixin:
                 if existing:
                     if existing[0] != request_hash:
                         raise IdempotencyConflict
-                    return RunRef(run_id=existing[1]), False
+                    return self._accepted_run_ref(user_id, existing[1]), False
             self.check_admission()
             used_row = self.db.execute(
                 "SELECT used FROM agent_token_usage WHERE user_id=? AND period=?",
@@ -353,18 +353,20 @@ class RunsMixin:
                 (user_id, period, used + estimated_tokens),
             )
             run_id = str(uuid.uuid4())
+            user_message_id = str(uuid.uuid4())
             self.db.execute(
                 "INSERT INTO agent_messages "
                 "(id,user_id,session_id,role,content,created_at,parts_json) "
                 "VALUES (?,?,?,?,?,?,?)",
-                (str(uuid.uuid4()), user_id, session_id, "user", payload.content,
+                (user_message_id, user_id, session_id, "user", payload.content,
                  _now().isoformat(), self._user_parts_json(payload)),
             )
             self.db.execute(
                 "INSERT INTO agent_runs "
                 "(id,user_id,session_id,status,created_at,context_json) VALUES (?,?,?,?,?,?)",
                 (run_id, user_id, session_id, "queued", _now().isoformat(),
-                 json.dumps({"instructions": instructions, "allowed_tools": allowed_tools,
+                 json.dumps({"user_message_id": user_message_id,
+                             "instructions": instructions, "allowed_tools": allowed_tools,
                              "user_prompt": user_prompt, "model_id": model_id,
                              "model_supports_images": model_supports_images,
                              "reasoning_effort": reasoning_effort,
@@ -380,7 +382,7 @@ class RunsMixin:
                     (user_id, session_id, idempotency_key, request_hash, run_id),
                 )
             self._append_token_entry(user_id, period, "reservation", estimated_tokens, run_id)
-        return RunRef(run_id=run_id), True
+        return RunRef(run_id=run_id, user_message_id=user_message_id), True
 
     def existing_message_for(
         self, user_id: str, session_id: str, idempotency_key: str | None,
@@ -411,7 +413,16 @@ class RunsMixin:
             return None
         if row[0] != request_hash:
             raise IdempotencyConflict
-        return RunRef(run_id=row[1])
+        return self._accepted_run_ref(user_id, row[1])
+
+    def _accepted_run_ref(self, user_id: str, run_id: str) -> RunRef:
+        """Return the exact accepted message identity; historical Runs may lack it."""
+        row = self.db.execute(
+            "SELECT context_json FROM agent_runs WHERE id=? AND user_id=?", (run_id, user_id)
+        ).fetchone()
+        context = json.loads(row[0]) if row and row[0] else {}
+        message_id = context.get("user_message_id") if isinstance(context, dict) else None
+        return RunRef(run_id=run_id, user_message_id=message_id if isinstance(message_id, str) else None)
 
     def owns_run(self, user_id: str, run_id: str) -> bool:
         """Return whether a Run belongs to the user."""

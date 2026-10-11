@@ -2933,6 +2933,10 @@ export type RunRef = {
      * Run Id
      */
     run_id: string;
+    /**
+     * User Message Id
+     */
+    user_message_id?: string | null;
 };
 
 /**

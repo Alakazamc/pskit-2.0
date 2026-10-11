@@ -6,7 +6,7 @@ import { ApiError } from "../../api/http";
 import { errorTranslationKey } from "../../i18n/errors";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { completeComposerDraft, conversationDraftScope, moveComposerDraft, readComposerDraft, type ComposerDraftScope } from "../chat/composerDrafts";
-import { acceptPendingMessage } from "../chat/useMessageHistory";
+import { acceptPendingMessage, addPendingMessage, removePendingMessage } from "../chat/useMessageHistory";
 import { sessionPath } from "./sessionPaths";
 
 export function useConversationSend(api: ResearchApi, user: UserIdentity, activeSessionId: string | null,
@@ -31,7 +31,7 @@ export function useConversationSend(api: ResearchApi, user: UserIdentity, active
     setSubmitting(true);
     setSendError(null);
     setShowUpgradePrompt(false);
-    let optimistic: { queryKey: string[]; id: string } | undefined;
+    let optimistic: { sessionId: string; id: string } | undefined;
     const submittedDraft = readComposerDraft(draftScope);
     try {
       const targetProjectId = activeProjectId ?? personalProjectId;
@@ -57,12 +57,12 @@ export function useConversationSend(api: ResearchApi, user: UserIdentity, active
         parts: [{ type: "text", text: payload.content },
           ...payload.attachments.map((file) => ({ type: "file" as const, id: file.id, name: file.name }))],
       };
-      optimistic = { queryKey, id: message.id };
-      queryClient.setQueryData<Message[]>(queryKey, (previous = []) => [...previous, message]);
+      optimistic = { sessionId: targetSessionId, id: message.id };
+      addPendingMessage(queryClient, user.id, targetSessionId, message);
       if (createdSession) navigate(sessionPath(targetProjectId, personalProjectId, targetSessionId));
       const result = await api.sendMessage(targetSessionId, payload, pendingSend.current.key, activeProjectId);
       if (createdSession) completeComposerDraft(conversationDraftScope(user.id, targetSessionId), submittedDraft);
-      if (optimistic) acceptPendingMessage(queryClient, user.id, targetSessionId, optimistic.id);
+      if (optimistic) acceptPendingMessage(queryClient, user.id, targetSessionId, optimistic.id, result.user_message_id);
       pendingSend.current = null;
 
       // CRITICAL: Start event polling immediately, before waiting for message refresh
@@ -80,8 +80,7 @@ export function useConversationSend(api: ResearchApi, user: UserIdentity, active
       return true;
     } catch (caught) {
       if (optimistic) {
-        const id = optimistic.id;
-        queryClient.setQueryData<Message[]>(optimistic.queryKey, (previous) => previous?.filter((message) => message.id !== id));
+        removePendingMessage(queryClient, user.id, optimistic.sessionId, optimistic.id);
       }
       const key = errorTranslationKey(caught);
       setSendError(key ? t(key) : t("workspace.sendFailed"));

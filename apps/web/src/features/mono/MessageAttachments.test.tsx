@@ -6,7 +6,8 @@ import { App } from "../../app/App";
 const nativeURL = URL;
 const createUrl = vi.fn(() => `blob:message-${createUrl.mock.calls.length}`);
 const revokeUrl = vi.fn();
-const image = new Blob(["image fixture"], { type: "image/png" });
+// Node 22 Response needs a byte body: jsdom's Blob has no stream() method.
+const imageResponse = () => new Response("image fixture", { headers: { "Content-Type": "image/png" } });
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 
 beforeEach(() => {
@@ -24,7 +25,7 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
 });
 
-function api(download: (id: string) => Promise<Response> = async () => new Response(image)) {
+function api(download: (id: string) => Promise<Response> = async () => imageResponse()) {
   const downloads: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const path = new nativeURL(String(input), "http://test").pathname;
@@ -60,6 +61,7 @@ it("loads saved same-name images above a separate user text bubble through owned
   const view = render(<App />);
   await waitFor(() => expect(screen.getAllByRole("img", { name: "image.png" })).toHaveLength(2));
   const pictures = screen.getAllByRole("img", { name: "image.png" });
+  expect(createUrl).toHaveBeenCalledWith(expect.objectContaining({ type: "image/png" }));
   expect(new Set(pictures.map((picture) => picture.getAttribute("src"))).size).toBe(2);
   const bubble = screen.getByText("Describe first").closest(".message-body")!;
   expect(bubble).not.toContainElement(pictures[0]);
@@ -80,13 +82,13 @@ it("shows pending image previews while retaining the message text", async () => 
   await screen.findByText("Describe first");
   expect(await screen.findAllByRole("status", { name: "Loading image image.png" })).toHaveLength(2);
   expect(screen.queryByRole("img", { name: "image.png" })).not.toBeInTheDocument();
-  await act(async () => { finish(new Response(image)); });
+  await act(async () => { finish(imageResponse()); });
   await waitFor(() => expect(screen.getAllByRole("img", { name: "image.png" })).toHaveLength(2));
 });
 
 it("keeps a named retryable fallback when an owned image cannot be downloaded", async () => {
   let unavailable = true;
-  api(async () => unavailable ? json({ detail: "Unavailable" }, 503) : new Response(image));
+  api(async () => unavailable ? json({ detail: "Unavailable" }, 503) : imageResponse());
   render(<App />);
   await waitFor(() => expect(screen.getAllByText("Image unavailable")).toHaveLength(2));
   expect(screen.getByText("Describe first")).toBeVisible();
@@ -98,14 +100,14 @@ it("keeps a named retryable fallback when an owned image cannot be downloaded", 
 it("isolates late image downloads when switching conversations", async () => {
   let finish!: (value: Response) => void;
   const pending = new Promise<Response>((resolve) => { finish = resolve; });
-  const downloads = api(async (id) => id.includes("first") ? (await pending).clone() : new Response(image));
+  const downloads = api(async (id) => id.includes("first") ? (await pending).clone() : imageResponse());
   render(<App />);
   await waitFor(() => expect(downloads).toContain("image-first-1"));
   await userEvent.setup().click(screen.getByRole("link", { name: "second chat" }));
   await screen.findByText("Describe second");
   await waitFor(() => expect(screen.getAllByRole("img", { name: "image.png" })).toHaveLength(2));
   const secondUrls = screen.getAllByRole("img", { name: "image.png" }).map((picture) => picture.getAttribute("src"));
-  await act(async () => { finish(new Response(image)); });
+  await act(async () => { finish(imageResponse()); });
   expect(screen.getAllByRole("img", { name: "image.png" }).map((picture) => picture.getAttribute("src"))).toEqual(secondUrls);
   expect(screen.queryByText("Describe first")).not.toBeInTheDocument();
   await userEvent.setup().click(screen.getByRole("link", { name: "first chat" }));

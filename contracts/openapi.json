@@ -12585,6 +12585,17 @@
           "run_id": {
             "type": "string",
             "title": "Run Id"
+          },
+          "user_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Message Id"
           }
         },
         "type": "object",

@@ -134,7 +134,7 @@ export interface ResearchApi extends AdminApi {
   getSessionArtifacts(sessionId: string): Promise<ArtifactRef[]>;
   getArtifactPreview(id: string): Promise<ArtifactPreview>;
   downloadArtifact(id: string): Promise<Blob>;
-  sendMessage(sessionId: string, message: MessageRequest, idempotencyKey?: string, projectId?: string | null): Promise<{ run_id: string }>;
+  sendMessage(sessionId: string, message: MessageRequest, idempotencyKey?: string, projectId?: string | null): Promise<{ run_id: string; user_message_id?: string | null }>;
   getRunEvents(runId: string, after?: string): Promise<RunEvent[]>;
   cancelRun(runId: string): Promise<RunStatus>;
   decideApproval(runId: string, approvalId: string, decision: Api.ApprovalDecisionRequest["decision"]): Promise<Api.ApprovalDecisionResponse>;
