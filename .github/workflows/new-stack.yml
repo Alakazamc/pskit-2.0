@@ -121,6 +121,13 @@ jobs:
           -e PYTHONPATH=/compat -v "$PWD/infra/litellm:/compat:ro"
           --entrypoint python ghcr.io/berriai/litellm:v1.100.3
           /compat/test_provider_compat.py
+      - name: Qualification parameters survive global drop and native SDK conversion
+        run: >-
+          timeout 180 docker run --rm --network none --read-only --tmpfs /tmp
+          -e LITELLM_LOCAL_MODEL_COST_MAP=True -e PYTHONDONTWRITEBYTECODE=1
+          -v "$PWD/apps/api/tests/qualification_litellm_wire.py:/qualification_wire.py:ro"
+          --entrypoint python ghcr.io/berriai/litellm:v1.100.3
+          /qualification_wire.py
 
   deployment-model-and-image:
     runs-on: ubuntu-latest

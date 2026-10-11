@@ -37,7 +37,7 @@ async def good_probe(case_id, body, *, actor_id, deployment_fingerprint):
     if case_id == "workspace_artifact":
         return {name: True for name in ("write_verified", "read_verified", "artifact_verified",
                                        "owner_verified", "usage_settled_once")}
-    if case_id == "tools":
+    if case_id == "tools" or case_id.startswith("tool_choice:"):
         return {"choices": [{"message": {"tool_calls": [{
             "id": "qualified-call", "type": "function", "function": {
                 "name": "qualification_echo", "arguments": '{"value":"qualification"}',
@@ -57,15 +57,16 @@ async def good_probe(case_id, body, *, actor_id, deployment_fingerprint):
     if case_id == "streaming_tools":
         assert body["stream"] is True
         return {"chunks": [
-            {"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "qualified-",
-                "function": {"name": "qualification_", "arguments": '{"value":'}}]},
+            {"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "qualified-call",
+                "function": {"name": "qualification_echo", "arguments": '{"value":'}}]},
                 "finish_reason": None}]},
-            {"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "call",
-                "function": {"name": "echo", "arguments": '"qualification"}'}}]},
+            {"choices": [{"delta": {"tool_calls": [{"index": 0,
+                "function": {"arguments": '"qualification"}'}}]},
                 "finish_reason": "tool_calls"}]},
         ]}
     if case_id == "images":
         assert body["messages"][0]["content"][1]["image_url"]["url"].startswith("data:image/png")
+        return {"choices": [{"message": {"content": '{"color":"red"}'}}]}
     if case_id.startswith("reasoning:"):
         assert body["reasoning_effort"] == case_id.split(":", 1)[1]
     result = response()
@@ -92,7 +93,8 @@ def with_evidence(candidate, evidence):
 @pytest.mark.asyncio
 async def test_offline_matrix_covers_images_reasoning_stream_tools_and_unknown_usage():
     candidate = profile(supports_images=True, reasoning_levels=["low", "high"],
-                        wire_policy=ModelWirePolicy(reasoning_mode="reasoning_effort"))
+                        wire_policy=ModelWirePolicy(reasoning_mode="reasoning_effort",
+                                                   preserve_openai_parameters=True))
     evidence = await qualifier().evaluate(candidate, actor_id="operator",
                                            deployment_fingerprint=fingerprint("route"))
     assert evidence.status == "degraded"
@@ -175,7 +177,7 @@ async def test_timeout_and_responses_fail_explicitly():
         await qualifier(blocked, timeout_seconds=0.01).evaluate(
             profile(), actor_id="operator", deployment_fingerprint=fingerprint("route"),
         )
-    with pytest.raises(ValueError, match="MODEL_PROTOCOL_UNAVAILABLE"):
+    with pytest.raises(ValueError, match="MODEL_PROTOCOL_UNSUPPORTED"):
         await qualifier(blocked).evaluate(profile(protocol="responses"), actor_id="operator",
                                            deployment_fingerprint=fingerprint("route"))
 
@@ -387,7 +389,8 @@ async def test_qualification_off_matches_pi_none_wire_but_evidence_keeps_ui_leve
             return response()
         return await good_probe(case_id, body, **kwargs)
     candidate = profile(reasoning_levels=["off"],
-                        wire_policy=ModelWirePolicy(reasoning_mode="reasoning_effort"))
+                        wire_policy=ModelWirePolicy(reasoning_mode="reasoning_effort",
+                                                   preserve_openai_parameters=True))
     evidence = await qualifier(probe).evaluate(candidate, actor_id="operator",
                                                deployment_fingerprint=fingerprint("route"))
     assert seen == ["none"]

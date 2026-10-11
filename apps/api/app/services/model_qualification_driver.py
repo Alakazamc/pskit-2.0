@@ -23,16 +23,26 @@ from app.adapters.live.sandbox_pi import SandboxPiRunner
 from app.contracts.admin import ModelDraft
 from app.contracts.conversation import ArtifactCreatedData, ArtifactCreatedEvent
 from app.contracts.model_runtime import ModelQualificationCase, ModelRuntimeProfile, fingerprint
-from app.domain.admin.model_qualification import ModelQualification, _tool_call, _usage_known
+from app.domain.admin.model_qualification import (
+    ModelQualification,
+    _content_valid,
+    _tool_call,
+    _usage_known,
+)
 from app.domain.quota import TokenQuotaExceeded
-from app.services.model_gateway import acquire_gateway_client, read_gateway_error
+from app.services.model_gateway import (
+    acquire_gateway_client,
+    prepare_model_parameters,
+    read_gateway_error,
+)
 from app.services.workspace_files import WorkspaceOperationContext
 
 _FAULT_CODES = {401: "MODEL_GATEWAY_AUTH_FAILED", 402: "MODEL_GATEWAY_QUOTA_EXHAUSTED",
                 403: "MODEL_GATEWAY_AUTH_FAILED", 429: "MODEL_GATEWAY_RATE_LIMITED",
                 500: "MODEL_GATEWAY_UNAVAILABLE", 503: "MODEL_GATEWAY_UNAVAILABLE"}
 _ROUTE_FIELDS = {"api_base", "api_key", "base_url", "deployment_id", "litellm_params",
-                 "provider", "custom_llm_provider", "model_list", "fallbacks", "retries"}
+                 "provider", "custom_llm_provider", "model_list", "fallbacks", "retries",
+                 "drop_params", "allowed_openai_params", "additional_drop_params", "extra_body"}
 _WORKSPACE_TOOLS = [
     {"type": "function", "function": {"name": "write_file", "description": "Write the fixed qualification artifact.",
         "parameters": {"type": "object", "properties": {"path": {"type": "string"},
@@ -60,6 +70,18 @@ def _loopback(value):
         return ipaddress.ip_address(hostname or "").is_loopback
     except ValueError:
         return False
+
+
+def _strict_openai_route(route):
+    # Native providers can remap effort to thinking/other fields. Only these
+    # pinned adapters have offline proof of unchanged OpenAI parameter wire.
+    return route["model"].split("/", 1)[0] in {"openai", "custom_openai"}
+
+
+def _verify_parameter_policy(profile, routes):
+    if (profile.wire_policy.preserve_openai_parameters is True
+            and any(not _strict_openai_route(route) for route in routes)):
+        raise ValueError("MODEL_QUALIFICATION_PARAMETER_POLICY_UNVERIFIED")
 
 
 async def _finish(task, *, completed=None):
@@ -265,18 +287,21 @@ class ModelQualificationDriver:
                 raise ValueError("MODEL_QUALIFICATION_RESPONSE_INVALID")
             return result
         chunks, usage, done = [], None, False
-        for event in raw.replace(b"\r\n", b"\n").split(b"\n\n"):
+        normalized = raw.replace(b"\r\n", b"\n")
+        for event in normalized.split(b"\n\n"):
             data = b"\n".join(line[5:].lstrip(b" ") for line in event.split(b"\n") if line.startswith(b"data:"))
             if not data:
                 continue
             if data == b"[DONE]":
+                if done or not normalized.endswith(b"\n\n"):
+                    raise ValueError("MODEL_QUALIFICATION_STREAM_INVALID")
                 done = True
                 continue
             if done or len(chunks) >= 2048:
                 raise ValueError("MODEL_QUALIFICATION_STREAM_INVALID")
             chunk = json.loads(data)
-            if not isinstance(chunk, dict):
-                raise TypeError("MODEL_QUALIFICATION_STREAM_INVALID")
+            if not isinstance(chunk, dict) or "error" in chunk:
+                raise ValueError("MODEL_QUALIFICATION_STREAM_INVALID")
             chunks.append(chunk)
             if chunk.get("usage") is not None:
                 if usage is not None and usage != chunk["usage"]:
@@ -286,10 +311,12 @@ class ModelQualificationDriver:
             raise ValueError("MODEL_QUALIFICATION_STREAM_INVALID")
         return {"chunks": chunks, **({"usage": usage} if usage is not None else {})}
 
-    async def _request(self, state, route, body, case_id, *, raw_response=False, source_run_id=None):
+    async def _request(self, state, route, body, case_id, *, raw_response=False, source_run_id=None,
+                       use_alias=False):
         await self._current(state)
-        payload = json.loads(json.dumps(body))
-        payload["model"] = route["metadata"]["id"]
+        _verify_parameter_policy(state.profile, state.routes)
+        payload = prepare_model_parameters(json.loads(json.dumps(body)), state.profile)
+        payload["model"] = state.profile.alias if use_alias else route["metadata"]["id"]
         payload["user"] = self.user_id
         field_name = state.profile.wire_policy.chat_max_tokens_field
         requested = payload.pop("max_tokens", payload.pop("max_completion_tokens", 64))
@@ -346,6 +373,11 @@ class ModelQualificationDriver:
                     observed = result["usage"]["prompt_tokens"] + result["usage"]["completion_tokens"]
                     state.observed_tokens += observed
                     state.attempts[index] = (run_id, observed)
+                if use_alias:
+                    route = next((candidate for candidate in state.routes
+                                  if candidate["metadata"]["id"] == response.headers.get("x-litellm-model-id")), None)
+                    if route is None:
+                        raise ValueError("MODEL_QUALIFICATION_ROUTE_UNVERIFIED")
                 if (response.headers.get("x-litellm-model-id") != route["metadata"]["id"]
                         or response.headers.get("x-litellm-version") != self.gateway_version
                         or _url(response.headers.get("x-litellm-model-api-base")) != _url(route["api_base"])):
@@ -401,17 +433,22 @@ class ModelQualificationDriver:
             return {"normalized": all(check.get("normalized") is True for check in checks)}
         if case_id == "alias_routing":
             await self._current(state)
+            result = await self._request(state, state.routes[0], body, case_id, use_alias=True)
             expected = {route["metadata"]["id"] for route in state.routes}
             return {"deployment_fingerprint": state.deployment_fingerprint,
-                    "all_deployments_verified": bool(expected) and state.verified == expected}
+                    "all_deployments_verified": (bool(expected) and state.verified == expected
+                                                 and _content_valid(result)),
+                    "response_fingerprint": fingerprint(result)}
         if case_id == "workspace_artifact":
             return await self._workspace(state)
+        if case_id.startswith("reasoning:") and (
+                not state.profile.wire_policy.preserve_openai_parameters
+                or any(not _strict_openai_route(route) for route in state.routes)):
+            return {"not_tested_reason": "strict_parameter_forwarding_unverified"}
         results = []
         for route in state.routes:
             request = json.loads(json.dumps(body))
             identifier = route["metadata"]["id"]
-            if case_id in {"tools", "streaming_tools"}:
-                request["tool_choice"] = {"type": "function", "function": {"name": "qualification_echo"}}
             if case_id == "tool_continue":
                 call = state.tool_calls.get(identifier)
                 if call is None:
@@ -602,6 +639,7 @@ class ModelQualificationDriver:
                 routes = await self._discovery(lease.client, profile.alias)
                 if self._routes_fingerprint(profile.alias, routes) != deployment_fingerprint:
                     raise ValueError("MODEL_QUALIFICATION_STALE")
+                _verify_parameter_policy(profile, routes)
                 scope = self._scope(lease.client, routes)
                 project = await self._ledger(self.store.create_project, self.user_id, "Model qualification audit", "Internal fixed protocol probes")
                 session = await self._ledger(self.store.create_session, self.user_id, project.id, "Model qualification audit")
@@ -621,7 +659,9 @@ class ModelQualificationDriver:
                         status=ModelQualification._status("workspace_artifact", result, deployment_fingerprint, None),
                         request_fingerprint=fingerprint("fixed workspace artifact"), response_fingerprint=fingerprint(result))
                     cases = tuple(case if item.case_id == "workspace_artifact" else item for item in evidence.cases)
-                    status = "failed" if any(item.status == "failed" for item in cases) else "passed"
+                    core = [item for item in cases if item.case_id not in {"tool_choice:required", "tool_choice:specific"}]
+                    status = ("failed" if any(item.status == "failed" for item in core) else
+                              "passed" if all(item.status in {"passed", "unknown"} for item in core) else "degraded")
                     evidence = evidence.model_copy(update={"cases": cases, "status": status})
                 await self._current(state)
                 return evidence

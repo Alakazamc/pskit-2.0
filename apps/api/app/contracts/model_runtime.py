@@ -40,6 +40,7 @@ class ModelWirePolicy(RuntimeContract):
     stream_usage_mode: Literal["supported", "not_supported", "unknown"] = "unknown"
     developer_role_mode: Literal["supported", "system_fallback", "unknown"] = "unknown"
     reasoning_mode: Literal["omit", "reasoning_effort"] = "omit"
+    preserve_openai_parameters: bool = Field(default=False, exclude_if=lambda value: value is False)
 
 
 class ModelQualificationCase(RuntimeContract):
@@ -48,6 +49,9 @@ class ModelQualificationCase(RuntimeContract):
     request_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
     response_fingerprint: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     usage_known: bool | None = None
+    not_tested_reason: Literal["strict_parameter_forwarding_unverified"] | None = Field(
+        default=None, exclude_if=lambda value: value is None,
+    )
 
 
 class ModelQualificationEvidence(RuntimeContract):
@@ -83,9 +87,14 @@ class ModelRuntimeProfile(RuntimeContract):
     qualification_evidence: ModelQualificationEvidence | None = None
 
     def candidate_fingerprint(self) -> str:
-        return fingerprint(self.model_dump(mode="json", exclude={
+        candidate = self.model_dump(mode="json", exclude={
             "qualification_status", "qualification_evidence_id", "qualification_evidence",
-        }))
+        })
+        # Absence/False retains the exact pre-policy fingerprint so existing
+        # published profiles and their evidence are not retroactively revoked.
+        if not self.wire_policy.preserve_openai_parameters:
+            candidate["wire_policy"].pop("preserve_openai_parameters", None)
+        return fingerprint(candidate)
 
     @property
     def agent_ready(self) -> bool:

@@ -2161,6 +2161,10 @@ export type ModelQualificationCase = {
      * Usage Known
      */
     usage_known?: boolean | null;
+    /**
+     * Not Tested Reason
+     */
+    not_tested_reason?: 'strict_parameter_forwarding_unverified' | null;
 };
 
 /**
@@ -2297,6 +2301,10 @@ export type ModelWirePolicy = {
      * Reasoning Mode
      */
     reasoning_mode?: 'omit' | 'reasoning_effort';
+    /**
+     * Preserve Openai Parameters
+     */
+    preserve_openai_parameters?: boolean;
 };
 
 /**

@@ -12,7 +12,26 @@ from email.utils import parsedate_to_datetime
 
 import httpx
 
+from app.contracts.model_runtime import ModelRuntimeProfile
+
 MAX_ERROR_BYTES = 64 * 1024
+
+
+def prepare_model_parameters(payload: dict, profile: ModelRuntimeProfile | None) -> dict:
+    """Apply only the trusted profile's opt-in OpenAI parameter policy.
+
+    Ordinary Pi calls and qualification use this same wire preparation. Legacy
+    profiles retain their provider's existing mapping and parameter filtering.
+    Caller overrides must be rejected before entering this boundary.
+    """
+    prepared = dict(payload)
+    if profile is not None and profile.wire_policy.preserve_openai_parameters is True:
+        prepared["drop_params"] = False
+        prepared["allowed_openai_params"] = [
+            name for name in ("tools", "tool_choice", "reasoning_effort") if name in prepared
+        ]
+        prepared["additional_drop_params"] = []
+    return prepared
 
 
 def create_gateway_client(transport=None) -> httpx.AsyncClient:

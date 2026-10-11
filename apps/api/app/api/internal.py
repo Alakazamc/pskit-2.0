@@ -29,7 +29,11 @@ from app.domain.persistent_conversation import ComputeLeaseConflict, GpuReconcil
 from app.domain.quota import GpuQuotaExceeded, TokenQuotaExceeded
 from app.domain.release_admission import AdmissionClosed
 from app.ports.providers import ProviderUnavailable
-from app.services.model_gateway import acquire_gateway_client, read_gateway_error
+from app.services.model_gateway import (
+    acquire_gateway_client,
+    prepare_model_parameters,
+    read_gateway_error,
+)
 
 router = APIRouter(prefix="/internal", tags=["internal"], include_in_schema=False)
 MAX_ARTIFACT_BYTES = 20 * 1024 * 1024
@@ -37,8 +41,9 @@ MAX_ARTIFACT_BYTES = 20 * 1024 * 1024
 # sampling request. A sandbox's Run token does not grant either authority.
 MODEL_ROUTE_OVERRIDE_FIELDS = frozenset({
     "api_base", "base_url", "api_key", "custom_llm_provider", "litellm_params",
-    "api_type", "api_version", "extra_headers", "headers", "model_list",
+    "api_type", "api_version", "extra_headers", "extra_body", "headers", "model_list",
     "deployment_id", "provider", "provider_options", "providerOptions",
+    "drop_params", "allowed_openai_params", "additional_drop_params",
 })
 
 
@@ -202,6 +207,7 @@ async def proxy_model_call(
         raise HTTPException(422, detail={"code": "MODEL_REASONING_UNAVAILABLE"})
     if effort:
         payload["reasoning_effort"] = reasoning_wire_value(logical_effort)
+    payload = prepare_model_parameters(payload, profile)
     if "max_completion_tokens" in payload and "max_tokens" in payload:
         raise HTTPException(400, detail="Conflicting model output limits")
     field = "max_completion_tokens" if "max_completion_tokens" in payload else "max_tokens"
