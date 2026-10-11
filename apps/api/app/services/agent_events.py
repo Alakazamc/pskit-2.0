@@ -1,6 +1,7 @@
 """Typed Pi projection and bounded text-delta persistence."""
 
 import asyncio
+import re
 
 from app.contracts.conversation import (
     MessageDeltaData,
@@ -17,6 +18,66 @@ from app.contracts.conversation import (
     ToolUpdatedData,
     ToolUpdatedEvent,
 )
+
+
+_TOOL_ERROR_MAX_CHARS = 500
+_TOOL_ERROR_INPUT_MAX_CHARS = 4096
+_TOOL_ERROR_SECRET_PATTERNS = (
+    (re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/-]+=*"), "Bearer [REDACTED]"),
+    (
+        re.compile(
+            r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|"
+            r"authorization)"
+            r"\b(\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^\s,;]+)"
+        ),
+        r"\1\2[REDACTED]",
+    ),
+    (
+        re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\."
+                   r"[A-Za-z0-9_-]{8,}\b"),
+        "[REDACTED]",
+    ),
+    (
+        re.compile(r"\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9]{20,}|"
+                   r"AKIA[A-Z0-9]{16})\b"),
+        "[REDACTED]",
+    ),
+    (re.compile(r"(?i)(https?://[^:/\s]+:)[^@/\s]+@"), r"\1[REDACTED]@"),
+)
+
+
+def _tool_failure_summary(result: object) -> str | None:
+    """Return a short, redacted diagnostic without persisting raw tool payloads."""
+    if not isinstance(result, dict):
+        return None
+
+    candidates = []
+    details = result.get("details")
+    if isinstance(details, dict):
+        for key in ("error", "message"):
+            value = details.get(key)
+            if isinstance(value, str):
+                candidates.append(value)
+    content = result.get("content")
+    if isinstance(content, list):
+        candidates.extend(
+            block["text"] for block in content
+            if isinstance(block, dict)
+            and block.get("type") == "text"
+            and isinstance(block.get("text"), str)
+        )
+
+    for candidate in candidates:
+        text = re.sub(
+            r"\x1b\[[0-?]*[ -/]*[@-~]", "", candidate[:_TOOL_ERROR_INPUT_MAX_CHARS]
+        )
+        text = " ".join("".join(char for char in text if char.isprintable()).split())
+        for pattern, replacement in _TOOL_ERROR_SECRET_PATTERNS:
+            text = pattern.sub(replacement, text)
+        text = text[:_TOOL_ERROR_MAX_CHARS].strip()
+        if text and text.casefold() not in {"tool failed", "failed", "error"}:
+            return text
+    return None
 
 
 def project_pi_event(run_id: str, event: dict) -> list[RunEvent]:
@@ -83,7 +144,9 @@ def project_pi_event(run_id: str, event: dict) -> list[RunEvent]:
                 ),
             )
         else:
-            details = (event.get("result") or {}).get("details") or {}
+            result = event.get("result")
+            result = result if isinstance(result, dict) else {}
+            details = result.get("details") or {}
             state = details.get("status") if isinstance(details, dict) else None
             status = (
                 "failed"
@@ -98,6 +161,8 @@ def project_pi_event(run_id: str, event: dict) -> list[RunEvent]:
                 "approval_required": "Waiting for approval",
                 "completed": "Tool completed",
             }[status]
+            if status == "failed":
+                summary = _tool_failure_summary(result) or summary
             projected = ToolFinishedEvent(
                 run_id=run_id,
                 data=ToolFinishedData(
