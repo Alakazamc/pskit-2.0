@@ -79,6 +79,11 @@ class AgentContextMixin:
             )
         compute = getattr(self, "compute_jobs", None)
         member = capabilities is None or capabilities.identities.tier_for(user_id) == "member"
+        # Historical contexts predate the flag and keep their transcript's tool
+        # surface. New admissions pin a server-owned boolean, including retries.
+        environment["PSKIT_COMPUTE_COMPAT_ENABLED"] = (
+            "1" if context.get("compute_tool_compatibility", True) is True else "0"
+        )
         environment["PSKIT_COMPUTE_CAPABILITIES_JSON"] = json.dumps(
             [capability.model_dump(mode="json") for capability in compute.catalog.for_user(user_id)]
             if compute is not None and member

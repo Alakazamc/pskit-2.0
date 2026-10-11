@@ -294,6 +294,7 @@ class RunsMixin:
         model_supports_images: bool = False,
         reasoning_effort: str | None = None,
         model_runtime_profile: dict | None = None,
+        compute_tool_compatibility: bool = False,
     ) -> tuple[RunRef, bool] | None:
         """Admit a message, reserve Tokens, and queue its Run atomically.
 
@@ -370,6 +371,7 @@ class RunsMixin:
                              "user_prompt": user_prompt, "model_id": model_id,
                              "model_supports_images": model_supports_images,
                              "reasoning_effort": reasoning_effort,
+                             "compute_tool_compatibility": compute_tool_compatibility,
                              **({"model_runtime_profile": model_runtime_profile}
                                 if model_runtime_profile is not None else {}),
                              "image_ids": list(image_ids),

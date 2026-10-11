@@ -4,7 +4,9 @@
 
 本轮基线为 `c37ca61e7a8d9672013597f2cc339f4e9060720f`，分支仍为 `codex/new-stack-baseline`；执行[最新整改方案](REMEDIATION_EXECUTION_2026-10-12.md)。`46c1dc4` 阶段之后新版源码已完成独立纯路径迁移至 `apps/api/`、`apps/web/`，本轮**不再次迁移**。根目录旧 `backend/`、`frontend/` 与旧 CI/回退资料继续保留；下文历史报告中的 `new_*` 和“当时未迁移”描述是其对应时间的事实。
 
-PR-0/1 已独立提交 `f088128`、`eb8df70`，基于指定 Actions 失败日志复现并修复 Ruff、前端图片 fixture 和乐观消息刷新生命周期；对应 HEAD 的 [GitHub 六项 CI 全部成功](https://github.com/Alakazamc/pskit-2.0/actions/runs/38156874714)。实际 RED/GREEN、400 项前端、Backend1206/PG232、当前镜像及回滚见 [PR-0/1 报告](phases/2026-10-12-pr01/REPORT.md)。PR-2 安全摘要和独立 MCP 容量/取消修复已通过 [精确 HEAD 六项 CI](https://github.com/Alakazamc/pskit-2.0/actions/runs/38160933404)。PR-3 核心协议资格及普通代理参数一致性已通过 [六项 CI](https://github.com/Alakazamc/pskit-2.0/actions/runs/38162074647)；默认资格证据旧格式读取还有独立兼容复核补丁。PR-4 内部拆分已通过本地458项部署、9组合成Compose和31方法等价；PR-5 默认/历史工具开关已准备并通过定向回归。后续最终源码、远端结果与回滚按阶段索引补齐，未提交或未通过门禁的结果不算交付。
+PR-0/1、PR-2安全摘要及独立MCP续租/取消补丁、PR-3真实协议离线资格与旧JSON兼容、PR-4私有控制器拆分、PR-5受控通用计算兼容均已实现，按职责独立提交。前四次精确HEAD的GitHub六项门禁已全绿；最后PR-5/交付提交的精确workflow在交付时再次核对。完整提交/Actions、8个前端问题逐项RED/GREEN、修改文件及回滚见[2026-10-12交付索引](phases/2026-10-12/REPORT.md)。
+
+最终本地：Backend **1516 passed/1原有外部Supabase skip**（PG **234/0skip**）；Frontend **400**、Pi **11**、Deployment **458/0skip**、Compose **9**、契约一致、镜像 **3**与 **316**运行源逐一匹配。原有未提交的流式排序、准入和发布资料改动保持独立，未放入本轮提交。
 
 当前部署入口为 [deploy/agent/README](../../deploy/agent/README.md) 与 [当前部署矩阵](DEPLOY_MATRIX.md)。本轮没有 SSH、部署、读取生产私有配置、修改真实数据库或使用付费模型。2026-10-11 的既有生产发布资料记录当时状态，本轮未重新在线核对；本地合成测试不能取代宿主 adoption、真实模型资格、Staging 回滚或 RPO/RTO 演练。
 

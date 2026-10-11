@@ -86,6 +86,7 @@ async def test_real_pi_suspends_compute_and_resumes_with_structured_terminal_res
             "PSKIT_AGENT_TOOL_TOKEN": "internal-secret",
             "PSKIT_INTERNAL_API_URL": f"http://127.0.0.1:{server.server_port}",
             "PSKIT_AF3_ENABLED": "0", "PSKIT_MCP_TOOLS_JSON": "[]",
+            "PSKIT_COMPUTE_COMPAT_ENABLED": "1",
             "PSKIT_COMPUTE_CAPABILITIES_JSON": json.dumps([{
                 "id": "lab.predict", "version": "1", "input_schema": {"type": "object"},
             }]),

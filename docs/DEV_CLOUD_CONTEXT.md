@@ -214,3 +214,8 @@ A6000 升级或恢复前核对唯一接收器、活动任务、journal/outbox/sp
 **2026-10-10 Phase 6 本地迁移交接：** 新版前端与后端源码已纯路径迁移到 `apps/web/`、`apps/api/`；旧 `backend/`、`frontend/` 与旧恢复工具保留。Backend 1204 passed / 1 external Supabase integration skipped（PostgreSQL 232 passed、0 skipped）；Frontend 387 测试、typecheck、lint、build 通过；Pi 测试、9 种合成 Compose、契约导出、本地 `apps/api` context 镜像构建及隔离 runtime smoke 通过。Deployment 测试 446 passed/1 skipped；其要求临时 host-root 位于 `/tmp` 的 staging Nginx 测试 4 项单独重跑通过。忽略的本地 `.env`、`.venv`、SQLite/Pi 会话、`node_modules` 与 `dist` 仍在新目录，未进入 Git。详细命令与限制见 [Phase 6 验证](architecture/phases/phase-6/VERIFICATION.md) 与[回退说明](architecture/phases/phase-6/MIGRATION_AND_ROLLBACK.md)。本轮没有 push、SSH、云端部署、真实数据库变更或历史数据清理；阿里云 source-bind、Staging 同制品及回退验收仍 pending。
 
 每次交接更新此节的日期、分支/提交、未完成项、实际验证结果、生产/Staging 状态及下一步。镜像 ID、制品哈希和回滚证据写入对应发布记录并链接到此处；连接别名、端口或职责变化则同时修改前面的环境章节。
+
+
+**2026-10-12 最新整改交接：** 分支 `codex/new-stack-baseline`；从原HEAD `c37ca61e` 按用户最新任务书完成PR-0/1、PR-2、独立MCP正确性补丁、PR-3/旧完整JSON兼容、PR-4控制器内部拆分和PR-5受控Compute兼容。各阶段独立提交及精确HEAD远端结果见[交付索引](architecture/phases/2026-10-12/REPORT.md)。已确认前四个整合HEAD的Backend、Frontend、Pi、Contracts、Gateway Protocol、Deployment/Image六项全部成功；最后交付提交在推送后再次核对其精确workflow。
+
+本地干净候选Backend1516通过/1原有外部Supabase跳过（PG234零跳过）、Frontend400、Pi11、Deployment458零跳过、9Compose、契约和本地镜像3项通过；镜像ID与316运行源校验见索引。真实供应商Staging、宿主adoption与RPO/RTO未在本轮执行。没有SSH、云端部署、真实数据库或付费模型配置变更，生产运行版本未在线核实；本轮此前已有工作区改动未混入整改提交。下一步需要独立授权才能做真实资格/宿主发布演练，不以本地绿色直接发布。

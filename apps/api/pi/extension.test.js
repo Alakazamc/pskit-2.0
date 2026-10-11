@@ -7,6 +7,7 @@ function genericEnvironment(overrides, action) {
   const values = {
     PSKIT_AF3_ENABLED: "0", PSKIT_MCP_TOOLS_JSON: "[]",
     PSKIT_COMPUTE_CAPABILITIES_JSON: "[]", PSKIT_COMPUTE_TOOLS_JSON: "[]",
+    PSKIT_COMPUTE_COMPAT_ENABLED: "0",
     PSKIT_WORKSPACE_CAPABILITIES_JSON: "{}", PSKIT_RUN_ID: "run-echo",
     PSKIT_AGENT_TOOL_TOKEN: "synthetic-token", PSKIT_INTERNAL_API_URL: "http://127.0.0.1:18080",
     ...overrides,
@@ -102,6 +103,7 @@ test("generic business whitelist rejects malformed descriptors", async () => {
 
 test("legacy generic submit_compute remains compatible alongside business tools", async () => {
   await genericEnvironment({
+    PSKIT_COMPUTE_COMPAT_ENABLED: "1",
     PSKIT_COMPUTE_TOOLS_JSON: JSON.stringify([echoDefinition]),
     PSKIT_COMPUTE_CAPABILITIES_JSON: JSON.stringify([{ id: "document.echo", version: "1" }]),
   }, async () => {
@@ -124,6 +126,50 @@ test("legacy generic submit_compute remains compatible alongside business tools"
       assert.equal(result.terminate, true);
       assert.equal(result.details.status, "pending");
       assert.ok(tools.has(echoDefinition.name));
+    } finally { globalThis.fetch = originalFetch; }
+  });
+});
+
+test("new and malformed compatibility profiles expose only published business tools", async () => {
+  for (const enabled of ["0", "", "false", "true"]) {
+    await genericEnvironment({
+      PSKIT_COMPUTE_COMPAT_ENABLED: enabled,
+      PSKIT_COMPUTE_TOOLS_JSON: JSON.stringify([echoDefinition]),
+      PSKIT_COMPUTE_CAPABILITIES_JSON: JSON.stringify([{ id: "document.echo", version: "1" }]),
+    }, () => {
+      const tools = new Map();
+      register({ registerTool(tool) { tools.set(tool.name, tool); }, registerCommand() {} });
+      assert.equal(tools.has("submit_compute"), false);
+      assert.ok(tools.has(echoDefinition.name));
+      assert.equal(tools.has("update_plan"), true);
+    });
+  }
+});
+
+test("new profile can resume a historical generic computation without registering submit_compute", async () => {
+  await genericEnvironment({
+    PSKIT_COMPUTE_TOOLS_JSON: JSON.stringify([echoDefinition]),
+    PSKIT_COMPUTE_CAPABILITIES_JSON: JSON.stringify([{ id: "document.echo", version: "1" }]),
+  }, async () => {
+    const tools = new Map();
+    const commands = new Map();
+    const messages = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async url => {
+      assert.match(url, /\/internal\/compute\/jobs\/compute-old\?run_id=run-echo$/);
+      return { ok: true, json: async () => ({ job: { status: "failed" },
+        related: [{ status: "failed", report: { usage: { cpu_core_ms: 7 } } }] }) };
+    };
+    try {
+      register({ registerTool(tool) { tools.set(tool.name, tool); },
+        registerCommand(name, command) { commands.set(name, command); },
+        sendMessage(message, options) { messages.push({ message, options }); } });
+      assert.equal(tools.has("submit_compute"), false);
+      await commands.get("pskit_resume").handler("compute-old");
+      assert.match(messages[0].message.content, /"status":"failed"/);
+      assert.match(messages[0].message.content, /"cpu_core_ms":7/);
+      assert.equal(messages[0].message.display, false);
+      assert.equal(messages[0].options.triggerTurn, true);
     } finally { globalThis.fetch = originalFetch; }
   });
 });

@@ -45,6 +45,7 @@ class Settings:
     mcp_allowed_tools_json: str = "[]"
     mcp_servers_json: str = "[]"
     compute_enabled: bool = False
+    compute_tool_compatibility_enabled: bool = False
     compute_services_json: str = "[]"
     compute_service_keys_json: str = "{}"
     compute_cpu_daily_limit_ms: int = 0
@@ -165,6 +166,9 @@ class Settings:
             mcp_allowed_tools_json=os.getenv("RESEARCH_AGENT_MCP_ALLOWED_TOOLS_JSON", "[]"),
             mcp_servers_json=os.getenv("RESEARCH_AGENT_MCP_SERVERS_JSON", "[]"),
             compute_enabled=os.getenv("RESEARCH_AGENT_COMPUTE_ENABLED", "false").lower() == "true",
+            compute_tool_compatibility_enabled=os.getenv(
+                "RESEARCH_AGENT_COMPUTE_TOOL_COMPATIBILITY_ENABLED", "false"
+            ).lower() == "true",
             compute_services_json=os.getenv("RESEARCH_AGENT_COMPUTE_SERVICES_JSON", "[]"),
             compute_service_keys_json=os.getenv("RESEARCH_AGENT_COMPUTE_SERVICE_KEYS_JSON", "{}"),
             compute_cpu_daily_limit_ms=int(os.getenv("RESEARCH_AGENT_COMPUTE_CPU_DAILY_LIMIT_MS", "0")),

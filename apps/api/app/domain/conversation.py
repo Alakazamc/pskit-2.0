@@ -78,6 +78,7 @@ class ConversationStore:
         model_supports_images: bool = False,
         reasoning_effort: str | None = None,
         model_runtime_profile: dict | None = None,
+        compute_tool_compatibility: bool = False,
     ) -> tuple[RunRef, bool] | None:
         """Charge mock Tokens and accept a user message once per request key.
 
@@ -103,7 +104,7 @@ class ConversationStore:
             TokenQuotaExceeded: The mock ledger rejects the charge.
         """
         del instructions, allowed_tools, user_prompt, model_id, image_ids, model_supports_images, reasoning_effort
-        del model_runtime_profile
+        del model_runtime_profile, compute_tool_compatibility
         if self.messages_for(user_id, session_id) is None:
             return None
         key = (user_id, session_id, idempotency_key) if idempotency_key else None

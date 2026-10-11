@@ -1,0 +1,94 @@
+{
+  "basis": "463b2ef + staged PR5; final report commit is authoritative",
+  "backend": {
+    "passed": 1516,
+    "skipped": 1,
+    "failed": 0,
+    "seconds": 320.44,
+    "postgres_passed": 234,
+    "postgres_skipped": 0,
+    "external_skip": "test_profile_round_trip_with_real_private_supabase_storage"
+  },
+  "frontend": {
+    "passed": 400,
+    "files": 53,
+    "typecheck": "passed",
+    "lint": "passed",
+    "build": "passed",
+    "molstar": "passed"
+  },
+  "pi_internal": {
+    "passed": 11,
+    "skipped": 0
+  },
+  "deployment": {
+    "passed": 458,
+    "skipped": 0,
+    "seconds": 28.7
+  },
+  "compose": {
+    "passed": 9
+  },
+  "gateway": {
+    "pinned_version": "1.100.3",
+    "native_tests": 5,
+    "strict_wire_tests": 4,
+    "paid_provider_calls": 0
+  },
+  "contracts": {
+    "paths": 121,
+    "schemas": 179,
+    "changed_schemas": [
+      "ModelWirePolicy",
+      "RunRef"
+    ],
+    "required_fields_changed": false,
+    "case_schema_unchanged": true,
+    "sse_compute_bytes_unchanged": true
+  },
+  "image": {
+    "id": "sha256:0bf9cb9388bc1f66d44e7943d9ab725cbbf857a6dd1953ca18f9f859c289b471",
+    "checks_passed": 3,
+    "runtime_files_matched": 316,
+    "mismatched": 0,
+    "pushed": false
+  },
+  "source_scope_files_matched": 1061,
+  "locks": {
+    "apps/web/package-lock.json": "11103ce172a8a6fe3d822d5be5c92a3a0bb6d69c755fa5ce6a1d42643b7e422e",
+    "apps/api/pi/package-lock.json": "53d45548ed7921bc6f4ee934e9df47ce5dde3a871edb1e9476ca80e7eae54bf1"
+  },
+  "ui_wrapper_boundary": "Actual 6 commands exit 0. Extra full-manifest stable assertion exit 1 after root refreshed only deployment README; no code/test/CI drift. Evidence preserved.",
+  "remote_completed": [
+    {
+      "head": "eb8df7027e85926145ac541a1c446b45104c2a08",
+      "run": 38156874714,
+      "jobs": 6,
+      "conclusion": "success"
+    },
+    {
+      "head": "9da18a1d783f9b3d5915cb0903d675e52020dda1",
+      "run": 38160933404,
+      "jobs": 6,
+      "conclusion": "success"
+    },
+    {
+      "head": "25673ec9af9ad22ca0c706d86b5c37451b7bff2b",
+      "run": 38162074647,
+      "jobs": 6,
+      "conclusion": "success"
+    },
+    {
+      "head": "463b2efbf0a94152c67ad786a3a36f4b6e8a9bbf",
+      "run": 38163205284,
+      "jobs": 6,
+      "conclusion": "success"
+    }
+  ],
+  "remote_final": "Final report commit triggers CI; exact run verified in delivery response, not invented before push.",
+  "production_deployed": false,
+  "real_database_modified": false,
+  "paid_model_configuration_changed": false,
+  "directory_moved": false,
+  "raw_evidence_root": "/tmp/pskit-remediation-20261012"
+}

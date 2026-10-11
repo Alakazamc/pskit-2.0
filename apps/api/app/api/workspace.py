@@ -354,6 +354,7 @@ async def send_message(
                                    if selected_model.runtime_profile is not None else None),
             reasoning_effort=payload.reasoning_effort,
             image_ids=context.image_ids,
+            compute_tool_compatibility=request.app.state.settings.compute_tool_compatibility_enabled,
         )
     except TokenQuotaExceeded as exc:
         raise HTTPException(

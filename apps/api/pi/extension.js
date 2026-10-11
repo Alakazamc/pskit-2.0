@@ -320,7 +320,7 @@ export default function register(pi) {
   });
 
   const computeCapabilities = JSON.parse(process.env.PSKIT_COMPUTE_CAPABILITIES_JSON || "[]");
-  if (computeCapabilities.length) pi.registerTool({
+  if (process.env.PSKIT_COMPUTE_COMPAT_ENABLED === "1" && computeCapabilities.length) pi.registerTool({
     name: "submit_compute",
     label: "Submit computation",
     description: `Submit a published laboratory capability as a durable background job. Available capabilities: ${JSON.stringify(computeCapabilities)}. Stop and wait; completion will resume this session automatically.`,
